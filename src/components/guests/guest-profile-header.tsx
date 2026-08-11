@@ -107,11 +107,20 @@ export function GuestProfileHeader({ guest, onEdit }: ProfileHeaderProps) {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {[
           { value: guest.totalVisits.toString(), label: "visits", sub: guest.vipScore >= 80 ? "Top 5%" : guest.vipScore >= 60 ? "Active" : null, subColor: "text-amber-400" },
           { value: formatCurrency(guest.lifetimeValue), label: "lifetime", sub: guest.lifetimeValue >= 2000 ? "Top 3%" : null, subColor: "text-amber-400" },
           { value: formatCurrency(guest.avgSpend), label: "avg spend", sub: guest.avgSpend >= 200 ? "High" : guest.avgSpend >= 120 ? "Above Avg" : null, subColor: "text-emerald-400" },
+          {
+            value:
+              guest.loyaltyPoints != null
+                ? guest.loyaltyPoints.toLocaleString()
+                : "—",
+            label: "loyalty pts",
+            sub: guest.loyaltyPoints != null ? "Enrolled" : "Not enrolled",
+            subColor: guest.loyaltyPoints != null ? "text-orange-400" : "text-muted-foreground",
+          },
           { value: guest.noShows.toString(), label: "no-shows", sub: guest.noShows === 0 ? "Perfect" : `${guest.noShows} missed`, subColor: guest.noShows === 0 ? "text-emerald-400" : "text-rose-400" },
         ].map((stat) => (
           <div key={stat.label} className="flex flex-col items-center rounded-xl border border-border/30 bg-secondary/30 px-2 py-2.5">

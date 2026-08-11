@@ -16,7 +16,7 @@ export default async function ReservationsLayout({ children }: { children: React
   const result = await getReservationsView()
 
   if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-    redirect("/login")
+    redirect("/staff/login")
   }
 
   const initialReservationsView = result.error === "NO_LOCATION" ? null : result.data

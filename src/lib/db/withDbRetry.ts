@@ -25,8 +25,8 @@ function sleep(ms: number): Promise<void> {
 /** Retry transient Neon/HTTP database errors (timeouts, connection blips). */
 export async function withDbRetry<T>(
   fn: () => Promise<T>,
-  attempts = 3,
-  baseDelayMs = 250
+  attempts = 4,
+  baseDelayMs = 400
 ): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {

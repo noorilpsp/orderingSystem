@@ -1,78 +1,180 @@
 "use client";
 
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { CreditCard, DollarSign, Smartphone } from "lucide-react";
+import { CreditCard, DollarSign, Store, UtensilsCrossed } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useGuestT } from "@/lib/guest-i18n";
+import type { EnMessageKey } from "@/lib/guest-i18n";
+
+export type GuestPaymentMethodId =
+  | "pay_now_card"
+  | "pay_at_pickup"
+  | "pay_at_table"
+  | "pay_at_counter";
+
+type PaymentMethodOption = {
+  id: GuestPaymentMethodId;
+  labelKey: EnMessageKey;
+  descriptionKey: EnMessageKey;
+  icon: typeof CreditCard;
+};
+
+export function defaultGuestPaymentMethod(input: {
+  orderType: "dine-in" | "pickup";
+  usesTableSession: boolean;
+  isSelfPickupMode: boolean;
+}): GuestPaymentMethodId {
+  if (input.orderType === "pickup") return "pay_at_pickup";
+  if (input.usesTableSession) return "pay_at_table";
+  if (input.isSelfPickupMode) return "pay_at_counter";
+  return "pay_at_table";
+}
+
+function paymentMethodOptions(input: {
+  orderType: "dine-in" | "pickup";
+  usesTableSession: boolean;
+}): PaymentMethodOption[] {
+  const payNowCard: PaymentMethodOption = {
+    id: "pay_now_card",
+    labelKey: "checkout.payNowCard",
+    descriptionKey: "checkout.payNowCardDesc",
+    icon: CreditCard,
+  };
+
+  if (input.orderType === "pickup") {
+    return [
+      payNowCard,
+      {
+        id: "pay_at_pickup",
+        labelKey: "checkout.payAtPickup",
+        descriptionKey: "checkout.payAtPickupDesc",
+        icon: DollarSign,
+      },
+    ];
+  }
+
+  if (input.usesTableSession) {
+    return [
+      payNowCard,
+      {
+        id: "pay_at_table",
+        labelKey: "checkout.payAtTable",
+        descriptionKey: "checkout.payAtTableDesc",
+        icon: UtensilsCrossed,
+      },
+    ];
+  }
+
+  return [
+    payNowCard,
+    {
+      id: "pay_at_counter",
+      labelKey: "checkout.payAtCounter",
+      descriptionKey: "checkout.payAtCounterDesc",
+      icon: Store,
+    },
+  ];
+}
+
+export function paymentMethodFooterHint(
+  method: GuestPaymentMethodId,
+  t: (key: EnMessageKey) => string,
+): string {
+  switch (method) {
+    case "pay_now_card":
+      return t("checkout.payNowCardHint");
+    case "pay_at_pickup":
+      return t("checkout.payAtPickupHint");
+    case "pay_at_table":
+      return t("checkout.payAtTableHint");
+    case "pay_at_counter":
+      return t("checkout.payAtCounterHint");
+    default: {
+      const _exhaustive: never = method;
+      return _exhaustive;
+    }
+  }
+}
 
 interface PaymentMethodSectionProps {
   orderType: "dine-in" | "pickup";
-  selectedMethod: string;
-  onMethodChange: (method: string) => void;
+  usesTableSession: boolean;
+  isSelfPickupMode: boolean;
+  selectedMethod: GuestPaymentMethodId;
+  onMethodChange: (method: GuestPaymentMethodId) => void;
+  className?: string;
 }
 
 export function PaymentMethodSection({
   orderType,
+  usesTableSession,
+  isSelfPickupMode: _isSelfPickupMode,
   selectedMethod,
   onMethodChange,
+  className,
 }: PaymentMethodSectionProps) {
-  const methods =
-    orderType === "dine-in"
-      ? [
-          { id: "pay-now", label: "Pay Now (Card)", icon: CreditCard },
-          { id: "pay-counter", label: "Pay at Counter", icon: DollarSign },
-          { id: "pay-table", label: "Pay at Table", icon: Smartphone },
-        ]
-      : [
-          { id: "pay-now", label: "Pay Now (Card)", icon: CreditCard },
-          { id: "pay-pickup", label: "Pay at Pickup", icon: DollarSign },
-        ];
+  const t = useGuestT();
+  const methods = paymentMethodOptions({
+    orderType,
+    usesTableSession,
+  });
 
   return (
-    <div className="mb-5">
-      <h2 className="text-lg font-bold text-foreground mb-3">Payment Method</h2>
-
-      <div className="mt-0 space-y-3">
-        <RadioGroup value={selectedMethod} onValueChange={onMethodChange}>
-        <div className="space-y-2">
-          {methods.map((method) => {
-            const Icon = method.icon;
-            const isSelected = selectedMethod === method.id;
-            return (
-              <label
-                key={method.id}
-                htmlFor={method.id}
-                className={`flex items-center gap-2.5 rounded-md border-2 px-3 py-2.5 transition-colors bg-transparent cursor-pointer ${
-                  isSelected
-                    ? "text-foreground border-foreground"
-                    : "text-foreground border-border hover:border-foreground shadow-md"
-                }`}
-              >
-                <Icon className={`h-4 w-4 flex-shrink-0 ${
-                  isSelected ? "text-foreground" : "text-muted-foreground"
-                }`} />
-                <span className="text-sm font-medium flex-1">
-                  {method.label}
+    <section
+      className={cn(
+        "rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-md",
+        className,
+      )}
+    >
+      <p className="mb-3 text-base font-semibold text-foreground">{t("checkout.paymentMethod")}</p>
+      <div role="radiogroup" aria-label={t("checkout.paymentMethod")} className="space-y-2">
+        {methods.map((method) => {
+          const Icon = method.icon;
+          const isSelected = selectedMethod === method.id;
+          return (
+            <button
+              key={method.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              onClick={() => onMethodChange(method.id)}
+              className={cn(
+                "flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
+                isSelected
+                  ? "border-primary/60 bg-primary/10"
+                  : "border-border/70 bg-background/40 hover:border-foreground/30",
+              )}
+            >
+              <Icon
+                className={cn(
+                  "mt-0.5 h-4 w-4 shrink-0",
+                  isSelected ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-foreground">
+                  {t(method.labelKey)}
                 </span>
-                <RadioGroupItem value={method.id} id={method.id} className="sr-only" />
-                <div className="flex-shrink-0">
-                  <div
-                    className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-                      isSelected
-                        ? "border-blue-600 bg-blue-600"
-                        : "border-gray-300 bg-white"
-                    }`}
-                  >
-                    {isSelected && (
-                      <div className="h-1 w-1 rounded-full bg-white" />
-                    )}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </RadioGroup>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {t(method.descriptionKey)}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                  isSelected
+                    ? "border-primary bg-primary"
+                    : "border-muted-foreground/40 bg-transparent",
+                )}
+                aria-hidden
+              >
+                {isSelected ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                ) : null}
+              </span>
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </section>
   );
 }

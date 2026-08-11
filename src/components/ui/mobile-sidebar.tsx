@@ -39,6 +39,7 @@ import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { logout } from "@/app/actions/auth"
 import { clearUserData } from "@/lib/utils/logout"
+import { unlockIncomingOrderAlertAudio } from "@/lib/orders/incoming-order-alert-sound"
 
 const operationsItems = [
   { title: "Home", href: "/dashboard", icon: Home },
@@ -266,6 +267,11 @@ export function MobileSidebar() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
+                  onPointerDown={() => {
+                    if (item.href === "/orders") {
+                      void unlockIncomingOrderAlertAudio()
+                    }
+                  }}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-4 py-3.5 text-base font-medium transition-all min-h-[44px]",
                     isActive

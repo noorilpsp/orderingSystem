@@ -135,6 +135,7 @@ type FloorTableColorInput = {
   reserved?: boolean
   alerts?: DetailAlert[]
   waves?: Wave[]
+  stage?: string | null
 }
 
 function hasAttentionAlert(alerts: DetailAlert[] = []): boolean {
@@ -167,9 +168,12 @@ export function getFloorTableColorState({
   reserved,
   alerts = [],
   waves = [],
+  stage = null,
 }: FloorTableColorInput): TableColorState {
   if (status === "urgent" || hasAttentionAlert(alerts)) return "needs_attention"
-  if (status === "billing" || hasBillRequestedSignal(alerts)) return "bill_requested"
+  if (status === "billing" || stage === "bill" || hasBillRequestedSignal(alerts)) {
+    return "bill_requested"
+  }
   if (hasFoodReadySignal(alerts, waves)) return "food_ready"
   if (status === "active") return "occupied"
   if (status === "free" && reserved) return "reserved"

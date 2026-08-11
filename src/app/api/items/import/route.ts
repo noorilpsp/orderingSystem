@@ -25,6 +25,7 @@ import {
   type ImportMenuCatalog,
 } from "@/lib/menu/import-items"
 import { getLocationStationsWithSubstations } from "@/lib/kds/getLocationStations"
+import { isLocationKdsEnabled } from "@/lib/merchant-features"
 
 export const runtime = "nodejs"
 
@@ -113,7 +114,10 @@ export async function POST(request: NextRequest) {
       }),
     )
 
-    const stationRows = await withDbRetry(() => getLocationStationsWithSubstations(locationId))
+    const kdsEnabled = await isLocationKdsEnabled(locationId)
+    const stationRows = kdsEnabled
+      ? await withDbRetry(() => getLocationStationsWithSubstations(locationId))
+      : []
     const stationCatalog: ImportStationCatalog = stationRows.map((s) => ({
       key: s.key,
       name: s.name,
@@ -357,8 +361,8 @@ export async function POST(request: NextRequest) {
             status: resolveStatus(row, importOptions.defaultStatus),
             displayOrder: index,
             useCustomHours: false,
-            defaultStation: row.defaultStation ?? null,
-            defaultSubstation: row.defaultSubstation ?? null,
+            defaultStation: kdsEnabled ? (row.defaultStation ?? null) : null,
+            defaultSubstation: kdsEnabled ? (row.defaultSubstation ?? null) : null,
           })),
         )
         .returning({ id: items.id }),

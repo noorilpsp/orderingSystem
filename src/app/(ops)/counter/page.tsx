@@ -8,7 +8,7 @@ export default async function CounterPage() {
   const result = await getCounterView();
 
   if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-    redirect("/login");
+    redirect("/staff/login");
   }
 
   return (

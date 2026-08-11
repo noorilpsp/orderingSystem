@@ -13,6 +13,8 @@ import { ActionBar } from "@/components/table-detail/action-bar"
 import { PaymentModal } from "@/components/table-detail/payment-modal"
 import { FoodReadyAlert } from "@/components/table-detail/food-ready-alert"
 import { KitchenDelayAlert } from "@/components/table-detail/kitchen-delay-alert"
+import { BillRequestAlert } from "@/components/table-detail/bill-request-alert"
+import { WaiterRequestAlert } from "@/components/table-detail/waiter-request-alert"
 import { SeatPartyModal } from "@/components/floor-map/seat-party-modal"
 import { Button } from "@/components/ui/button"
 import { CategoryNav } from "@/components/take-order/category-nav"
@@ -58,6 +60,7 @@ import type { StoreTable, StoreTableSessionState } from "@/store/types"
 import { storeTablesToFloorTables } from "@/lib/floor-map-data"
 import { floorMapPath } from "@/lib/floor-map/floorMapNav"
 import { patchFloorMapViewTableCleaning } from "@/lib/floor-map/floorMapView"
+import { hasBillRequest, hasWaiterRequestAlert } from "@/lib/floor-map/acknowledgeTableService"
 import { prefetchFloorMapView } from "@/lib/floor-map/prefetchFloorMapView"
 import { prefetchRoute } from "@/components/ui/link"
 import { fetchPos, getPosCorrelationId, makeIdempotencyKey } from "@/lib/pos/fetchPos"
@@ -492,6 +495,7 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [alertDismissed, setAlertDismissed] = useState(false)
+  const [waiterAckInFlight, setWaiterAckInFlight] = useState(false)
   const [seatPartyOpen, setSeatPartyOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [closeInFlight, setCloseInFlight] = useState(false)
@@ -862,6 +866,8 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
 
   const readyItems = getReadyItems(projectedSeats)
   const showAlert = readyItems.length > 0 && !alertDismissed
+  const showWaiterRequest = hasWaiterRequestAlert(tableView?.table.alerts ?? null)
+  const showBillRequest = hasBillRequest(tableView?.table.stage)
   const selectedSeatNumber = selectedSeat
   const waveNumbers = useMemo(() => {
     const backend = (tableView?.waves ?? []).map((w) => w.waveNumber)
@@ -2870,6 +2876,86 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
     ]
   );
 
+  const handleAcknowledgeService = useCallback(
+    async (requestType: "waiter" | "bill") => {
+      if (waiterAckInFlight) return;
+
+      const snapshot = tableView;
+      setWaiterAckInFlight(true);
+      setTableView((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          table: {
+            ...prev.table,
+            alerts:
+              requestType === "waiter"
+                ? (prev.table.alerts ?? []).filter((alert) => alert !== "waiting")
+                : prev.table.alerts,
+            stage: requestType === "bill" ? null : prev.table.stage,
+          },
+        };
+      });
+
+      try {
+        const res = await fetchPos(`/api/tables/${encodeURIComponent(id)}/acknowledge-service`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestType }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload?.ok !== true) {
+          setTableView(snapshot);
+          const msg =
+            (payload?.error &&
+              typeof payload.error === "object" &&
+              (payload.error as { message?: string }).message) ||
+            (typeof payload?.error === "string" ? payload.error : null);
+          toast.error(
+            msg ??
+              (requestType === "bill"
+                ? "Failed to mark bill request handled"
+                : "Failed to mark waiter request handled"),
+          );
+          return;
+        }
+
+        const locationId = currentLocationId ?? tableView?.table.locationId ?? null;
+        if (locationId) invalidateFloorMapCache(locationId);
+
+        const alreadyHandled = Boolean(
+          (payload.data as { alreadyHandled?: boolean } | undefined)?.alreadyHandled,
+        );
+        if (requestType === "bill") {
+          toast.success(alreadyHandled ? "Bill request already handled" : "Bill request handled");
+        } else {
+          toast.success(
+            alreadyHandled ? "Waiter request already handled" : "Waiter request handled",
+          );
+        }
+        void refreshTableView({ silent: true });
+      } catch {
+        setTableView(snapshot);
+        toast.error(
+          requestType === "bill"
+            ? "Failed to mark bill request handled"
+            : "Failed to mark waiter request handled",
+        );
+      } finally {
+        setWaiterAckInFlight(false);
+      }
+    },
+    [currentLocationId, id, refreshTableView, tableView, waiterAckInFlight],
+  );
+
+  const handleAcknowledgeWaiter = useCallback(async () => {
+    await handleAcknowledgeService("waiter");
+  }, [handleAcknowledgeService]);
+
+  const handleAcknowledgeBill = useCallback(async () => {
+    await handleAcknowledgeService("bill");
+  }, [handleAcknowledgeService]);
+
   if (tableView === null && !tableViewError) {
     return <TablePageSkeleton />
   }
@@ -2915,6 +3001,26 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
         />
       )}
 
+      {/* Guest bill request */}
+      {showBillRequest && (
+        <BillRequestAlert
+          onAcknowledge={() => {
+            void handleAcknowledgeBill();
+          }}
+          pending={waiterAckInFlight}
+        />
+      )}
+
+      {/* Guest waiter request */}
+      {showWaiterRequest && (
+        <WaiterRequestAlert
+          onAcknowledge={() => {
+            void handleAcknowledgeWaiter();
+          }}
+          pending={waiterAckInFlight}
+        />
+      )}
+
       {/* Main content area - responsive grid */}
       <div className="flex-1 overflow-hidden">
         <div className="flex h-full">
@@ -2931,6 +3037,11 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
                   onSelectSeat={setSelectedSeat}
                   status={table.status}
                   onAddItemsForSeat={handleEnterOrdering}
+                  waiterRequested={showWaiterRequest}
+                  onAcknowledgeWaiter={() => {
+                    void handleAcknowledgeWaiter()
+                  }}
+                  waiterAckPending={waiterAckInFlight}
                 />
               </div>
             </div>
@@ -3413,6 +3524,11 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
                   onSelectSeat={setSelectedSeat}
                   status={table.status}
                   onAddItemsForSeat={handleEnterOrdering}
+                  waiterRequested={showWaiterRequest}
+                  onAcknowledgeWaiter={() => {
+                    void handleAcknowledgeWaiter()
+                  }}
+                  waiterAckPending={waiterAckInFlight}
                 />
               </div>
               <div className="px-4 pb-4">

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { locationStations } from "@/lib/db/schema/location-stations";
 import { locationSubstations } from "@/lib/db/schema/location-substations";
 import { verifyLocationAccess } from "@/lib/location-access";
+import { assertLocationKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posSuccess, posFailure, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -48,6 +49,9 @@ export async function PATCH(
     if (!existing) {
       return posFailure("NOT_FOUND", "Substation not found", { status: 404 });
     }
+
+    const kdsGate = await assertLocationKdsEnabled(existing.station.location.id);
+    if (kdsGate) return kdsGate;
 
     const access = await verifyLocationAccess(existing.station.location.id);
     if (!access) {
@@ -137,6 +141,9 @@ export async function DELETE(
     if (!existing) {
       return posFailure("NOT_FOUND", "Substation not found", { status: 404 });
     }
+
+    const kdsGate = await assertLocationKdsEnabled(existing.station.location.id);
+    if (kdsGate) return kdsGate;
 
     const access = await verifyLocationAccess(existing.station.location.id);
     if (!access) {

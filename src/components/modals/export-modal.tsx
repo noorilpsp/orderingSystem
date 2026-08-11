@@ -224,7 +224,7 @@ export function ExportModal({ open, onOpenChange, currentFilterSummary }: Export
                       { key: "includePhotos", label: "Item photos" },
                       { key: "includePrices", label: "Prices" },
                       { key: "includeDescriptions", label: "Descriptions" },
-                      { key: "includeQRCode", label: "QR code (links to online menu)" },
+                      { key: "includeQRCode", label: "QR code (links to /menu/{storeSlug}?table={number})" },
                     ].map(({ key, label }) => (
                       <div key={key} className="flex items-center space-x-2">
                         <Checkbox

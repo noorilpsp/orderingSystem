@@ -1,0 +1,133 @@
+import type { OpeningHours } from "@/lib/db/schema/merchant-locations";
+
+type MenuScheduleBlock = {
+  days: number[];
+  startTime: string;
+  endTime: string;
+};
+
+type DbSchedule = Record<string, Array<{ open: string; close: string }>>;
+
+const DAY_MAP: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+const DAY_NAMES = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
+
+function normalizeTime(value: string): string {
+  const trimmed = value.trim();
+  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+    const [h, m] = trimmed.split(":");
+    return `${h.padStart(2, "0")}:${m}`;
+  }
+  return trimmed;
+}
+
+function to24HourFormat(time12: string): string {
+  if (!time12) return "00:00";
+  if (!time12.includes("AM") && !time12.includes("PM")) {
+    return normalizeTime(time12);
+  }
+  const match = time12.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return "00:00";
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const period = match[3].toUpperCase();
+  if (period === "AM") {
+    if (hours === 12) hours = 0;
+  } else if (hours !== 12) {
+    hours += 12;
+  }
+  return `${hours.toString().padStart(2, "0")}:${minutes}`;
+}
+
+export function dbScheduleToBlocks(schedule: unknown): MenuScheduleBlock[] {
+  if (!schedule || typeof schedule !== "object") return [];
+
+  const timeBlocks: Record<string, Array<{ day: string; open: string; close: string }>> = {};
+
+  for (const [day, blocks] of Object.entries(schedule as DbSchedule)) {
+    if (!Array.isArray(blocks)) continue;
+    for (const block of blocks) {
+      const normalizedOpen = normalizeTime(block.open);
+      const normalizedClose = normalizeTime(block.close);
+      const key = `${normalizedOpen}-${normalizedClose}`;
+      if (!timeBlocks[key]) timeBlocks[key] = [];
+      timeBlocks[key].push({ day, open: normalizedOpen, close: normalizedClose });
+    }
+  }
+
+  const result: MenuScheduleBlock[] = [];
+  for (const blocks of Object.values(timeBlocks)) {
+    if (blocks.length === 0) continue;
+    const days = blocks
+      .map((block) => DAY_MAP[block.day])
+      .filter((day): day is number => day !== undefined);
+    if (days.length === 0) continue;
+    result.push({
+      days,
+      startTime: blocks[0].open,
+      endTime: blocks[0].close,
+    });
+  }
+  return result;
+}
+
+function isWithinSchedule(blocks: MenuScheduleBlock[], now: Date): boolean {
+  if (blocks.length === 0) return true;
+  const day = now.getDay();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+
+  return blocks.some((block) => {
+    if (!block.days.includes(day)) return false;
+    const [startH, startM] = to24HourFormat(block.startTime).split(":").map(Number);
+    const [endH, endM] = to24HourFormat(block.endTime).split(":").map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    return minutes >= startMinutes && minutes <= endMinutes;
+  });
+}
+
+export function resolveActiveMenu<
+  T extends { id: string; name: string; schedule: unknown; status: string; displayOrder: number },
+>(menus: T[], now = new Date()): T | null {
+  const activeMenus = menus
+    .filter((menu) => menu.status === "active")
+    .sort((a, b) => a.displayOrder - b.displayOrder);
+
+  for (const menu of activeMenus) {
+    const blocks = dbScheduleToBlocks(menu.schedule);
+    if (isWithinSchedule(blocks, now)) return menu;
+  }
+
+  return activeMenus[0] ?? null;
+}
+
+export function openingHoursToGuestHours(
+  openingHours: OpeningHours | null | undefined,
+): Array<{ day: string; time: string }> {
+  if (!openingHours) return [];
+
+  return DAY_NAMES.map((day) => {
+    const blocks = openingHours[day];
+    if (!blocks?.length) {
+      return { day: day.charAt(0).toUpperCase() + day.slice(1), time: "Closed" };
+    }
+    const time = blocks.map((block) => `${block.open} - ${block.close}`).join(", ");
+    return { day: day.charAt(0).toUpperCase() + day.slice(1), time };
+  });
+}

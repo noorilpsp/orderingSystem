@@ -10,6 +10,35 @@ import {
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
+const STAFF_AUTH_PREFIXES = [
+  '/staff/login',
+  '/staff/signup',
+  '/staff/forgot-password',
+  '/staff/reset-password',
+] as const
+
+const DINER_AUTH_PREFIXES = [
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+] as const
+
+function matchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
+  return prefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )
+}
+
+function sanitizeDinerReturnTo(returnTo: string | null): string {
+  if (!returnTo) return '/account'
+  const trimmed = returnTo.trim()
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/account'
+  if (trimmed.startsWith('/menu/')) return trimmed
+  if (trimmed === '/account' || trimmed.startsWith('/account?')) return trimmed
+  return '/account'
+}
+
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request: { headers: request.headers } })
   const pathname = request.nextUrl.pathname
@@ -52,28 +81,48 @@ export async function proxy(request: NextRequest) {
     error: userError,
   } = await supabase.auth.getUser()
 
-  // Handle auth pages (/login, /signup, /forgot-password, /reset-password)
-  // Redirect authenticated users to dashboard (they shouldn't see these pages)
-  if (
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/signup') ||
-    pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password')
-  ) {
-    if (user && !userError) {
+  const isStaffAuthPage = matchesPrefix(pathname, STAFF_AUTH_PREFIXES)
+  const isDinerAuthPage = matchesPrefix(pathname, DINER_AUTH_PREFIXES)
+  // Recovery links establish a session before the form submits — don't bounce.
+  const isResetPasswordPage =
+    pathname === '/reset-password' ||
+    pathname.startsWith('/reset-password/') ||
+    pathname === '/staff/reset-password' ||
+    pathname.startsWith('/staff/reset-password/')
+
+  if (isStaffAuthPage) {
+    if (user && !userError && !isResetPasswordPage) {
       if (isPrefetch) {
-        // Prefetch from logged-in user on auth page: return 204 (they'd be redirected anyway)
         return new Response(null, { status: 204 })
       }
       if (isDevelopment) {
-        console.info('[proxy] authenticated user accessing auth page, redirecting to dashboard', {
+        console.info('[proxy] authenticated user on staff auth page → dashboard', {
           userId: user.id,
           path: pathname,
         })
       }
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
-    // Not authenticated, allow access to auth pages
+    return response
+  }
+
+  if (isDinerAuthPage) {
+    if (user && !userError && !isResetPasswordPage) {
+      if (isPrefetch) {
+        return new Response(null, { status: 204 })
+      }
+      const returnTo = sanitizeDinerReturnTo(
+        request.nextUrl.searchParams.get('returnTo'),
+      )
+      if (isDevelopment) {
+        console.info('[proxy] authenticated user on diner auth page → returnTo/account', {
+          userId: user.id,
+          path: pathname,
+          returnTo,
+        })
+      }
+      return NextResponse.redirect(new URL(returnTo, request.url))
+    }
     return response
   }
 
@@ -91,11 +140,27 @@ export async function proxy(request: NextRequest) {
       if (isDevelopment) {
         console.info('[proxy] dashboard access denied - not authenticated')
       }
-      return NextResponse.redirect(new URL('/login', request.url))
+      return NextResponse.redirect(new URL('/staff/login', request.url))
     }
 
     if (isDevelopment) {
       console.info('[proxy] dashboard access granted', { userId: user.id })
+    }
+    return response
+  }
+
+  // Handle ops orders board - require staff authentication
+  if (pathname === '/orders' || pathname.startsWith('/orders/')) {
+    if (userError || !user) {
+      if (isPrefetch || (!hasCookies && !isDirectNavigation)) {
+        return new Response(null, { status: 204 })
+      }
+      if (isDevelopment) {
+        console.info('[proxy] orders access denied - not authenticated')
+      }
+      const loginUrl = new URL('/staff/login', request.url)
+      loginUrl.searchParams.set('returnTo', pathname)
+      return NextResponse.redirect(loginUrl)
     }
     return response
   }
@@ -112,7 +177,7 @@ export async function proxy(request: NextRequest) {
       if (isDevelopment) {
         console.info('[proxy] admin access denied - not authenticated')
       }
-      return NextResponse.redirect(new URL('/login', request.url))
+      return NextResponse.redirect(new URL('/staff/login', request.url))
     }
 
     // Ultra-fast path: Check in-memory cache first (<1ms)
@@ -146,7 +211,7 @@ export async function proxy(request: NextRequest) {
       if (isDevelopment) {
         console.info('[proxy] admin access denied - not platform admin')
       }
-      return NextResponse.redirect(new URL('/login', request.url))
+      return NextResponse.redirect(new URL('/staff/login', request.url))
     }
 
     if (isDevelopment) {
@@ -169,8 +234,18 @@ export const config = {
     '/forgot-password/:path*',
     '/reset-password',
     '/reset-password/:path*',
+    '/staff/login',
+    '/staff/login/:path*',
+    '/staff/signup',
+    '/staff/signup/:path*',
+    '/staff/forgot-password',
+    '/staff/forgot-password/:path*',
+    '/staff/reset-password',
+    '/staff/reset-password/:path*',
     '/dashboard',
     '/dashboard/:path*',
+    '/orders',
+    '/orders/:path*',
     '/admin',
     '/admin/:path*',
   ],

@@ -8,6 +8,7 @@ import {
   sessionEvents as sessionEventsTable,
 } from "@/lib/db/schema/orders";
 import { verifyLocationAccess } from "@/lib/location-access";
+import { withDbRetry } from "@/lib/db/withDbRetry";
 import { updateTableMutation } from "@/domain/table-mutations";
 import { isValidUuid } from "@/lib/resolveTableUuid";
 import { recordSessionEventWithSource } from "@/app/actions/session-events";
@@ -273,24 +274,26 @@ export async function getTablesForFloorPlanTrusted(
   locationId: string,
   floorPlanId: string
 ): Promise<StoreTable[]> {
-  const [rows, computedStatuses] = await Promise.all([
-    db.query.tables.findMany({
-      where: and(
-        eq(tablesTable.locationId, locationId),
-        eq(tablesTable.floorPlanId, floorPlanId)
-      ),
-      orderBy: [desc(tablesTable.createdAt)],
-    }),
-    getComputedStatusesForTables(locationId),
-  ]);
+  return withDbRetry(async () => {
+    const [rows, computedStatuses] = await Promise.all([
+      db.query.tables.findMany({
+        where: and(
+          eq(tablesTable.locationId, locationId),
+          eq(tablesTable.floorPlanId, floorPlanId)
+        ),
+        orderBy: [desc(tablesTable.createdAt)],
+      }),
+      getComputedStatusesForTables(locationId),
+    ]);
 
-  return rows.map((r) => {
-    const status = computedStatuses.get(r.id) ?? "available";
-    return mapTableRowToStoreTable({
-      ...r,
-      status,
-      position: r.position,
-      alerts: r.alerts,
+    return rows.map((r) => {
+      const status = computedStatuses.get(r.id) ?? "available";
+      return mapTableRowToStoreTable({
+        ...r,
+        status,
+        position: r.position,
+        alerts: r.alerts,
+      });
     });
   });
 }

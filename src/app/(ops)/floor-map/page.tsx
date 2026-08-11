@@ -23,7 +23,18 @@ export default async function FloorMapPage({
   const result = await getFloorMapView(rememberedFloorplanId);
 
   if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-    redirect("/login");
+    redirect("/staff/login");
+  }
+
+  if (result.error === "DB_ERROR") {
+    return (
+      <Suspense fallback={<FloorMapPageSkeleton />}>
+        <FloorMapClient
+          initialFloorMapView={null}
+          initialLoadError={result.message ?? "Failed to load floor map. Please try again."}
+        />
+      </Suspense>
+    );
   }
 
   return (

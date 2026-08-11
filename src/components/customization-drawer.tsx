@@ -23,6 +23,7 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 import type {
   CustomizationGroup,
   AdvancedCustomizationGroup,
@@ -39,7 +40,9 @@ import { UnsavedChangesModal } from "@/components/modals/unsaved-changes-modal"
 
 const customizationSchema = z.object({
   name: z.string().min(1, "Group name is required").max(50),
+  nameAr: z.string().max(50).optional(),
   customerInstructions: z.string().min(1, "Customer instructions are required").max(200),
+  customerInstructionsAr: z.string().max(200).optional(),
   internalNotes: z.string().optional(),
   rules: z.object({
     min: z.number().min(0),
@@ -51,6 +54,7 @@ const customizationSchema = z.object({
       z.object({
         id: z.string(),
         name: z.string().min(1, "Option name is required"),
+        nameAr: z.string().max(100).optional(),
         priceDelta: z.number(),
         isDefault: z.boolean(),
         order: z.number(),
@@ -107,14 +111,22 @@ export function CustomizationDrawer({
     defaultValues: group
       ? {
           name: group.name,
+          nameAr: group.i18n?.ar?.name ?? group.nameAr ?? "",
           customerInstructions: group.customerInstructions,
+          customerInstructionsAr:
+            group.i18n?.ar?.customerInstructions ?? group.customerInstructionsAr ?? "",
           internalNotes: group.internalNotes || "",
           rules: group.rules,
-          options: group.options,
+          options: group.options.map((opt) => ({
+            ...opt,
+            nameAr: opt.i18n?.ar?.name ?? opt.nameAr ?? "",
+          })),
         }
       : {
           name: "",
+          nameAr: "",
           customerInstructions: "",
+          customerInstructionsAr: "",
           internalNotes: "",
           rules: {
             min: 0,
@@ -125,6 +137,7 @@ export function CustomizationDrawer({
             {
               id: `opt-${Date.now()}`,
               name: "",
+              nameAr: "",
               priceDelta: 0,
               isDefault: false,
               order: 0,
@@ -160,10 +173,16 @@ export function CustomizationDrawer({
         // Editing existing group - load data from group
         form.reset({
           name: group.name,
+          nameAr: group.i18n?.ar?.name ?? group.nameAr ?? "",
           customerInstructions: group.customerInstructions,
+          customerInstructionsAr:
+            group.i18n?.ar?.customerInstructions ?? group.customerInstructionsAr ?? "",
           internalNotes: group.internalNotes || "",
           rules: group.rules,
-          options: group.options,
+          options: group.options.map((opt) => ({
+            ...opt,
+            nameAr: opt.i18n?.ar?.name ?? opt.nameAr ?? "",
+          })),
         })
 
         // Initialize advanced features from group
@@ -186,7 +205,9 @@ export function CustomizationDrawer({
         // Creating new group - reset to defaults
         form.reset({
           name: "",
+          nameAr: "",
           customerInstructions: "",
+          customerInstructionsAr: "",
           internalNotes: "",
           rules: {
             min: 0,
@@ -197,6 +218,7 @@ export function CustomizationDrawer({
             {
               id: `opt-${Date.now()}`,
               name: "",
+              nameAr: "",
               priceDelta: 0,
               isDefault: false,
               order: 0,
@@ -259,13 +281,30 @@ export function CustomizationDrawer({
     setIsSaving(true)
     try {
       const values = form.getValues()
+      const groupI18n = normalizeCatalogI18n({
+        ar: {
+          name: values.nameAr,
+          customerInstructions: values.customerInstructionsAr,
+        },
+      })
       const groupData: AdvancedCustomizationGroup = {
         id: group?.id || `${Date.now()}`,
         name: values.name,
         customerInstructions: values.customerInstructions,
         internalNotes: values.internalNotes,
+        i18n: groupI18n,
+        nameAr: values.nameAr,
+        customerInstructionsAr: values.customerInstructionsAr,
         rules: values.rules,
-        options: values.options.map((opt, idx) => ({ ...opt, order: idx })),
+        options: values.options.map((opt, idx) => ({
+          id: opt.id,
+          name: opt.name,
+          nameAr: opt.nameAr,
+          priceDelta: opt.priceDelta,
+          isDefault: opt.isDefault,
+          order: idx,
+          i18n: normalizeCatalogI18n({ ar: { name: opt.nameAr } }),
+        })),
         itemCount: group?.itemCount || 0,
         itemNames: group?.itemNames || [],
         // Include advanced features
@@ -299,6 +338,7 @@ export function CustomizationDrawer({
     append({
       id: `opt-${Date.now()}`,
       name: "",
+      nameAr: "",
       priceDelta: 0,
       isDefault: false,
       order: fields.length,
@@ -454,6 +494,34 @@ export function CustomizationDrawer({
                       <p className="text-xs text-gray-500 dark:text-gray-400">This text will be shown to customers</p>
                     </div>
 
+                    <div className="space-y-3 rounded-lg border border-dashed p-4">
+                      <div>
+                        <h4 className="text-sm font-semibold">Arabic (guest menu)</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Optional. Guests who choose Arabic see this; otherwise English is shown.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nameAr">Group Name (Arabic)</Label>
+                        <Input
+                          id="nameAr"
+                          dir="rtl"
+                          placeholder="مثلاً: حجم البيتزا"
+                          {...form.register("nameAr")}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="customerInstructionsAr">Customer Instructions (Arabic)</Label>
+                        <Textarea
+                          id="customerInstructionsAr"
+                          dir="rtl"
+                          placeholder="مثلاً: اختر حجم البيتزا"
+                          rows={2}
+                          {...form.register("customerInstructionsAr")}
+                        />
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="internalNotes">Internal Notes</Label>
                       <Textarea
@@ -604,6 +672,16 @@ export function CustomizationDrawer({
                                 {errors.options[index]?.name?.message}
                               </p>
                             )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor={`option-name-ar-${index}`}>Name (Arabic)</Label>
+                            <Input
+                              id={`option-name-ar-${index}`}
+                              dir="rtl"
+                              placeholder="مثلاً: صغير"
+                              {...form.register(`options.${index}.nameAr`)}
+                            />
                           </div>
 
                           {/* Price Delta */}

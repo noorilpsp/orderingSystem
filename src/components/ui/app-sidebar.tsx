@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { unlockIncomingOrderAlertAudio } from "@/lib/orders/incoming-order-alert-sound"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -332,7 +333,15 @@ export function AppSidebar() {
                               }
                             }}
                           >
-                            <Link href={item.href} className="px-4 py-2.5">
+                            <Link
+                              href={item.href}
+                              className="px-4 py-2.5"
+                              onPointerDown={() => {
+                                if (item.href === "/orders") {
+                                  void unlockIncomingOrderAlertAudio()
+                                }
+                              }}
+                            >
                               <Icon className="h-4 w-4" />
                               <span>{item.title}</span>
                               {item.badge && (

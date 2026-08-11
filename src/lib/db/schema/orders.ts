@@ -531,6 +531,8 @@ export const orders = pgTable(
       .default("0.00"),
     notes: text("notes"),
     estimatedReadyAt: timestamp("estimated_ready_at", { withTimezone: true }),
+    /** Guest-requested future pickup time. Live board parks until releaseAt. */
+    scheduledPickupAt: timestamp("scheduled_pickup_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancellationReason: text("cancellation_reason"),
@@ -559,6 +561,10 @@ export const orders = pgTable(
     customerIdIdx: index("orders_customer_id_idx").on(table.customerId),
     statusIdx: index("orders_status_idx").on(table.status),
     createdAtIdx: index("orders_created_at_idx").on(table.createdAt),
+    locationScheduledPickupAtIdx: index("orders_location_scheduled_pickup_at_idx").on(
+      table.locationId,
+      table.scheduledPickupAt,
+    ),
   }),
 );
 

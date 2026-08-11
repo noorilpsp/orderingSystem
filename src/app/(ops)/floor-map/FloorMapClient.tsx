@@ -25,6 +25,7 @@ import type { SavedFloorplan } from "@/lib/floorplan-storage-db"
 import { useFloorMapView } from "@/lib/hooks/useFloorMapView"
 import { prefetchFloorMapView } from "@/lib/floor-map/prefetchFloorMapView"
 import { useFloorMapMutations } from "@/lib/hooks/useFloorMapMutations"
+import { hasBillRequest, hasWaiterRequestAlert } from "@/lib/floor-map/acknowledgeTableService"
 import { setLastViewedFloorplanClient } from "@/lib/floor-map/lastViewedFloorplan"
 import {
   viewTablesToFloorTables,
@@ -50,9 +51,10 @@ import { getFloorTableColorState, TABLE_COLOR_STATES, type TableColorState } fro
 
 type FloorMapClientProps = {
   initialFloorMapView: FloorMapView | null;
+  initialLoadError?: string | null;
 };
 
-export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
+export function FloorMapClient({ initialFloorMapView, initialLoadError = null }: FloorMapClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const floorplanParam = searchParams.get("floorplan")?.trim() || null
@@ -87,9 +89,9 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
   const { view, loading: viewLoading, error: viewError, staleError, refresh, patch } = useFloorMapView(
     currentLocationId,
     selectedFloorplanId,
-    { initialData: initialFloorMapView }
+    { initialData: initialFloorMapView, initialError: initialLoadError }
   )
-  const { seatParty, markTableAvailable } = useFloorMapMutations({ patch, refresh, view })
+  const { seatParty, markTableAvailable, acknowledgeService } = useFloorMapMutations({ patch, refresh, view })
 
   const currentServer = React.useMemo(() => {
     const cs = view?.currentServer
@@ -200,6 +202,8 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
     tableNumber: number
     position: { x: number; y: number }
     isCleaning?: boolean
+    hasWaiterRequest?: boolean
+    hasBillRequest?: boolean
   } | null>(null)
   const [navigatingTableId, setNavigatingTableId] = useState<string | null>(null)
 
@@ -248,6 +252,7 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
           reserved,
           alerts: detail?.alerts ?? [],
           waves: detail?.waves ?? [],
+          stage: t.stage,
         })
       )
     }
@@ -496,6 +501,8 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
         tableNumber: table.number,
         position: { x, y },
         isCleaning: table.status === "closed",
+        hasWaiterRequest: hasWaiterRequestAlert(table.alerts),
+        hasBillRequest: hasBillRequest(table.stage),
       })
     },
     [tables]
@@ -750,6 +757,9 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
               onMarkAvailable={(tableId) => {
                 void markTableAvailable(tableId)
               }}
+              onAcknowledgeService={(tableId, requestType) => {
+                void acknowledgeService(tableId, requestType)
+              }}
             />
           </div>
         )}
@@ -760,6 +770,8 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
           tableNumber={quickAction.tableNumber}
           position={quickAction.position}
           isCleaning={quickAction.isCleaning}
+          hasWaiterRequest={quickAction.hasWaiterRequest}
+          hasBillRequest={quickAction.hasBillRequest}
           onClose={() => setQuickAction(null)}
           onSeatParty={() => {
             setQuickAction(null)
@@ -767,6 +779,9 @@ export function FloorMapClient({ initialFloorMapView }: FloorMapClientProps) {
           }}
           onMarkAvailable={() => {
             void markTableAvailable(quickAction.tableId)
+          }}
+          onAcknowledgeService={(requestType) => {
+            void acknowledgeService(quickAction.tableId, requestType)
           }}
         />
       )}

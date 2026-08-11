@@ -204,6 +204,29 @@ export function viewTablesToFloorTables(
   }));
 }
 
+/** Optimistic floor map patch when staff handles a guest waiter request. */
+export function patchFloorMapViewAcknowledgeService(
+  prev: FloorMapView,
+  tableId: string,
+  requestType: "waiter" | "bill" = "waiter",
+): FloorMapView {
+  const tables = prev.tables.map((t) =>
+    t.id.toLowerCase() === tableId.toLowerCase()
+      ? requestType === "bill"
+        ? { ...t, stage: null }
+        : { ...t, alerts: t.alerts.filter((alert) => alert !== "waiting") }
+      : t,
+  );
+  return {
+    ...prev,
+    tables,
+    statusCounts: {
+      ...prev.statusCounts,
+      urgent: tables.filter((t) => t.status === "urgent").length,
+    },
+  };
+}
+
 /** Optimistic floor map patch when a table enters cleaning after close. */
 export function patchFloorMapViewTableCleaning(
   prev: FloorMapView,

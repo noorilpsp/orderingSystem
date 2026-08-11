@@ -7,6 +7,7 @@ import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { locationId, name, emoji, description, displayOrder, menuIds } = body;
+    const { locationId, name, emoji, description, displayOrder, menuIds, i18n } = body;
 
     if (!locationId || !name) {
       return NextResponse.json(
@@ -190,6 +191,7 @@ export async function POST(request: NextRequest) {
           emoji: emoji || null,
           description: description || null,
           displayOrder: displayOrder ?? 0,
+          i18n: i18n !== undefined ? normalizeCatalogI18n(i18n) : null,
         })
         .returning()
     );

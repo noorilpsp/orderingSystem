@@ -1,7 +1,10 @@
+import type { CatalogI18n } from "@/lib/catalog-i18n";
+
 export type CustomizationOption = {
   id: string;
   name: string;
   price: number;
+  i18n?: CatalogI18n | null;
   conditionalPrices?: {
     baseGroupId: string;
     prices: Array<{ baseOptionId: string; price: number }>;
@@ -12,6 +15,7 @@ export type CustomizationGroup = {
   id: string;
   name: string;
   customerInstructions?: string;
+  i18n?: CatalogI18n | null;
   isRequired: boolean;
   minSelections: number;
   maxSelections: number;
@@ -34,7 +38,7 @@ export type MenuItemDetail = {
   image: string;
   basePrice: number;
   calories?: number;
-  tags: string[];
+  tags: Array<{ name: string }>;
   status: "live" | "soldout";
 };
 
@@ -46,7 +50,7 @@ export const menuItemModalData: MenuItemDetail = {
   image: "/pizza-margherita.jpg",
   basePrice: 12.0,
   calories: 850,
-  tags: ["Vegetarian"],
+  tags: [{ name: "Vegetarian" }],
   status: "live",
 };
 

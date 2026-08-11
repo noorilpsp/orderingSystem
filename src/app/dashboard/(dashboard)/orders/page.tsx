@@ -1,1554 +1,1969 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertTriangle, Armchair, Banknote, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MapPinned, Search, ShoppingBag, Store, Users } from "lucide-react"
-import { useRouter } from "next/navigation"
-
-import { Input } from "@/components/ui/input"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { cn } from "@/lib/utils"
-import { sectionConfig, storeTablesToFloorTables, type FloorTable } from "@/lib/floor-map-data"
-import { useRestaurantStore } from "@/store/restaurantStore"
-import { getTableDetailById, getTableDetailFallback, type Wave, type WaveStatus } from "@/lib/table-detail-data"
+import * as React from "react"
 import {
-  getAllTrackingSnapshots,
-  upsertTrackingSnapshot,
-  type TrackingServiceType,
-  type TrackingSnapshot,
-  type TrackingStatus,
-} from "@/lib/order-tracking"
+  Search,
+  Download,
+  MoreHorizontal,
+  X,
+  Plus,
+  CreditCard,
+  AlertCircle,
+  Flame,
+  Wallet,
+  ClipboardList,
+  Edit,
+  Trash2,
+  Copy,
+  Send,
+  Printer,
+  LayoutGrid,
+  LayoutList,
+  TrendingUp,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  XCircle,
+  FileText,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Progress } from "@/components/ui/progress"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Drawer } from "@/components/ui/drawer"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { SkeletonBlock } from "@/components/ui/skeleton-block"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { SidebarPanel } from "@/components/ui/sidebar-panel"
+import { Separator } from "@/components/ui/separator"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import ConnectedRecords from "@/components/connected/ConnectedRecords"
+import { motion, AnimatePresence } from "framer-motion"
 
-type OrderSource = "table" | TrackingServiceType
-type UnifiedStatus = "sent" | "preparing" | "ready" | "served" | "closed" | "voided" | "refunded"
-type LocalWaveStatus = WaveStatus | "fired"
-type PaymentState = "paid" | "unpaid"
-type PaymentMethod = "card" | "cash" | "other" | null
+import { mockStaffWorkload, mockRecentOrderActivity, mockOrdersPerformance } from "@/lib/mockData"
+import { LineChart, Line, ResponsiveContainer } from "recharts"
+import { useSearchParams } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
+import { StaffFilterProvider, useStaffFilter } from "./context/StaffFilterContext"
+import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useLocations } from "@/lib/hooks/useLocations"
 
-type UnifiedOrder = {
+const fullColumns = ["orderNumber", "table", "customer", "items", "total", "time", "status", "staff", "actions"]
+const compactDesktopColumns = ["orderNumber", "table", "total", "time", "status"]
+const compactMobileColumns = ["orderNumber", "table", "total", "status"]
+
+// Type for order data from API
+type OrderData = {
   id: string
-  source: OrderSource
-  label: string
-  sectionLabel: string
-  guestLabel: string
-  status: UnifiedStatus
-  createdAt: number
-  updatedAt: number
+  orderNumber: string
+  orderType: string
+  table: { id: string; tableNumber: string } | null
+  customer: { id: string; name: string } | null
+  itemsCount: number
   total: number
-  itemCount: number
-  items: Array<{ id: string; name: string; qty: number; status: string }>
-  waves: Array<{ number: number; status: LocalWaveStatus }>
-  trackToken?: string
-  note?: string
-  paymentState?: PaymentState
-  paymentMethod?: PaymentMethod
+  createdAt: string
+  status: string
+  assignedStaff: { id: string; fullName: string } | null
+  paymentStatus: string
+  notes: string | null
+  hasItemNotes: boolean
 }
 
-type BoardMode = "live" | "history"
-
-const sourceLabel: Record<OrderSource, string> = {
-  table: "Table",
-  pickup: "Pickup",
-  dine_in_no_table: "Dine-In",
+// Type for detailed order from API
+type DetailedOrderData = {
+  id: string
+  orderNumber: string
+  orderType: string
+  status: string
+  paymentStatus: string
+  reservation: { id: string; reservationDate: string; reservationTime: string } | null
+  table: { id: string; tableNumber: string } | null
+  customer: { id: string; name: string; email: string | null; phone: string | null } | null
+  assignedStaff: { id: string; fullName: string } | null
+  items: Array<{
+    id: string
+    itemName: string
+    itemPrice: number
+    quantity: number
+    customizations: Array<{
+      groupName: string
+      optionName: string
+      optionPrice: number
+      quantity: number
+    }>
+    customizationsTotal: number
+    lineTotal: number
+    notes: string | null
+    status: string
+  }>
+  subtotal: number
+  taxAmount: number
+  serviceCharge: number
+  tipAmount: number
+  discountAmount: number
+  total: number
+  timeline: Array<{
+    status: string
+    createdAt: string
+    changedBy: string
+    note: string | null
+  }>
+  payments: Array<{
+    id: string
+    amount: number
+    tipAmount: number
+    method: string
+    status: string
+    paidAt: string | null
+  }>
+  delivery: {
+    addressLine1: string
+    addressLine2: string | null
+    city: string
+    postalCode: string
+    deliveryInstructions: string | null
+    deliveryFee: number
+    estimatedDeliveryAt: string | null
+    deliveredAt: string | null
+  } | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
 }
 
-const sourceChipClass: Record<OrderSource, string> = {
-  table: "border-cyan-300/45 bg-cyan-500/12 text-cyan-100",
-  pickup: "border-violet-300/45 bg-violet-500/12 text-violet-100",
-  dine_in_no_table: "border-amber-300/45 bg-amber-500/12 text-amber-100",
-}
+function OrdersPageContent() {
+  const { locations, loading: locationsLoading } = useLocations()
+  const [locationId, setLocationId] = React.useState<string | null>(null)
+  const [orders, setOrders] = React.useState<OrderData[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [viewMode, setViewMode] = React.useState<"table" | "card">("table")
+  const [statusFilter, setStatusFilter] = React.useState<string[]>([])
+  const [activeFilter, setActiveFilter] = React.useState(false)
+  const [needsAttention, setNeedsAttention] = React.useState(false)
+  const [sortColumn, setSortColumn] = React.useState<string | null>(null)
+  const [sortDirection, setSortDirection] = React.useState<"asc" | "desc">("desc")
 
-const liveStatusOrder: UnifiedStatus[] = ["ready", "preparing", "sent", "served"]
-const liveStatusFilterOrder: UnifiedStatus[] = ["sent", "preparing", "ready", "served"]
-const historyStatusOrder: UnifiedStatus[] = ["served", "closed", "voided", "refunded"]
+  const [windowWidth, setWindowWidth] = React.useState(typeof window !== "undefined" ? window.innerWidth : 1024)
 
-const statusChipClass: Record<UnifiedStatus, string> = {
-  sent: "border-sky-300/45 bg-sky-500/12 text-sky-100",
-  preparing: "border-amber-300/45 bg-amber-500/12 text-amber-100",
-  ready: "border-red-300/45 bg-red-500/12 text-red-100",
-  served: "border-emerald-300/45 bg-emerald-500/12 text-emerald-100",
-  closed: "border-white/20 bg-white/[0.06] text-muted-foreground",
-  voided: "border-red-400/40 bg-red-500/10 text-red-200",
-  refunded: "border-fuchsia-300/45 bg-fuchsia-500/12 text-fuchsia-100",
-}
+  const [containerWidth, setContainerWidth] = React.useState(0)
+  const controlsContainerRef = React.useRef<HTMLDivElement>(null)
+  const mainColumnRef = React.useRef<HTMLDivElement>(null)
+  const sidebarRef = React.useRef<HTMLDivElement>(null)
+  const [sidebarHeight, setSidebarHeight] = React.useState<number | null>(null)
 
-const statusChipLabel: Record<UnifiedStatus, string> = {
-  sent: "New",
-  preparing: "Preparing",
-  ready: "Ready",
-  served: "Served",
-  closed: "Closed",
-  voided: "Voided",
-  refunded: "Refunded",
-}
-
-const statusFilterLabel: Record<UnifiedStatus, string> = {
-  sent: "New",
-  preparing: "Preparing",
-  ready: "Ready",
-  served: "Served",
-  closed: "Closed",
-  voided: "Voided",
-  refunded: "Refunded",
-}
-
-const statusFilterToneClass: Record<
-  UnifiedStatus,
-  { active: string; idle: string }
-> = {
-  sent: {
-    active: "border-sky-300/60 bg-sky-500/22 text-sky-100",
-    idle: "border-sky-300/35 bg-sky-500/10 text-sky-200/85 hover:bg-sky-500/16",
-  },
-  preparing: {
-    active: "border-amber-300/60 bg-amber-500/22 text-amber-100",
-    idle: "border-amber-300/35 bg-amber-500/10 text-amber-200/85 hover:bg-amber-500/16",
-  },
-  ready: {
-    active: "border-red-300/60 bg-red-500/22 text-red-100",
-    idle: "border-red-300/35 bg-red-500/10 text-red-200/85 hover:bg-red-500/16",
-  },
-  served: {
-    active: "border-emerald-300/60 bg-emerald-500/22 text-emerald-100",
-    idle: "border-emerald-300/35 bg-emerald-500/10 text-emerald-200/85 hover:bg-emerald-500/16",
-  },
-  closed: {
-    active: "border-slate-300/45 bg-slate-500/16 text-slate-100",
-    idle: "border-slate-300/25 bg-slate-500/8 text-slate-300/80 hover:bg-slate-500/14",
-  },
-  voided: {
-    active: "border-rose-300/55 bg-rose-500/20 text-rose-100",
-    idle: "border-rose-300/35 bg-rose-500/10 text-rose-200/80 hover:bg-rose-500/16",
-  },
-  refunded: {
-    active: "border-fuchsia-300/55 bg-fuchsia-500/20 text-fuchsia-100",
-    idle: "border-fuchsia-300/35 bg-fuchsia-500/10 text-fuchsia-200/80 hover:bg-fuchsia-500/16",
-  },
-}
-
-const waveChipClass: Record<LocalWaveStatus, string> = {
-  served: "border-emerald-400/55 bg-emerald-500/14 text-emerald-300",
-  ready: "border-red-400/55 bg-red-500/14 text-red-300",
-  cooking: "border-amber-400/55 bg-amber-500/14 text-amber-300",
-  fired: "border-sky-400/55 bg-sky-500/14 text-sky-300",
-  held: "border-white/15 bg-white/[0.04] text-muted-foreground",
-  not_started: "border-white/10 bg-white/[0.02] text-muted-foreground/60",
-}
-
-type OrderTone = "urgent" | "active" | "served" | "billing" | "closed" | "voided" | "refunded" | "completed_history"
-
-const statusTone: Record<UnifiedStatus, OrderTone> = {
-  ready: "urgent",
-  preparing: "active",
-  sent: "billing",
-  served: "served",
-  closed: "closed",
-  voided: "voided",
-  refunded: "refunded",
-}
-
-const toneBorderClass: Record<OrderTone, string> = {
-  urgent: "border-l-red-400/80",
-  active: "border-l-amber-400/60",
-  served: "border-l-emerald-400/70",
-  billing: "border-l-blue-400/60",
-  closed: "border-l-slate-300/55",
-  voided: "border-l-rose-400/70",
-  refunded: "border-l-fuchsia-400/70",
-  completed_history: "border-l-indigo-400/75",
-}
-
-const toneDotClass: Record<OrderTone, string> = {
-  urgent: "bg-red-400",
-  active: "bg-amber-400",
-  served: "bg-emerald-400",
-  billing: "bg-blue-400",
-  closed: "bg-slate-300",
-  voided: "bg-rose-400",
-  refunded: "bg-fuchsia-400",
-  completed_history: "bg-indigo-400",
-}
-
-const toneTextClass: Record<OrderTone, string> = {
-  urgent: "text-red-400",
-  active: "text-amber-400",
-  served: "text-emerald-400",
-  billing: "text-blue-400",
-  closed: "text-slate-300",
-  voided: "text-rose-400",
-  refunded: "text-fuchsia-400",
-  completed_history: "text-indigo-300",
-}
-
-const toneGlowClass: Record<OrderTone, string> = {
-  urgent: "shadow-[inset_0_0_0_1px_hsl(var(--glow-urgent)/0.15)]",
-  active: "",
-  served: "",
-  billing: "",
-  closed: "",
-  voided: "",
-  refunded: "",
-  completed_history: "",
-}
-
-const toneAccentColor: Record<OrderTone, string> = {
-  urgent: "#f87171",
-  active: "#fbbf24",
-  served: "#34d399",
-  billing: "#60a5fa",
-  closed: "#cbd5e1",
-  voided: "#fb7185",
-  refunded: "#e879f9",
-  completed_history: "#818cf8",
-}
-
-const toneAccentBg: Record<OrderTone, string> = {
-  urgent: "#f8717120",
-  active: "#fbbf2420",
-  served: "#34d39920",
-  billing: "#60a5fa20",
-  closed: "#cbd5e120",
-  voided: "#fb718520",
-  refunded: "#e879f920",
-  completed_history: "#818cf820",
-}
-
-const groupLabel: Record<UnifiedStatus, string> = {
-  ready: "URGENT",
-  preparing: "PREPARING",
-  sent: "NEW",
-  served: "SERVED",
-  closed: "CLOSED",
-  voided: "VOIDED",
-  refunded: "REFUNDED",
-}
-
-const historyCompletedTone = {
-  chipClass: "border-indigo-300/45 bg-indigo-500/12 text-indigo-100",
-  filterActive: "border-indigo-300/60 bg-indigo-500/22 text-indigo-100",
-  filterIdle: "border-indigo-300/35 bg-indigo-500/10 text-indigo-200/85 hover:bg-indigo-500/16",
-  accent: "#818cf8",
-  accentBg: "#818cf820",
-}
-
-const paymentStateClass: Record<PaymentState, string> = {
-  paid: "border-emerald-300/55 bg-emerald-500/14 text-emerald-200",
-  unpaid: "border-amber-300/55 bg-amber-500/14 text-amber-200",
-}
-
-const paymentMethodClass: Record<Exclude<PaymentMethod, null>, string> = {
-  card: "border-sky-300/55 bg-sky-500/14 text-sky-200",
-  cash: "border-emerald-300/55 bg-emerald-500/14 text-emerald-200",
-  other: "border-violet-300/55 bg-violet-500/14 text-violet-200",
-}
-
-function minutesAgo(ts: number): number {
-  return Math.max(0, Math.round((Date.now() - ts) / 60000))
-}
-
-function formatDateTime(ts: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(ts)
-}
-
-function formatMinutesCompact(totalMinutes: number): string {
-  const safe = Math.max(0, totalMinutes)
-  if (safe < 60) return `${safe}m`
-  const h = Math.floor(safe / 60)
-  const m = safe % 60
-  return m > 0 ? `${h}h ${m}m` : `${h}h`
-}
-
-const counterStatusFlow: UnifiedStatus[] = ["sent", "preparing", "ready", "served"]
-
-function getCounterFlowIndex(status: UnifiedStatus): number {
-  const index = counterStatusFlow.indexOf(status)
-  if (index >= 0) return index
-  if (status === "closed" || status === "refunded" || status === "voided") return counterStatusFlow.length - 1
-  return 0
-}
-
-function mapTrackingStatus(status: TrackingStatus): UnifiedStatus {
-  if (status === "picked_up") return "served"
-  return status
-}
-
-function isOrderVisibleInBoardMode(order: UnifiedOrder, mode: BoardMode): boolean {
-  if (mode === "live") {
-    if (order.status === "served") return order.source === "table"
-    return order.status === "ready" || order.status === "preparing" || order.status === "sent"
-  }
-  if (order.status === "served") return order.source !== "table"
-  return order.status === "closed" || order.status === "voided" || order.status === "refunded"
-}
-
-function deriveTableStatus(waves: Wave[], tableStatus: string): UnifiedStatus {
-  if (waves.some((w) => w.status === "ready")) return "ready"
-  if (waves.some((w) => w.status === "cooking")) return "preparing"
-
-  const hasHeld = waves.some((w) => w.status === "held" || w.status === "not_started")
-  const hasServed = waves.some((w) => w.status === "served")
-
-  // Keep table card in "Served" when completed wave(s) are green and next wave is still held.
-  if (hasServed) {
-    if (!hasHeld && waves.every((w) => w.status === "served")) {
-      return tableStatus === "billing" ? "closed" : "served"
+  // Set locationId from first available location
+  React.useEffect(() => {
+    if (!locationsLoading && locations.length > 0 && !locationId) {
+      setLocationId(locations[0].id)
     }
-    return "served"
+  }, [locations, locationsLoading, locationId])
+
+  // Fetch orders when locationId changes
+  React.useEffect(() => {
+    if (!locationId) {
+      setIsLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    async function fetchOrders() {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const params = new URLSearchParams({ locationId })
+        // Note: API currently only supports single status, so we'll filter client-side for multiple
+        // If you want to support multiple statuses in API, you'd need to update the API route
+
+        const response = await fetch(`/api/orders?${params.toString()}`, {
+          credentials: "include",
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || "Failed to fetch orders")
+        }
+
+        const data = await response.json()
+        if (!cancelled) {
+          setOrders(data.orders || [])
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to fetch orders")
+          toast({
+            title: "Error",
+            description: err instanceof Error ? err.message : "Failed to fetch orders",
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    fetchOrders()
+
+    return () => {
+      cancelled = true
+    }
+  }, [locationId, statusFilter])
+
+  React.useEffect(() => {
+    if (!controlsContainerRef.current) return
+
+    let timeoutId: NodeJS.Timeout
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        for (const entry of entries) {
+          setContainerWidth(entry.contentRect.width)
+        }
+      }, 50)
+    })
+
+    resizeObserver.observe(controlsContainerRef.current)
+
+    return () => {
+      clearTimeout(timeoutId)
+      resizeObserver.disconnect()
+    }
+  }, [])
+
+  const [isCompact, setIsCompact] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      // Phase-2: User preferences will be loaded from backend
+      const saved = localStorage.getItem("berrytap.orders.compact")
+      if (saved !== null) return JSON.parse(saved)
+      // Default to compact on mobile (<768px)
+      if (window.innerWidth < 768) return true
+    }
+    return false
+  })
+
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [selectedOrder, setSelectedOrder] = React.useState<DetailedOrderData | null>(null)
+  const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null)
+  const [drawerOpen, setDrawerOpen] = React.useState(false)
+
+  // Fetch detailed order when selected
+  React.useEffect(() => {
+    if (!selectedOrderId || !locationId) return
+
+    let cancelled = false
+
+    async function fetchOrderDetails() {
+      try {
+        const response = await fetch(`/api/orders/${selectedOrderId}`, {
+          credentials: "include",
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || "Failed to fetch order details")
+        }
+
+        const data = await response.json()
+        if (!cancelled) {
+          setSelectedOrder(data.order)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          toast({
+            title: "Error",
+            description: err instanceof Error ? err.message : "Failed to fetch order details",
+            variant: "destructive",
+          })
+        }
+      }
+    }
+
+    fetchOrderDetails()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedOrderId, locationId])
+  const [newOrderModalOpen, setNewOrderModalOpen] = React.useState(false)
+  const [rightSidebarOpen, setRightSidebarOpen] = React.useState(
+    () => (typeof window !== "undefined" ? window.innerWidth >= 1024 : true),
+  )
+  const [isInsightsCollapsed, setIsInsightsCollapsed] = React.useState(false)
+  const [showCollapseButton, setShowCollapseButton] = React.useState(false)
+
+  const { selectedStaff, setSelectedStaff } = useStaffFilter()
+  const isMobileViewport = useIsMobile()
+
+  const searchParams = useSearchParams()
+  const sessionId = searchParams.get("sessionId") ?? undefined
+
+  const { toast } = useToast()
+
+  const hasActiveFilters = React.useMemo(() => {
+    return searchQuery !== "" || statusFilter.length > 0 || activeFilter || needsAttention || selectedStaff !== "all"
+  }, [searchQuery, statusFilter, activeFilter, needsAttention, selectedStaff])
+
+  const handleResetFilters = () => {
+    setSearchQuery("")
+    setStatusFilter([])
+    setActiveFilter(false)
+    setNeedsAttention(false)
+    setSelectedStaff("all")
   }
 
-  if (hasHeld) return "sent"
-  return tableStatus === "billing" ? "closed" : "sent"
-}
 
-function deriveStatusFromOrderWaves(waves: Array<{ status: LocalWaveStatus }>): UnifiedStatus {
-  if (waves.some((wave) => wave.status === "ready")) return "ready"
-  if (waves.some((wave) => wave.status === "cooking")) return "preparing"
-  if (waves.some((wave) => wave.status === "fired")) return "sent"
-  if (waves.some((wave) => wave.status === "served")) return "served"
-  if (waves.some((wave) => wave.status === "held" || wave.status === "not_started")) return "sent"
-  if (waves.length > 0 && waves.every((wave) => wave.status === "served")) return "served"
-  return "sent"
-}
-
-function getNextFireableWaveNumber(order: UnifiedOrder): number | null {
-  if (order.source !== "table") return null
-  const next = order.waves.find((wave) => wave.status === "held" || wave.status === "not_started")
-  return next ? next.number : null
-}
-
-function normalizeNewTableWaves(waves: Array<{ number: number; status: LocalWaveStatus }>, status: UnifiedStatus) {
-  if (status !== "sent") return waves
-  if (waves.some((wave) => wave.status === "fired")) return waves
-  const firstHeld = waves.find((wave) => wave.status === "held" || wave.status === "not_started")
-  if (!firstHeld) return waves
-  return waves.map((wave) =>
-    wave.number === firstHeld.number ? { ...wave, status: "fired" as LocalWaveStatus } : wave
-  )
-}
-
-function buildTableOrders(floorTables: FloorTable[]): UnifiedOrder[] {
-  return floorTables
-    .filter((table) => table.status !== "free")
-    .map((table): UnifiedOrder => {
-      const detail =
-        getTableDetailById(table.id) ??
-        getTableDetailFallback(
-          table.id,
-          table.number,
-          table.section,
-          sectionConfig[table.section].name,
-          table.guests,
-          table.status,
-          table.seatedAt
-        )
-
-      const items = detail.seats.flatMap((seat, seatIdx) =>
-        (seat.items ?? []).map((item, itemIdx) => ({
-          id: `${table.id}-s${seat.number}-${itemIdx}`,
-          name: item.name,
-          qty: 1,
-          status: item.status,
-        }))
-      )
-      const createdAt = new Date(detail.seatedAt).getTime()
-      const total = detail.seats.reduce((sum, seat) => sum + seat.orderTotal, 0)
-
-      return {
-        id: `table-${table.id}`,
-        source: "table",
-        label: `T${table.number}`,
-        sectionLabel: detail.sectionLabel,
-        guestLabel: `${detail.guests} guest${detail.guests === 1 ? "" : "s"}`,
-        status: deriveTableStatus(detail.waves, table.status),
-        createdAt,
-        updatedAt: createdAt,
-        total,
-        itemCount: items.length,
-        items,
-        waves: detail.waves.map((wave, index) => ({
-          number: index + 1,
-          status: wave.status,
-        })),
-        note: detail.notes[0]?.text ?? "",
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter((prev) => {
+      if (prev.includes(status)) {
+        return prev.filter((s) => s !== status)
+      } else {
+        return [...prev, status]
       }
     })
-}
+  }
 
-function buildCounterOrders(snapshots: TrackingSnapshot[]): UnifiedOrder[] {
-  return snapshots.map((entry) => {
-    const activeItemCount = entry.items.filter((item) => item.status !== "voided").reduce((sum, item) => sum + item.qty, 0)
-    const paymentState: PaymentState =
-      entry.status === "picked_up" || entry.status === "closed" || entry.status === "refunded" ? "paid" : "unpaid"
+  React.useEffect(() => {
+    localStorage.setItem("berrytap.orders.compact", JSON.stringify(isCompact))
+  }, [isCompact])
 
-    return {
-      id: `counter-${entry.token}`,
-      source: entry.serviceType,
-      label: entry.code,
-      sectionLabel: entry.serviceType === "pickup" ? "Pickup" : "Dine-In",
-      guestLabel: entry.customerName || "Guest",
-      status: mapTrackingStatus(entry.status),
-      createdAt: entry.createdAt,
-      updatedAt: entry.updatedAt,
-      total: 0,
-      itemCount: activeItemCount,
-      items: entry.items.map((item) => ({
-        id: item.id,
-        name: item.name,
-        qty: item.qty,
-        status: item.status,
-      })),
-      waves: [],
-      trackToken: entry.token,
-      note: entry.orderNote || "",
-      paymentState,
-      paymentMethod: null,
+  React.useEffect(() => {
+    if (rightSidebarOpen) {
+      const timer = setTimeout(() => {
+        setShowCollapseButton(true)
+      }, 275)
+
+      return () => clearTimeout(timer)
     }
-  })
-}
 
-function buildDemoOrders(now: number, counterDemoStatusOverrides: Record<string, UnifiedStatus>): UnifiedOrder[] {
-  const m = 60_000
-  const orders: UnifiedOrder[] = [
-    {
-      id: "demo-table-21",
-      source: "table",
-      label: "T21",
-      sectionLabel: "Patio",
-      guestLabel: "4 guests",
-      status: "ready",
-      createdAt: now - 72 * m,
-      updatedAt: now - 10 * m,
-      total: 84,
-      itemCount: 5,
-      items: [
-        { id: "d-1", name: "Mojito", qty: 2, status: "ready" },
-        { id: "d-2", name: "Bruschetta", qty: 1, status: "ready" },
-      ],
-      waves: [{ number: 1, status: "ready" }],
-      note: "Allergy: no nuts",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-table-22",
-      source: "table",
-      label: "T22",
-      sectionLabel: "Main Hall",
-      guestLabel: "2 guests",
-      status: "preparing",
-      createdAt: now - 63 * m,
-      updatedAt: now - 8 * m,
-      total: 52,
-      itemCount: 3,
-      items: [{ id: "d-3", name: "Pasta Alfredo", qty: 2, status: "preparing" }],
-      waves: [{ number: 1, status: "cooking" }],
-      note: "",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-table-23",
-      source: "table",
-      label: "T23",
-      sectionLabel: "Lounge",
-      guestLabel: "3 guests",
-      status: "sent",
-      createdAt: now - 58 * m,
-      updatedAt: now - 7 * m,
-      total: 66,
-      itemCount: 4,
-      items: [{ id: "d-4", name: "Club Sandwich", qty: 3, status: "sent" }],
-      waves: [{ number: 1, status: "fired" }, { number: 2, status: "held" }],
-      note: "No onions",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-table-24",
-      source: "table",
-      label: "T24",
-      sectionLabel: "Window",
-      guestLabel: "2 guests",
-      status: "served",
-      createdAt: now - 41 * m,
-      updatedAt: now - 3 * m,
-      total: 47,
-      itemCount: 2,
-      items: [{ id: "d-5", name: "Soup of the day", qty: 2, status: "served" }],
-      waves: [{ number: 1, status: "served" }],
-      note: "",
-      paymentState: "paid",
-      paymentMethod: "card",
-    },
-    {
-      id: "demo-table-fire-30",
-      source: "table",
-      label: "T30",
-      sectionLabel: "Chef Counter",
-      guestLabel: "4 guests",
-      status: "sent",
-      createdAt: now - 34 * m,
-      updatedAt: now - 2 * m,
-      total: 112,
-      itemCount: 6,
-      items: [
-        { id: "d-fire-1", name: "Sparkling Water", qty: 2, status: "served" },
-        { id: "d-fire-2", name: "Burrata", qty: 2, status: "held" },
-        { id: "d-fire-3", name: "Ribeye", qty: 2, status: "held" },
-      ],
-      waves: [
-        { number: 1, status: "served" },
-        { number: 2, status: "fired" },
-        { number: 3, status: "held" },
-      ],
-      note: "Wave 1 served, Wave 2 fired (New), Wave 3 held.",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-table-fire-31",
-      source: "table",
-      label: "T31",
-      sectionLabel: "Main Hall",
-      guestLabel: "3 guests",
-      status: "served",
-      createdAt: now - 28 * m,
-      updatedAt: now - 1 * m,
-      total: 78,
-      itemCount: 5,
-      items: [
-        { id: "d-fire-31-1", name: "Mineral Water", qty: 2, status: "served" },
-        { id: "d-fire-31-2", name: "Risotto", qty: 2, status: "held" },
-        { id: "d-fire-31-3", name: "Tiramisu", qty: 1, status: "held" },
-      ],
-      waves: [
-        { number: 1, status: "served" },
-        { number: 2, status: "held" },
-        { number: 3, status: "held" },
-      ],
-      note: "Ready for next course. Tap Fire W2.",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-pickup-240",
-      source: "pickup",
-      label: "PU-240",
-      sectionLabel: "Pickup",
-      guestLabel: "Alex",
-      status: "ready",
-      createdAt: now - 55 * m,
-      updatedAt: now - 2 * m,
-      total: 0,
-      itemCount: 3,
-      items: [{ id: "d-6", name: "Caesar Salad", qty: 1, status: "ready" }],
-      waves: [],
-      trackToken: "demo-pu-240",
-      note: "",
-      paymentState: "paid",
-      paymentMethod: "card",
-    },
-    {
-      id: "demo-pickup-241",
-      source: "pickup",
-      label: "PU-241",
-      sectionLabel: "Pickup",
-      guestLabel: "Mia",
-      status: "preparing",
-      createdAt: now - 46 * m,
-      updatedAt: now - 6 * m,
-      total: 0,
-      itemCount: 2,
-      items: [{ id: "d-7", name: "Chicken Bowl", qty: 2, status: "preparing" }],
-      waves: [],
-      trackToken: "demo-pu-241",
-      note: "",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-pickup-242",
-      source: "pickup",
-      label: "PU-242",
-      sectionLabel: "Pickup",
-      guestLabel: "Noah",
-      status: "sent",
-      createdAt: now - 30 * m,
-      updatedAt: now - 5 * m,
-      total: 0,
-      itemCount: 1,
-      items: [{ id: "d-8", name: "Sparkling Water", qty: 1, status: "sent" }],
-      waves: [],
-      trackToken: "demo-pu-242",
-      note: "",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-pickup-243",
-      source: "pickup",
-      label: "PU-243",
-      sectionLabel: "Pickup",
-      guestLabel: "Liam",
-      status: "served",
-      createdAt: now - 24 * m,
-      updatedAt: now - 2 * m,
-      total: 0,
-      itemCount: 2,
-      items: [{ id: "d-9", name: "Matcha Latte", qty: 2, status: "served" }],
-      waves: [],
-      trackToken: "demo-pu-243",
-      note: "",
-      paymentState: "paid",
-      paymentMethod: "cash",
-    },
-    {
-      id: "demo-dine-410",
-      source: "dine_in_no_table",
-      label: "DI-410",
-      sectionLabel: "Dine-In",
-      guestLabel: "Walk-in 2",
-      status: "ready",
-      createdAt: now - 36 * m,
-      updatedAt: now - 1 * m,
-      total: 0,
-      itemCount: 3,
-      items: [{ id: "d-10", name: "Burger Combo", qty: 2, status: "ready" }],
-      waves: [],
-      trackToken: "demo-di-410",
-      note: "",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-dine-411",
-      source: "dine_in_no_table",
-      label: "DI-411",
-      sectionLabel: "Dine-In",
-      guestLabel: "Walk-in 1",
-      status: "preparing",
-      createdAt: now - 22 * m,
-      updatedAt: now - 5 * m,
-      total: 0,
-      itemCount: 2,
-      items: [{ id: "d-11", name: "Avocado Toast", qty: 1, status: "preparing" }],
-      waves: [],
-      trackToken: "demo-di-411",
-      note: "",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-dine-412",
-      source: "dine_in_no_table",
-      label: "DI-412",
-      sectionLabel: "Dine-In",
-      guestLabel: "Walk-in 3",
-      status: "sent",
-      createdAt: now - 15 * m,
-      updatedAt: now - 4 * m,
-      total: 0,
-      itemCount: 2,
-      items: [{ id: "d-12", name: "Cappuccino", qty: 2, status: "sent" }],
-      waves: [],
-      trackToken: "demo-di-412",
-      note: "",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-dine-413",
-      source: "dine_in_no_table",
-      label: "DI-413",
-      sectionLabel: "Dine-In",
-      guestLabel: "Walk-in 2",
-      status: "served",
-      createdAt: now - 12 * m,
-      updatedAt: now - 1 * m,
-      total: 0,
-      itemCount: 1,
-      items: [{ id: "d-13", name: "Cheesecake", qty: 1, status: "served" }],
-      waves: [],
-      trackToken: "demo-di-413",
-      note: "",
-      paymentState: "paid",
-      paymentMethod: "card",
-    },
-    {
-      id: "demo-history-1",
-      source: "pickup",
-      label: "PU-190",
-      sectionLabel: "Pickup",
-      guestLabel: "Ethan",
-      status: "closed",
-      createdAt: now - 120 * m,
-      updatedAt: now - 40 * m,
-      total: 0,
-      itemCount: 2,
-      items: [{ id: "d-14", name: "Flat White", qty: 2, status: "served" }],
-      waves: [],
-      trackToken: "demo-pu-190",
-      note: "",
-      paymentState: "paid",
-      paymentMethod: "other",
-    },
-    {
-      id: "demo-history-2",
-      source: "table",
-      label: "T19",
-      sectionLabel: "Main Hall",
-      guestLabel: "2 guests",
-      status: "voided",
-      createdAt: now - 140 * m,
-      updatedAt: now - 60 * m,
-      total: 0,
-      itemCount: 1,
-      items: [{ id: "d-15", name: "Steak Frites", qty: 1, status: "voided" }],
-      waves: [{ number: 1, status: "held" }],
-      note: "Voided by manager",
-      paymentState: "unpaid",
-      paymentMethod: null,
-    },
-    {
-      id: "demo-history-3",
-      source: "dine_in_no_table",
-      label: "DI-389",
-      sectionLabel: "Dine-In",
-      guestLabel: "Walk-in",
-      status: "refunded",
-      createdAt: now - 160 * m,
-      updatedAt: now - 80 * m,
-      total: 0,
-      itemCount: 2,
-      items: [{ id: "d-16", name: "Iced Tea", qty: 2, status: "served" }],
-      waves: [],
-      trackToken: "demo-di-389",
-      note: "Customer complaint",
-      paymentState: "paid",
-      paymentMethod: "other",
-    },
-  ]
+    setShowCollapseButton(false)
+  }, [rightSidebarOpen])
 
-  return orders.map((order) => {
-    const override = counterDemoStatusOverrides[order.id]
-    if (!override) return order
-    return {
-      ...order,
-      status: override,
-      updatedAt: now,
+  React.useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  const showButtonText = containerWidth >= 700
+
+  const visibleColumns = React.useMemo(() => {
+    if (windowWidth < 640) return compactMobileColumns
+    return isCompact ? compactDesktopColumns : fullColumns
+  }, [windowWidth, isCompact])
+
+  const showCompactToggle = windowWidth >= 640
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800)
+    return () => clearTimeout(timer)
+  }, [])
+
+  React.useEffect(() => {
+    const savedView = localStorage.getItem("ordersViewMode")
+    if (savedView === "table" || savedView === "card") {
+      setViewMode(savedView)
     }
-  })
-}
+  }, [])
 
-function WaveStrip({ waves }: { waves: UnifiedOrder["waves"] }) {
-  if (waves.length === 0) return null
+  const handleViewModeChange = (mode: "table" | "card") => {
+    setViewMode(mode)
+    localStorage.setItem("ordersViewMode", mode)
+  }
+
+  const handleOrderClick = (order: OrderData) => {
+    setSelectedOrderId(order.id)
+    setDrawerOpen(true)
+  }
+
+  const handleMarkPaid = (order: typeof selectedOrder) => {
+    if (!order) return
+
+    toast({
+      title: "✅ Payment received",
+      description: (
+        <div className="space-y-2">
+          <p>Payment received for Order #{order.id}. Clear table?</p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                toast({
+                  title: "Table cleared",
+                  description: `Table ${order.table} is now available.`,
+                })
+              }}
+            >
+              Yes, Clear
+            </Button>
+            <Button size="sm" variant="outline">
+              Still Dining
+            </Button>
+          </div>
+        </div>
+      ),
+    })
+  }
+
+  const filteredOrders = React.useMemo(() => {
+    let filtered = orders.filter((order) => {
+      // If activeFilter is on, show preparing OR any status in statusFilter
+      // If activeFilter is off, only use statusFilter
+      if (activeFilter && statusFilter.length > 0) {
+        // Show orders that are either preparing (from active) OR match any status in statusFilter
+        if (order.status !== "preparing" && !statusFilter.includes(order.status)) {
+          return false
+        }
+      } else if (activeFilter) {
+        // Only active filter is on, show only preparing
+        if (order.status !== "preparing") {
+          return false
+        }
+      } else if (statusFilter.length > 0) {
+        // Only status filters are on, show matching statuses
+        if (!statusFilter.includes(order.status)) {
+          return false
+        }
+      }
+
+      // Staff filter
+      if (selectedStaff === "all") {
+        // Show all orders
+      } else if (selectedStaff === "me") {
+        // TODO: Get current user's staff ID and filter
+        // For now, show all orders
+      } else {
+        // Show orders for specific staff member
+        if (order.assignedStaff?.fullName !== selectedStaff) return false
+      }
+
+      // Needs attention filter - only show orders with urgency (yellow or red)
+      if (needsAttention && !hasUrgency(order)) {
+        return false
+      }
+
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        return (
+          order.orderNumber.toLowerCase().includes(query) ||
+          order.customer?.name.toLowerCase().includes(query) ||
+          order.table?.tableNumber.toLowerCase().includes(query)
+        )
+      }
+      return true
+    })
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        let aValue: any
+        let bValue: any
+
+        switch (sortColumn) {
+          case "orderNumber":
+            aValue = a.orderNumber
+            bValue = b.orderNumber
+            break
+          case "table":
+            aValue = a.table?.tableNumber || (a.orderType === "pickup" ? "Pickup" : a.orderType === "delivery" ? "Delivery" : "")
+            bValue = b.table?.tableNumber || (b.orderType === "pickup" ? "Pickup" : b.orderType === "delivery" ? "Delivery" : "")
+            break
+          case "customer":
+            aValue = a.customer?.name || "Guest"
+            bValue = b.customer?.name || "Guest"
+            break
+          case "items":
+            aValue = a.itemsCount
+            bValue = b.itemsCount
+            break
+          case "total":
+            aValue = a.total
+            bValue = b.total
+            break
+          case "time":
+            aValue = new Date(a.createdAt).getTime()
+            bValue = new Date(b.createdAt).getTime()
+            break
+          case "status":
+            aValue = a.status
+            bValue = b.status
+            break
+          case "staff":
+            aValue = a.assignedStaff?.fullName || ""
+            bValue = b.assignedStaff?.fullName || ""
+            break
+          default:
+            return 0
+        }
+
+        if (aValue < bValue) return sortDirection === "asc" ? -1 : 1
+        if (aValue > bValue) return sortDirection === "asc" ? 1 : -1
+        return 0
+      })
+    }
+
+    return filtered
+  }, [orders, selectedStaff, searchQuery, sortColumn, sortDirection, statusFilter, activeFilter, needsAttention])
+
+  React.useEffect(() => {
+    if (!rightSidebarOpen || isMobileViewport) {
+      setSidebarHeight(null)
+      return
+    }
+
+    const updateSidebarHeight = () => {
+      if (!mainColumnRef.current) return
+      const mainHeight = mainColumnRef.current.getBoundingClientRect().height
+      const viewportOffset =
+        typeof window !== "undefined"
+          ? Math.min(Math.max(Math.round(window.innerHeight * 0.22), 160), 360)
+          : 200
+      const height = Math.max(mainHeight + viewportOffset - 4, 280)
+      setSidebarHeight(height)
+    }
+
+    const timer = setTimeout(updateSidebarHeight, 100)
+    updateSidebarHeight()
+
+    const observer = new ResizeObserver(updateSidebarHeight)
+    if (mainColumnRef.current) {
+      observer.observe(mainColumnRef.current)
+    }
+
+    window.addEventListener("resize", updateSidebarHeight)
+
+    return () => {
+      clearTimeout(timer)
+      observer.disconnect()
+      window.removeEventListener("resize", updateSidebarHeight)
+    }
+  }, [rightSidebarOpen, isMobileViewport, filteredOrders, viewMode, isCompact, isLoading])
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction if clicking the same column
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+    } else {
+      // Set new column and default to descending
+      setSortColumn(column)
+      setSortDirection("desc")
+    }
+  }
+
+  const getSortIcon = (column: string) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+    }
+    return sortDirection === "asc" ? (
+      <ArrowUp className="h-4 w-4" />
+    ) : (
+      <ArrowDown className="h-4 w-4" />
+    )
+  }
+
+  const stats = React.useMemo(() => {
+    return {
+      active: orders.filter((o) => o.status === "preparing" || o.status === "ready").length,
+      pending: orders.filter((o) => o.status === "pending").length,
+      ready: orders.filter((o) => o.status === "ready").length,
+      completed: orders.filter((o) => o.status === "completed").length,
+      cancelled: orders.filter((o) => o.status === "cancelled").length,
+    }
+  }, [orders])
+
+  const hasUrgency = (order: OrderData) => {
+    // Calculate urgency based on order age and status
+    const createdAt = new Date(order.createdAt)
+    const now = new Date()
+    const minutesAgo = (now.getTime() - createdAt.getTime()) / (1000 * 60)
+
+    // Highly urgent (red): pending > 30 min, preparing > 45 min, or cancelled
+    if (order.status === "cancelled") return true
+    if (order.status === "pending" && minutesAgo > 30) return true
+    if (order.status === "preparing" && minutesAgo > 45) return true
+    
+    // Urgent (yellow): pending > 15 min, preparing > 30 min, or ready > 20 min
+    if (order.status === "pending" && minutesAgo > 15) return true
+    if (order.status === "preparing" && minutesAgo > 30) return true
+    if (order.status === "ready" && minutesAgo > 20) return true
+    
+    // Not urgent (green): everything else
+    return false
+  }
+
+  const getUrgencyColor = (order: OrderData) => {
+    // Calculate urgency based on order age and status
+    const createdAt = new Date(order.createdAt)
+    const now = new Date()
+    const minutesAgo = (now.getTime() - createdAt.getTime()) / (1000 * 60)
+
+    // Highly urgent (red): pending > 30 min, preparing > 45 min, or cancelled
+    if (order.status === "cancelled") return "bg-red-500"
+    if (order.status === "pending" && minutesAgo > 30) return "bg-red-500"
+    if (order.status === "preparing" && minutesAgo > 45) return "bg-red-500"
+    
+    // Urgent (yellow): pending > 15 min, preparing > 30 min, or ready > 20 min
+    if (order.status === "pending" && minutesAgo > 15) return "bg-yellow-500"
+    if (order.status === "preparing" && minutesAgo > 30) return "bg-yellow-500"
+    if (order.status === "ready" && minutesAgo > 20) return "bg-yellow-500"
+    
+    // Not urgent (green): everything else
+    return "bg-green-500"
+  }
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case "Paid":
+        return "text-green-600"
+      case "Pending":
+        return "text-yellow-600"
+      case "Failed":
+      case "Refunded":
+        return "text-red-600"
+      default:
+        return "text-gray-600"
+    }
+  }
+
+  const getLoadPercentage = (load: string) => {
+    switch (load) {
+      case "high":
+        return 85
+      case "medium":
+        return 55
+      case "low":
+        return 25
+      default:
+        return 0
+    }
+  }
+
+  const InsightsContent = ({ className }: { className?: string }) => (
+    <div
+      className={cn(
+        "space-y-4",
+        className,
+      )}
+    >
+      {/* Quick Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Quick Filters</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Button variant="outline" className="w-full justify-start bg-transparent" size="sm">
+            <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+            Needs Attention
+          </Button>
+          <Button variant="outline" className="w-full justify-start bg-transparent" size="sm">
+            <Flame className="h-4 w-4 mr-2 text-orange-500" />
+            Rush Orders
+          </Button>
+          <Button variant="outline" className="w-full justify-start bg-transparent" size="sm">
+            <Wallet className="h-4 w-4 mr-2 text-yellow-500" />
+            Unpaid
+          </Button>
+          <Button variant="outline" className="w-full justify-start bg-transparent" size="sm">
+            <ClipboardList className="h-4 w-4 mr-2 text-blue-500" />
+            My Orders
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Performance Snapshot */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Performance Snapshot</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Avg Prep Time</span>
+              <div className="flex items-center gap-1">
+                <span className="font-semibold">18 min</span>
+                <TrendingUp className="h-3 w-3 text-red-500" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Avg Order Value</span>
+              <span className="font-semibold">$42.50</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Orders per Hour</span>
+              <span className="font-semibold">7.2</span>
+            </div>
+          </div>
+          <div className="h-16">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={mockOrdersPerformance}>
+                <Line type="monotone" dataKey="orders" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Staff Workload */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Staff Workload</CardTitle>
+        </CardHeader>
+        <CardContent className="max-h-64 overflow-y-auto pr-2.5 space-y-2">
+          {mockStaffWorkload.map((staff) => (
+            <div
+              key={staff.id}
+              onClick={() => setSelectedStaff(staff.name)}
+              className={`flex items-center justify-between border rounded-lg p-2 cursor-pointer transition-all hover:bg-muted/50 ${
+                selectedStaff === staff.name ? "ring-2 ring-primary bg-muted/30" : ""
+              }`}
+            >
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarFallback className="text-xs">
+                    {staff.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{staff.name}</p>
+                  <p className="text-xs text-muted-foreground">{staff.role}</p>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {staff.activeOrders} {staff.activeOrders === 1 ? "order" : "orders"}
+                </span>
+                <Progress value={getLoadPercentage(staff.load)} className="w-16 h-1.5" />
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Table Status Overview */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Table Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Occupied</span>
+              <span className="font-semibold">12 / 20</span>
+            </div>
+            <div className="grid grid-cols-10 gap-1">
+              {Array.from({ length: 20 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-6 rounded ${i < 12 ? "bg-red-500" : i < 17 ? "bg-green-500" : "bg-yellow-500"}`}
+                />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {mockRecentOrderActivity.map((activity) => (
+            <div key={activity.id} className="flex items-start gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2" />
+              <div className="flex-1 space-y-1">
+                <p className="text-sm">{activity.message}</p>
+                <p className="text-xs text-muted-foreground">{activity.time}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
+  const isMobileCardView = windowWidth < 480
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {waves.map((wave) => (
-        <span
-          key={`w-${wave.number}`}
-          className={cn(
-            "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded-md border px-2 text-[10px] font-black tracking-wide",
-            waveChipClass[wave.status]
+    <div className="relative h-full">
+      <div
+        className={cn(
+          "mx-auto w-full max-w-screen-2xl",
+          "grid gap-6 transition-all duration-300 px-4 py-4 md:px-6 md:py-6",
+          "grid-cols-1",
+          rightSidebarOpen ? "lg:grid-cols-[1fr_minmax(200px,22vw)]" : "lg:grid-cols-1",
+        )}
+      >
+        <section className="flex flex-col gap-6 min-w-0">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setRightSidebarOpen((prev) => !prev)}
+                  className="lg:hidden"
+                >
+                  <ChevronDown
+                    className={cn("h-5 w-5 transition-transform", rightSidebarOpen ? "rotate-180" : "")}
+                  />
+                </Button>
+                {!rightSidebarOpen && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="hidden md:flex h-10 w-10 lg:h-12 lg:w-12 rounded-full shadow-lg bg-transparent border-2 shrink-0"
+                    onClick={() => {
+                      setRightSidebarOpen(true)
+                      setIsInsightsCollapsed(false)
+                    }}
+                  >
+                    <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5 -rotate-90" />
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" disabled>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+        <div className="flex flex-wrap gap-2">
+          <Badge
+            variant="secondary"
+            className={cn(
+              "cursor-pointer px-3 py-1 lg:px-2.5 lg:py-0.5 text-sm rounded-full",
+              activeFilter
+                ? "bg-blue-500 text-white border-blue-500 dark:bg-blue-500 dark:text-white dark:border-blue-500"
+                : "hover:bg-blue-100 dark:hover:bg-blue-900",
+            )}
+            onClick={() => {
+              setActiveFilter(!activeFilter)
+              // Remove preparing from individual filters when toggling active
+              if (!activeFilter) {
+                setStatusFilter(statusFilter.filter(s => s !== "preparing"))
+              }
+            }}
+          >
+            {stats.active} Active
+          </Badge>
+          <Badge
+            variant="secondary"
+            className={cn(
+              "cursor-pointer px-3 py-1 lg:px-2.5 lg:py-0.5 text-sm rounded-full",
+              statusFilter.includes("pending")
+                ? "bg-gray-300 text-gray-900 border-gray-400 dark:bg-gray-600 dark:text-white dark:border-gray-600"
+                : "hover:bg-gray-200 dark:hover:bg-gray-700",
+            )}
+            onClick={() => toggleStatusFilter("pending")}
+          >
+            {stats.pending} Pending
+          </Badge>
+          <Badge
+            variant="secondary"
+            className={cn(
+              "cursor-pointer px-3 py-1 lg:px-2.5 lg:py-0.5 text-sm rounded-full",
+              statusFilter.includes("ready")
+                ? "bg-green-500 text-white border-green-500 dark:bg-green-500 dark:text-white dark:border-green-500"
+                : "hover:bg-green-100 dark:hover:bg-green-900",
+            )}
+            onClick={() => toggleStatusFilter("ready")}
+          >
+            {stats.ready} Ready
+          </Badge>
+          <Badge
+            variant="secondary"
+            className={cn(
+              "cursor-pointer px-3 py-1 lg:px-2.5 lg:py-0.5 text-sm rounded-full",
+              statusFilter.includes("completed")
+                ? "bg-slate-500 text-white border-slate-500 dark:bg-slate-500 dark:text-white dark:border-slate-500"
+                : "hover:bg-slate-200 dark:hover:bg-slate-700",
+            )}
+            onClick={() => toggleStatusFilter("completed")}
+          >
+            {stats.completed} Completed Today
+          </Badge>
+          <Badge
+            variant="secondary"
+            className={cn(
+              "cursor-pointer px-3 py-1 lg:px-2.5 lg:py-0.5 text-sm rounded-full",
+              statusFilter.includes("cancelled")
+                ? "bg-red-600 text-white border-red-600 dark:bg-red-600 dark:text-white dark:border-red-600"
+                : "hover:bg-red-100 dark:hover:bg-red-900",
+            )}
+            onClick={() => toggleStatusFilter("cancelled")}
+          >
+            {stats.cancelled} Cancelled
+          </Badge>
+          {hasActiveFilters && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer px-3 py-1 lg:px-2.5 lg:py-0.5 text-sm rounded-full bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 border-orange-500 dark:border-orange-600"
+              onClick={handleResetFilters}
+            >
+              <X className="h-3 w-3 mr-1" />
+              Reset
+            </Badge>
           )}
+        </div>
+
+        {/* Controls */}
+        <div ref={controlsContainerRef} className="flex flex-wrap items-center gap-2 w-full">
+          {/* Search bar - full width on mobile, flexible on desktop */}
+          <div className="relative w-full md:min-w-[120px] md:max-w-[240px] md:flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search orders..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          {/* Status dropdown - flexible on mobile, fixed on desktop */}
+            <Select 
+              value={statusFilter.length === 0 ? "all" : statusFilter[0]} 
+              onValueChange={(value) => {
+                if (value === "all") {
+                  setStatusFilter([])
+                } else {
+                  setStatusFilter([value])
+                }
+              }}
+            >
+              <SelectTrigger className="flex-1 md:w-[120px] md:flex-none shrink-0">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent className="z-50">
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="preparing">Preparing</SelectItem>
+                <SelectItem value="ready">Ready</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+
+          {/* Staff dropdown - flexible on mobile, fixed on desktop */}
+          <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+            <SelectTrigger className="flex-1 md:w-[120px] md:flex-none shrink-0">
+              <SelectValue placeholder="Staff" />
+            </SelectTrigger>
+            <SelectContent className="z-50">
+              <SelectItem value="all">All Staff</SelectItem>
+              <SelectItem value="me">You (My Orders)</SelectItem>
+              <SelectItem value="John Smith">John Smith</SelectItem>
+              <SelectItem value="Maria Garcia">Maria Garcia</SelectItem>
+              <SelectItem value="David Lee">David Lee</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Needs Attention - adapts based on container width */}
+          <Button
+            variant={needsAttention ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setNeedsAttention(!needsAttention)}
+            className={cn(
+              "shrink-0 overflow-hidden",
+              "transition-all duration-300 ease-in-out",
+              showButtonText ? "min-w-[140px] px-3 justify-start" : "w-9 h-9 px-0 justify-center",
+              needsAttention &&
+                "bg-yellow-100 text-yellow-700 border-yellow-400 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-600 dark:hover:bg-yellow-900/40",
+            )}
+          >
+            <div className="flex items-center justify-center gap-0">
+              <AlertTriangle
+                className={cn(
+                  "h-4 w-4 shrink-0 transition-all duration-300 ease-in-out",
+                  showButtonText && "mr-2",
+                  needsAttention && "text-yellow-600 dark:text-yellow-400",
+                )}
+              />
+              <span
+                className={cn(
+                  "whitespace-nowrap overflow-hidden",
+                  "transition-all duration-300 ease-in-out",
+                  showButtonText ? "max-w-[120px] opacity-100" : "max-w-0 opacity-0",
+                )}
+              >
+                Needs Attention
+              </span>
+            </div>
+          </Button>
+
+          {/* Compact toggle */}
+          {viewMode === "table" && (
+            <div className="flex max-sm:hidden items-center gap-2 px-3 py-1.5 h-12 lg:h-9 border rounded-md shrink-0">
+              <Switch id="compact-view" checked={isCompact} onCheckedChange={setIsCompact} />
+              <Label htmlFor="compact-view" className="text-sm cursor-pointer">
+                Compact
+              </Label>
+            </div>
+          )}
+
+          {/* View mode toggle */}
+          <div className="flex max-sm:hidden items-center gap-1 border rounded-md shrink-0">
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="icon"
+              onClick={() => handleViewModeChange("table")}
+              className="h-9 w-9"
+            >
+              <LayoutList className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === "card" ? "secondary" : "ghost"}
+              size="icon"
+              onClick={() => handleViewModeChange("card")}
+              className="h-9 w-9"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+        {/* Main Content - Only table/card view */}
+        <div className="min-w-0" ref={mainColumnRef}>
+          {/* Orders View */}
+          {isLoading ? (
+            <SkeletonBlock rows={8} />
+          ) : filteredOrders.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <ClipboardList className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No orders found</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {searchQuery ? "Try adjusting your search" : "Create your first order to get started"}
+                </p>
+                <Button onClick={() => setNewOrderModalOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create First Order
+                </Button>
+              </CardContent>
+            </Card>
+          ) : error ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Error loading orders</h3>
+                <p className="text-sm text-muted-foreground mb-4">{error}</p>
+                <Button onClick={() => window.location.reload()}>
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          ) : !locationId ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <ClipboardList className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No location selected</h3>
+                <p className="text-sm text-muted-foreground">
+                  Please select a location to view orders
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div>
+              {viewMode === "table" ? (
+                isMobileCardView ? (
+                  <div className="space-y-2">
+                    <AnimatePresence mode="popLayout">
+                      {filteredOrders.slice(0, 10).map((order) => (
+                        <motion.div
+                          key={order.id}
+                          layout
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          onClick={() => handleOrderClick(order)}
+                          className="rounded-xl border p-3 shadow-sm bg-card text-sm flex flex-col gap-2 cursor-pointer hover:shadow-md active:scale-[0.98] transition-all"
+                        >
+                          <div className="flex justify-between items-start font-medium">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-1 h-8 rounded-full shrink-0 ${getUrgencyColor(order)}`} />
+                              <span className="font-semibold">#{order.orderNumber}</span>
+                            </div>
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={order.status} />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="rounded-full hover:bg-muted transition-colors h-8 w-8"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  side="top"
+                                  className="min-w-[180px] sm:min-w-[200px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <DropdownMenuItem>
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit Order
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled>
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Duplicate
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled>
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    Print Receipt
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled>
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    Cancel Order
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-base">
+                              {order.table 
+                                ? `Table ${order.table.tableNumber}` 
+                                : order.orderType === "pickup" 
+                                  ? "Pickup" 
+                                  : order.orderType === "delivery" 
+                                    ? "Delivery" 
+                                    : "No table"}
+                            </span>
+                            <span className="font-bold text-base">${order.total.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs text-muted-foreground">
+                            <span>{order.customer?.name || "Guest"}</span>
+                            <span>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                ) : (
+                  <Card className="overflow-hidden">
+                    <div className="w-full overflow-x-auto md:overflow-visible">
+                      <Table
+                        className={cn(
+                          "w-full border-separate border-spacing-0 text-sm",
+                          "[&_th]:py-4 [&_th]:align-middle",
+                          "[&_td]:py-4 [&_td]:align-middle",
+                          isCompact && "table-fixed",
+                          windowWidth < 640 && "[&>tbody>tr>td]:py-1 [&>thead>tr>th]:py-1 text-xs",
+                        )}
+                      >
+                        <colgroup>
+                          {visibleColumns.map((_, i) => (
+                            <col key={i} style={{ width: `${100 / visibleColumns.length}%` }} />
+                          ))}
+                        </colgroup>
+                        <TableHeader className="bg-muted/50">
+                          <TableRow className="[&>th:first-child]:rounded-tl-lg [&>th:last-child]:rounded-tr-lg">
+                            {visibleColumns.includes("orderNumber") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("orderNumber")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Order #
+                                  {getSortIcon("orderNumber")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("table") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("table")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Table
+                                  {getSortIcon("table")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("customer") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("customer")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Customer
+                                  {getSortIcon("customer")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("items") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("items")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Items
+                                  {getSortIcon("items")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("total") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("total")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Total
+                                  {getSortIcon("total")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("time") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("time")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Time
+                                  {getSortIcon("time")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("status") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("status")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Status
+                                  {getSortIcon("status")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("staff") && (
+                              <TableHead 
+                                className="align-middle text-center cursor-pointer hover:bg-muted/70 transition-colors select-none"
+                                onClick={() => handleSort("staff")}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  Staff
+                                  {getSortIcon("staff")}
+                                </div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes("actions") && (
+                              <TableHead className="text-center align-middle">Actions</TableHead>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredOrders.slice(0, 10).map((order) => (
+                            <TableRow
+                              key={order.id}
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => handleOrderClick(order)}
+                            >
+                              {visibleColumns.includes("orderNumber") && (
+                                <TableCell className="font-medium align-middle">
+                                  <div className="flex items-center gap-2 justify-center">
+                                    <div className={`w-1 h-8 rounded-full shrink-0 ${getUrgencyColor(order)}`} />
+                                    <span className="whitespace-normal break-words">{order.orderNumber}</span>
+                                    {order.notes && (
+                                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" title={`Order Notes: ${order.notes}`} />
+                                    )}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("table") && (
+                                <TableCell className="whitespace-normal break-words align-middle text-center">
+                                  {order.table 
+                                    ? `Table ${order.table.tableNumber}` 
+                                    : order.orderType === "pickup" 
+                                      ? "Pickup" 
+                                      : order.orderType === "delivery" 
+                                        ? "Delivery" 
+                                        : "-"}
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("customer") && (
+                                <TableCell className="whitespace-normal break-words align-middle text-center">
+                                  {order.customer?.name || "Guest"}
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("items") && (
+                                <TableCell className="align-middle text-center">
+                                  <div className="flex items-center gap-2 justify-center">
+                                    {order.itemsCount}
+                                    {order.hasItemNotes && (
+                                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" title="One or more items have notes" />
+                                    )}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("total") && (
+                                <TableCell className="whitespace-normal break-words align-middle text-center">
+                                  ${order.total.toFixed(2)}
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("time") && (
+                                <TableCell className="text-muted-foreground whitespace-normal break-words align-middle text-center">
+                                  {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("status") && (
+                                <TableCell className="align-middle text-center">
+                                  <StatusBadge status={order.status} />
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("staff") && (
+                                <TableCell className="align-middle text-center">
+                                  {order.assignedStaff ? (
+                                    <div className="flex items-center gap-2 justify-center">
+                                      <Avatar className="h-6 w-6">
+                                        <AvatarFallback className="text-xs">
+                                          {order.assignedStaff.fullName
+                                            .split(" ")
+                                            .map((n) => n[0])
+                                            .join("")}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="text-sm whitespace-normal break-words">
+                                        {order.assignedStaff.fullName.split(" ")[0]}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                </TableCell>
+                              )}
+                              {visibleColumns.includes("actions") && (
+                                <TableCell className="text-center align-middle">
+                                  <div className="flex justify-center">
+                                    <div className="flex items-center gap-2">
+                                      <CreditCard className={`h-4 w-4 ${getPaymentStatusColor(order.paymentStatus === "paid" ? "Paid" : order.paymentStatus === "partial" ? "Pending" : "Unpaid")}`} />
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="rounded-full hover:bg-muted transition-colors h-8 w-8"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <MoreHorizontal className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                          align="end"
+                                          side={isMobileViewport ? "top" : "bottom"}
+                                          className="min-w-[180px] sm:min-w-[200px]"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <DropdownMenuItem>
+                                            <Eye className="mr-2 h-4 w-4" />
+                                            View Details
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem disabled>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            Edit Order
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem disabled>
+                                            <Copy className="mr-2 h-4 w-4" />
+                                            Duplicate
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem disabled>
+                                            <Printer className="mr-2 h-4 w-4" />
+                                            Print Receipt
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem disabled>
+                                            <XCircle className="mr-2 h-4 w-4" />
+                                            Cancel Order
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </Card>
+                )
+              ) : (
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                  {filteredOrders.slice(0, 6).map((order) => (
+                    <Card
+                      key={order.id}
+                      className="cursor-pointer hover:shadow-md transition-shadow"
+                      onClick={() => handleOrderClick(order)}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-1 h-8 rounded-full shrink-0 ${getUrgencyColor(order)}`} />
+                              <CardTitle className="text-lg">{order.orderNumber}</CardTitle>
+                              {order.notes && (
+                                <FileText className="h-4 w-4 text-muted-foreground shrink-0" title={`Order Notes: ${order.notes}`} />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>
+                                {order.table 
+                                  ? `Table ${order.table.tableNumber}` 
+                                  : order.orderType === "pickup" 
+                                    ? "Pickup" 
+                                    : order.orderType === "delivery" 
+                                      ? "Delivery" 
+                                      : "No table"}
+                              </span>
+                              <span>•</span>
+                              <span>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={order.status} />
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-full hover:bg-muted transition-colors h-8 w-8"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                side={isMobileViewport ? "top" : "bottom"}
+                                className="min-w-[180px] sm:min-w-[200px]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <DropdownMenuItem>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem disabled>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit Order
+                                </DropdownMenuItem>
+                                <DropdownMenuItem disabled>
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Duplicate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem disabled>
+                                  <Printer className="mr-2 h-4 w-4" />
+                                  Print Receipt
+                                </DropdownMenuItem>
+                                <DropdownMenuItem disabled>
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  Cancel Order
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">{order.customer?.name || "Guest"}</span>
+                          <span className="font-semibold">${order.total.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">{order.itemsCount} items</span>
+                            {order.hasItemNotes && (
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" title="One or more items have notes" />
+                            )}
+                          </div>
+                          {order.assignedStaff && (
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-xs">
+                                  {order.assignedStaff.fullName
+                                    .split(" ")
+                                    .map((n) => n[0])
+                                    .join("")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{order.assignedStaff.fullName.split(" ")[0]}</span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        </section>
+
+        {rightSidebarOpen && (
+          <aside
+            ref={sidebarRef}
+            className="hidden lg:block transition-all duration-300 min-w-[200px] max-w-[22vw] w-full flex-shrink-0 self-start"
+            style={sidebarHeight ? { height: sidebarHeight, maxHeight: sidebarHeight } : undefined}
+          >
+            <SidebarPanel
+              title="Insights"
+              collapsible
+              isCollapsed={isInsightsCollapsed}
+              onToggle={() => {
+                const newCollapsed = !isInsightsCollapsed
+                setIsInsightsCollapsed(newCollapsed)
+                if (newCollapsed) {
+                  setRightSidebarOpen(false)
+                }
+              }}
+              className="h-full w-full"
+              contentClassName="flex flex-col h-full min-h-0"
+              bodyClassName="flex-1 min-h-0 overflow-y-auto pr-2 md:pr-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            >
+              <InsightsContent />
+            </SidebarPanel>
+          </aside>
+        )}
+      </div>
+
+      {isMobileViewport && rightSidebarOpen && (
+        <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-md overflow-y-auto px-4 [&>button]:sm:hidden [&>button]:lg:block [&>button]:!top-1 pointer-events-auto"
+          >
+            <div className="pointer-events-auto">
+              <SheetHeader className="pb-2">
+                <SheetTitle className="leading-none">Insights</SheetTitle>
+              </SheetHeader>
+              <Separator className="mt-1.5 mb-0" />
+              <InsightsContent className="pt-4 pb-6" />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {isMobileViewport && showCollapseButton && (
+        <Button
+          variant="outline"
+          onClick={() => setRightSidebarOpen(false)}
+          className="hidden sm:flex lg:hidden !h-7 !w-7 rounded-full !p-0 !min-w-0 !min-h-0 shrink-0 items-center justify-center fixed top-[12px] right-[434px] z-[999] shadow-lg bg-white pointer-events-auto transition-all duration-200 animate-in fade-in-0 zoom-in-95 border-0"
         >
-          W{wave.number}
-        </span>
-      ))}
+          <ChevronRight className="h-3 w-3" />
+        </Button>
+      )}
+
+      {/* Order Details Drawer */}
+      {selectedOrder && (
+        <Drawer
+          open={drawerOpen}
+          onClose={() => {
+            setDrawerOpen(false)
+            setSelectedOrderId(null)
+            setSelectedOrder(null)
+          }}
+          title={selectedOrder.orderNumber}
+          subtitle={`Placed: ${new Date(selectedOrder.createdAt).toLocaleString()}`}
+        >
+          <div className="space-y-6 px-4">
+            <Select value={selectedOrder.status} disabled>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="preparing">Preparing</SelectItem>
+                <SelectItem value="ready">Ready</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Connected Records */}
+            <ConnectedRecords
+              order={{ id: selectedOrder.id, total: selectedOrder.total }}
+              table={selectedOrder.table ? { id: selectedOrder.table.id, label: `Table ${selectedOrder.table.tableNumber}` } : undefined}
+              reservation={
+                selectedOrder.reservation
+                  ? { id: selectedOrder.reservation.id, name: selectedOrder.customer?.name || "Guest", time: selectedOrder.reservation.reservationTime }
+                  : undefined
+              }
+              sessionId={sessionId}
+            />
+
+            {/* Order Info */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">Order Information</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Table</p>
+                  <p className="font-medium">{selectedOrder.table ? `Table ${selectedOrder.table.tableNumber}` : "No table"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Customer</p>
+                  <p className="font-medium">{selectedOrder.customer?.name || "Guest"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Order Type</p>
+                  <p className="font-medium">{selectedOrder.orderType.replace("_", " ")}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Assigned Staff</p>
+                  <p className="font-medium">{selectedOrder.assignedStaff?.fullName || "Not assigned"}</p>
+                </div>
+              </div>
+              {selectedOrder.notes && (
+                <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Order Notes
+                  </p>
+                  <p className="text-sm mt-1">{selectedOrder.notes}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Items List */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Items</h3>
+                <Button variant="ghost" size="sm" disabled>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Item
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {selectedOrder.items.map((item) => (
+                  <div key={item.id} className="flex items-start justify-between p-3 border rounded-md">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{item.itemName}</span>
+                        <span className="text-muted-foreground">x{item.quantity}</span>
+                      </div>
+                      {item.customizations.length > 0 && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {item.customizations.map((c, i) => (
+                            <span key={i}>
+                              {c.groupName}: {c.optionName} {c.quantity > 1 && `(x${c.quantity})`}
+                              {i < item.customizations.length - 1 && ", "}
+                            </span>
+                          ))}
+                        </p>
+                      )}
+                      {item.notes && (
+                        <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+                          <p className="text-xs font-medium flex items-center gap-1 text-blue-700 dark:text-blue-400">
+                            <FileText className="h-3 w-3" />
+                            Item Note
+                          </p>
+                          <p className="text-sm mt-1">{item.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">${item.lineTotal.toFixed(2)}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div className="space-y-2 pt-3 border-t">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>${selectedOrder.subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Tax</span>
+                <span>${selectedOrder.taxAmount.toFixed(2)}</span>
+              </div>
+              {selectedOrder.serviceCharge > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Service Charge</span>
+                  <span>${selectedOrder.serviceCharge.toFixed(2)}</span>
+                </div>
+              )}
+              {selectedOrder.tipAmount > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Tip</span>
+                  <span>${selectedOrder.tipAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {selectedOrder.discountAmount > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span>-${selectedOrder.discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-lg font-bold pt-2 border-t">
+                <span>Total</span>
+                <span>${selectedOrder.total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Payment */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">Payment</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <p className={`font-medium ${getPaymentStatusColor(selectedOrder.paymentStatus === "paid" ? "Paid" : selectedOrder.paymentStatus === "partial" ? "Pending" : "Unpaid")}`}>
+                    {selectedOrder.paymentStatus.charAt(0).toUpperCase() + selectedOrder.paymentStatus.slice(1)}
+                  </p>
+                </div>
+                {selectedOrder.payments.length > 0 && (
+                  <div>
+                    <p className="text-muted-foreground">Method</p>
+                    <p className="font-medium">{selectedOrder.payments[0].method}</p>
+                  </div>
+                )}
+              </div>
+              {selectedOrder.payments.length > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Payments</p>
+                  <div className="space-y-2">
+                    {selectedOrder.payments.map((payment) => (
+                      <div key={payment.id} className="p-2 border rounded text-sm">
+                        <div className="flex justify-between">
+                          <span>${payment.amount.toFixed(2)}</span>
+                          <span className="text-muted-foreground">{payment.method}</span>
+                        </div>
+                        {payment.paidAt && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Paid: {new Date(payment.paidAt).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleMarkPaid(selectedOrder)}>
+                  Mark Paid
+                </Button>
+                <Button variant="outline" size="sm" disabled>
+                  Refund
+                </Button>
+                <Button variant="outline" size="sm" disabled>
+                  Split
+                </Button>
+                <Button variant="outline" size="sm" disabled>
+                  Send Invoice
+                </Button>
+              </div>
+            </div>
+
+            {/* Timeline */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">Timeline</h3>
+              <div className="space-y-3">
+                {selectedOrder.timeline.map((event, index) => (
+                  <div key={index} className="flex items-start gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs">
+                        {event.changedBy
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        Status changed to: {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{event.changedBy}</span>
+                        <span>•</span>
+                        <span>{new Date(event.createdAt).toLocaleString()}</span>
+                      </div>
+                      {event.note && (
+                        <p className="text-xs text-muted-foreground mt-1">{event.note}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="pt-4 border-t space-y-2">
+              <div className="flex gap-2">
+                <Button className="flex-1" disabled>
+                  Mark as Ready
+                </Button>
+                <Button variant="outline" disabled>
+                  <Printer className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" disabled>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1 bg-transparent" disabled>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 bg-transparent" disabled>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Duplicate
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 bg-transparent" disabled>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Drawer>
+      )}
+
+      {/* New Order Modal */}
+      <Dialog open={newOrderModalOpen} onOpenChange={setNewOrderModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Order</DialogTitle>
+            <DialogDescription>Create a new order for a table</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Table</Label>
+                <Select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select table" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Table 1</SelectItem>
+                    <SelectItem value="2">Table 2</SelectItem>
+                    <SelectItem value="3">Table 3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Order Type</Label>
+                <Select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dine-in">Dine-in</SelectItem>
+                    <SelectItem value="takeout">Takeout</SelectItem>
+                    <SelectItem value="delivery">Delivery</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Customer Name</Label>
+              <Input placeholder="Enter customer name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Menu Items</Label>
+              <div className="border rounded-md p-4 space-y-2">
+                <Input placeholder="Search menu items..." />
+                <p className="text-sm text-muted-foreground">Select items to add to order</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Special Instructions</Label>
+              <Input placeholder="Any special requests or notes..." />
+            </div>
+            <div className="space-y-2">
+              <Label>Assigned Staff</Label>
+              <Select>
+                <SelectTrigger>
+                  <SelectValue placeholder="You" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="you">You</SelectItem>
+                  <SelectItem value="john">John Smith</SelectItem>
+                  <SelectItem value="maria">Maria Garcia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewOrderModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled>
+              Save as Draft
+            </Button>
+            <Button disabled>Save & Send to Kitchen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-function getIdentifier(order: UnifiedOrder): {
-  Icon: typeof Armchair
-  text: string
-} {
-  if (order.source === "table") {
-    const number = order.label.match(/\d+/)?.[0] ?? order.label
-    return { Icon: HandPlatter, text: `T${number}` }
-  }
-  if (order.source === "pickup") {
-    const code = order.label.toUpperCase().startsWith("PU-") ? order.label : `PU-${order.label}`
-    return { Icon: ShoppingBag, text: code }
-  }
-  const code = order.label.toUpperCase().startsWith("DI-") ? order.label : `DI-${order.label}`
-  return { Icon: Store, text: code }
-}
-
-function OrderCard({
-  order,
-  boardMode,
-  onMarkServed,
-  onOpenDetail,
-  onFireTableWave,
-}: {
-  order: UnifiedOrder
-  boardMode: BoardMode
-  onMarkServed: (order: UnifiedOrder) => void
-  onOpenDetail: (order: UnifiedOrder) => void
-  onFireTableWave: (order: UnifiedOrder) => void
-}) {
-  const elapsed = minutesAgo(order.createdAt)
-  const isHistoryCompleted = boardMode === "history" && order.status === "served"
-  const tone: OrderTone = isHistoryCompleted ? "completed_history" : statusTone[order.status]
-  const isUrgent = order.status === "ready"
-  const hasAllergyHint = /allergy|no nuts|no nut|allergic/i.test(order.note ?? "")
-  const identifier = getIdentifier(order)
-  const canMarkServed = order.status === "ready" && order.source !== "table"
-  const nextFireableWaveNumber = getNextFireableWaveNumber(order)
-  const canFireNextWave = order.source === "table" && order.status === "served" && nextFireableWaveNumber !== null
-
-  return (
-    <article
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpenDetail(order)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault()
-          onOpenDetail(order)
-        }
-      }}
-      className={cn(
-        "group flex cursor-pointer flex-col rounded-xl border-l-[3px] border border-white/[0.06] bg-card/60 text-left backdrop-blur-sm transition-all duration-200",
-        toneBorderClass[tone],
-        toneGlowClass[tone],
-        isUrgent && "bg-red-500/[0.04]",
-        "hover:-translate-y-0.5 hover:bg-card/80 hover:shadow-lg hover:shadow-black/20"
-      )}
-      style={isUrgent ? ({ "--glow-urgent": "0 72% 51%" } as React.CSSProperties) : undefined}
-    >
-      <header className="flex items-center gap-1.5 px-4 pt-3.5 pb-2.5">
-        <span
-          className={cn(
-            "relative inline-flex h-6 w-6 items-center justify-center rounded-full shrink-0",
-            toneDotClass[tone]
-          )}
-        >
-          {isUrgent ? <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-50" /> : null}
-          <identifier.Icon className="relative z-10 h-3.5 w-3.5 text-slate-950/90" />
-        </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={cn("font-mono text-sm font-bold tracking-wide", toneTextClass[tone])}>
-              {identifier.text}
-            </span>
-            <span className={cn("inline-flex h-5 items-center rounded border px-1 text-[10px] font-semibold", sourceChipClass[order.source])}>
-              {sourceLabel[order.source]}
-            </span>
-            <span
-              className={cn(
-                "inline-flex h-5 items-center rounded border px-1 text-[10px] font-semibold",
-                isHistoryCompleted ? historyCompletedTone.chipClass : statusChipClass[order.status]
-              )}
-            >
-              {isHistoryCompleted ? "Completed" : statusChipLabel[order.status]}
-            </span>
-            {order.paymentState ? (
-              <span
-                className={cn(
-                  "inline-flex h-5 items-center gap-1 rounded border px-1 text-[10px] font-semibold",
-                  paymentStateClass[order.paymentState]
-                )}
-              >
-                {order.paymentState === "paid" ? <CheckCircle2 className="h-3 w-3" /> : <Clock3 className="h-3 w-3" />}
-                <span>{order.paymentState === "paid" ? "Paid" : "Unpaid"}</span>
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-1 flex items-center text-[11px] text-muted-foreground/70">
-            <span className="inline-flex items-center gap-1">
-              <MapPinned className="h-3 w-3" />
-              <span>{order.sectionLabel}</span>
-            </span>
-            <span className="ml-1.5 inline-flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              <span>{order.guestLabel}</span>
-            </span>
-          </div>
-        </div>
-        <div className="ml-auto text-right">
-          <div className={cn("mt-0.5 flex items-center justify-end gap-0.5 font-mono text-[11px]", isUrgent ? "text-red-400/80" : "text-muted-foreground/60")}>
-            <Clock3 className="h-3 w-3" />
-            {elapsed}m
-          </div>
-          <div className="mt-0.5 text-xs font-semibold text-foreground/90">{order.itemCount} items</div>
-        </div>
-      </header>
-
-      {isUrgent ? (
-        <div className="px-3.5 pb-2">
-          <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-500/10 px-2.5 py-2">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold leading-tight text-red-400">Items are ready for pickup</p>
-              <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
-                Move this order to handoff / served.
-              </p>
-            </div>
-            {canMarkServed ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onMarkServed(order)
-                }}
-                className="ml-2 inline-flex h-7 shrink-0 items-center gap-1 self-center rounded-md border border-emerald-300/50 bg-emerald-500/20 px-2.5 text-[11px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Served
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {order.waves.length > 0 ? (
-        <div className="px-4 pb-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <WaveStrip waves={order.waves} />
-            {canFireNextWave ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onFireTableWave(order)
-                }}
-                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-orange-300/45 bg-orange-500/14 px-2.5 text-[11px] font-semibold text-orange-100 transition-colors hover:bg-orange-500/24"
-              >
-                <Flame className="h-3.5 w-3.5" />
-                Fire W{nextFireableWaveNumber}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {order.note ? (
-        <div className={cn("mx-4 mb-2 rounded-md border px-2 py-1.5 text-[11px] italic", hasAllergyHint ? "border-amber-400/30 bg-amber-500/10 text-amber-200/90" : "border-white/10 bg-black/20 text-muted-foreground")}>
-          {order.note}
-        </div>
-      ) : null}
-
-    </article>
-  )
-}
-
 export default function OrdersPage() {
-  const router = useRouter()
-  const [query, setQuery] = useState("")
-  const [boardMode, setBoardMode] = useState<BoardMode>("live")
-  const [sourceFilter, setSourceFilter] = useState<"all" | OrderSource>("all")
-  const [statusFilter, setStatusFilter] = useState<"all" | UnifiedStatus>("all")
-  const [trackedOrders, setTrackedOrders] = useState<TrackingSnapshot[]>([])
-  const [counterDemoStatusOverrides, setCounterDemoStatusOverrides] = useState<Record<string, UnifiedStatus>>({})
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
-  const [tableWaveOverrides, setTableWaveOverrides] = useState<Record<string, Record<number, LocalWaveStatus>>>({})
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<UnifiedStatus>>(new Set())
-
-  const storeTables = useRestaurantStore((s) => s.tables ?? [])
-  const floorTables = useMemo(() => storeTablesToFloorTables(storeTables), [storeTables])
-
-  useEffect(() => {
-    const load = () => setTrackedOrders(getAllTrackingSnapshots())
-    load()
-    const timer = setInterval(load, 2500)
-    return () => clearInterval(timer)
-  }, [])
-
-  const handleAdvanceCounterStatus = useCallback(
-    (order: UnifiedOrder, nextStatus: "sent" | "preparing" | "ready" | "served") => {
-      if (order.source === "table") return
-
-      const mapToTracking = (status: "sent" | "preparing" | "ready" | "served"): TrackingStatus => {
-        if (status === "served") return "picked_up"
-        return status
-      }
-
-      if (order.trackToken) {
-        const current = trackedOrders.find((entry) => entry.token === order.trackToken)
-        if (current) {
-          const next: TrackingSnapshot = {
-            ...current,
-            status: mapToTracking(nextStatus),
-            updatedAt: Date.now(),
-          }
-          upsertTrackingSnapshot(next)
-          setTrackedOrders((prev) => prev.map((entry) => (entry.token === next.token ? next : entry)))
-          return
-        }
-      }
-
-      setCounterDemoStatusOverrides((prev) => ({
-        ...prev,
-        [order.id]: nextStatus,
-      }))
-    },
-    [trackedOrders]
-  )
-
-  const handleMarkServed = useCallback(
-    (order: UnifiedOrder) => {
-      if (order.status !== "ready" || order.source === "table") return
-      handleAdvanceCounterStatus(order, "served")
-    },
-    [handleAdvanceCounterStatus]
-  )
-
-  const allOrders = useMemo(() => {
-    const tableOrders = buildTableOrders(floorTables)
-    const counterOrders = buildCounterOrders(trackedOrders)
-    const demoOrders = buildDemoOrders(Date.now(), counterDemoStatusOverrides)
-    const merged = [...tableOrders, ...counterOrders, ...demoOrders].map((order) => {
-      const overrides = tableWaveOverrides[order.id] ?? {}
-      const wavesWithOverrides = order.waves.map((wave) => ({
-        ...wave,
-        status: overrides[wave.number] ?? wave.status,
-      }))
-
-      if (order.source !== "table") {
-        return Object.keys(overrides).length > 0 ? { ...order, waves: wavesWithOverrides } : order
-      }
-
-      const derivedStatus = deriveStatusFromOrderWaves(wavesWithOverrides)
-      const normalizedWaves = normalizeNewTableWaves(wavesWithOverrides, derivedStatus)
-      return {
-        ...order,
-        waves: normalizedWaves,
-        status: deriveStatusFromOrderWaves(normalizedWaves),
-      }
-    })
-
-    return merged.sort((a, b) => a.createdAt - b.createdAt)
-  }, [counterDemoStatusOverrides, floorTables, tableWaveOverrides, trackedOrders])
-
-  const selectedOrder = useMemo(
-    () => allOrders.find((order) => order.id === selectedOrderId) ?? null,
-    [allOrders, selectedOrderId]
-  )
-
-  useEffect(() => {
-    if (selectedOrderId && !selectedOrder) {
-      setSelectedOrderId(null)
-    }
-  }, [selectedOrder, selectedOrderId])
-
-  const visibleStatuses = boardMode === "live" ? liveStatusOrder : historyStatusOrder
-  const visibleStatusFilters = boardMode === "live" ? liveStatusFilterOrder : historyStatusOrder
-
-  const sourceCounts = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const base = allOrders.filter((order) => {
-      if (!isOrderVisibleInBoardMode(order, boardMode)) return false
-      if (!q) return true
-      return (
-        order.label.toLowerCase().includes(q) ||
-        order.sectionLabel.toLowerCase().includes(q) ||
-        order.guestLabel.toLowerCase().includes(q) ||
-        order.items.some((item) => item.name.toLowerCase().includes(q))
-      )
-    })
-
-    return {
-      all: base.length,
-      table: base.filter((o) => o.source === "table").length,
-      pickup: base.filter((o) => o.source === "pickup").length,
-      dineIn: base.filter((o) => o.source === "dine_in_no_table").length,
-    }
-  }, [allOrders, boardMode, query])
-
-  useEffect(() => {
-    if (statusFilter !== "all" && !visibleStatuses.includes(statusFilter)) {
-      setStatusFilter("all")
-    }
-  }, [boardMode, statusFilter, visibleStatuses])
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return allOrders.filter((order) => {
-      if (!isOrderVisibleInBoardMode(order, boardMode)) return false
-      if (sourceFilter !== "all" && order.source !== sourceFilter) return false
-      if (statusFilter !== "all" && order.status !== statusFilter) return false
-      if (!q) return true
-      return (
-        order.label.toLowerCase().includes(q) ||
-        order.sectionLabel.toLowerCase().includes(q) ||
-        order.guestLabel.toLowerCase().includes(q) ||
-        order.items.some((item) => item.name.toLowerCase().includes(q))
-      )
-    })
-  }, [allOrders, boardMode, query, sourceFilter, statusFilter])
-
-  const statusCounts = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const base = allOrders.filter((order) => {
-      if (!isOrderVisibleInBoardMode(order, boardMode)) return false
-      if (sourceFilter !== "all" && order.source !== sourceFilter) return false
-      if (!q) return true
-      return (
-        order.label.toLowerCase().includes(q) ||
-        order.sectionLabel.toLowerCase().includes(q) ||
-        order.guestLabel.toLowerCase().includes(q) ||
-        order.items.some((item) => item.name.toLowerCase().includes(q))
-      )
-    })
-
-    return base.reduce<Record<UnifiedStatus, number>>(
-      (acc, order) => {
-        acc[order.status] += 1
-        return acc
-      },
-      {
-        sent: 0,
-        preparing: 0,
-        ready: 0,
-        served: 0,
-        closed: 0,
-        voided: 0,
-        refunded: 0,
-      }
-    )
-  }, [allOrders, boardMode, query, sourceFilter])
-
-  const groupedOrders = useMemo(
-    () => visibleStatuses.map((status) => ({ status, orders: filtered.filter((order) => order.status === status) })),
-    [filtered, visibleStatuses]
-  )
-
-  const toggleGroup = useCallback((status: UnifiedStatus) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(status)) next.delete(status)
-      else next.add(status)
-      return next
-    })
-  }, [])
-
-  const handleOpenOrder = useCallback(
-    (order: UnifiedOrder) => {
-      if (order.source === "table" && order.id.startsWith("table-")) {
-        const tableId = order.id.slice("table-".length)
-        router.push(`/table/${tableId}`)
-        return
-      }
-      setSelectedOrderId(order.id)
-    },
-    [router]
-  )
-
-const handleFireTableWave = useCallback((order: UnifiedOrder) => {
-    if (order.source !== "table") return
-    const nextWave = getNextFireableWaveNumber(order)
-    if (!nextWave) return
-
-    setTableWaveOverrides((prev) => ({
-      ...prev,
-      [order.id]: {
-        ...(prev[order.id] ?? {}),
-        [nextWave]: "fired",
-      },
-    }))
-  }, [])
-
-  const selectedIdentifier = selectedOrder ? getIdentifier(selectedOrder) : null
-  const selectedElapsedMinutes = selectedOrder ? minutesAgo(selectedOrder.createdAt) : 0
-  const selectedIsCounterOrder = selectedOrder?.source === "pickup" || selectedOrder?.source === "dine_in_no_table"
-  const selectedIsCounterDineIn = selectedOrder?.source === "dine_in_no_table"
-  const selectedSourceLabel =
-    selectedOrder?.source === "dine_in_no_table"
-      ? "Dine-In"
-      : selectedOrder
-        ? sourceLabel[selectedOrder.source]
-        : ""
-  const selectedFlowIndex = selectedOrder ? getCounterFlowIndex(selectedOrder.status) : 0
-  const selectedTargetEtaMinutes = selectedOrder
-    ? selectedOrder.source === "pickup"
-      ? 18
-      : selectedOrder.source === "dine_in_no_table"
-        ? 14
-        : 20
-    : 20
-  const selectedEtaRemaining = Math.max(0, selectedTargetEtaMinutes - selectedElapsedMinutes)
-  const selectedEtaLate = selectedElapsedMinutes > selectedTargetEtaMinutes
-  const selectedCurrentStageMinutes = selectedOrder
-    ? Math.max(0, Math.round((Date.now() - selectedOrder.updatedAt) / 60000))
-    : 0
-  const selectedPriorStageMinutes = Math.max(0, selectedElapsedMinutes - selectedCurrentStageMinutes)
-  const selectedPerCompletedStageMinutes =
-    selectedFlowIndex > 0 ? Math.round(selectedPriorStageMinutes / selectedFlowIndex) : 0
-
   return (
-    <main className="h-full bg-[radial-gradient(circle_at_12%_8%,rgba(34,211,238,0.16),transparent_35%),radial-gradient(circle_at_84%_0%,rgba(16,185,129,0.12),transparent_32%),hsl(222,24%,8%)] text-foreground">
-      <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col p-3 md:p-4">
-        <header className="sticky top-0 z-20 rounded-xl border border-white/10 bg-[hsl(224,18%,12%)]/88 p-3 backdrop-blur-md">
-          <div className="grid gap-2 lg:grid-cols-[1fr_auto_auto]">
-            <div className="flex items-center gap-1.5">
-              <div className="inline-flex h-8 items-center rounded-md border border-white/15 bg-black/25 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setBoardMode("live")}
-                  className={cn(
-                    "h-7 rounded px-2 text-[11px] font-semibold transition-colors",
-                    boardMode === "live"
-                      ? "bg-cyan-500/20 text-cyan-100"
-                      : "text-muted-foreground hover:bg-white/[0.06]"
-                  )}
-                >
-                  Live
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBoardMode("history")}
-                  className={cn(
-                    "h-7 rounded px-2 text-[11px] font-semibold transition-colors",
-                    boardMode === "history"
-                      ? "bg-fuchsia-500/20 text-fuchsia-100"
-                      : "text-muted-foreground hover:bg-white/[0.06]"
-                  )}
-                >
-                  History
-                </button>
-              </div>
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search table, ticket, guest, item..."
-                  className="h-9 border-white/15 bg-black/20 pl-8"
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {[
-                { id: "all" as const, label: `All (${sourceCounts.all})` },
-                { id: "table" as const, label: `Table (${sourceCounts.table})`, Icon: HandPlatter },
-                { id: "pickup" as const, label: `Pickup (${sourceCounts.pickup})`, Icon: ShoppingBag },
-                { id: "dine_in_no_table" as const, label: `Dine-In (${sourceCounts.dineIn})`, Icon: Store },
-              ].map((filter) => {
-                const Icon = "Icon" in filter ? filter.Icon : undefined
-                return (
-                <button
-                  key={filter.id}
-                  type="button"
-                  onClick={() => setSourceFilter(filter.id)}
-                  className={cn(
-                    "h-8 rounded-md border px-2.5 text-xs font-semibold transition-colors",
-                    sourceFilter === filter.id
-                      ? "border-cyan-300/55 bg-cyan-500/18 text-cyan-100"
-                      : "border-white/15 text-muted-foreground hover:bg-white/[0.06]"
-                  )}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
-                    <span>{filter.label}</span>
-                  </span>
-                </button>
-                )
-              })}
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {(["all", ...visibleStatusFilters] as const).map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setStatusFilter(status)}
-                  className={cn(
-                    "h-8 rounded-md border px-2.5 text-xs font-semibold capitalize transition-all duration-150",
-                    statusFilter === status && "shadow-[0_0_0_1px_rgba(255,255,255,0.28),0_0_16px_rgba(56,189,248,0.16)] -translate-y-[1px]",
-                    status === "all"
-                      ? statusFilter === "all"
-                        ? "border-cyan-300/55 bg-cyan-500/18 text-cyan-100"
-                        : "border-white/15 text-muted-foreground hover:bg-white/[0.06]"
-                      : statusFilter === status
-                        ? boardMode === "history" && status === "served"
-                          ? historyCompletedTone.filterActive
-                          : statusFilterToneClass[status].active
-                        : boardMode === "history" && status === "served"
-                          ? historyCompletedTone.filterIdle
-                          : statusFilterToneClass[status].idle
-                  )}
-                >
-                  {status === "all" ? (
-                    `All (${visibleStatusFilters.reduce((sum, key) => sum + statusCounts[key], 0)})`
-                  ) : (
-                    `${boardMode === "history" && status === "served" ? "Completed" : statusFilterLabel[status]} (${statusCounts[status]})`
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </header>
-
-        <section className="mt-3 min-h-0 flex-1 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="col-span-full flex min-h-52 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-black/20 p-6 text-center">
-              <ShoppingBag className="h-6 w-6 text-muted-foreground/60" />
-              <div className="text-sm font-semibold text-foreground">No matching orders</div>
-              <div className="text-xs text-muted-foreground">
-                {boardMode === "live"
-                  ? "Try changing search or status filters. Live board only includes New, Preparing, Ready, and Served."
-                  : "Try changing search or status filters. History includes Closed, Voided, and Refunded."}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {groupedOrders.map(({ status, orders }) => {
-                if (orders.length === 0) return null
-                const tone = statusTone[status]
-                const isCollapsed = collapsedGroups.has(status)
-                const isHistoryCompleted = boardMode === "history" && status === "served"
-                return (
-                  <div key={status}>
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(status)}
-                      className={cn(
-                        "sticky top-0 z-10 flex w-full items-center gap-2.5 border-b border-white/[0.04] bg-background/85 px-4 py-2.5 text-left backdrop-blur-md transition-colors hover:bg-white/[0.02]"
-                      )}
-                      aria-expanded={!isCollapsed}
-                      aria-label={`${isHistoryCompleted ? "COMPLETED" : groupLabel[status]} group, ${orders.length} orders`}
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: isHistoryCompleted ? historyCompletedTone.accent : toneAccentColor[tone] }}
-                      />
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80">
-                        {isHistoryCompleted ? "COMPLETED" : groupLabel[status]}
-                      </span>
-                      <span
-                        className="flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 font-mono text-[9px] font-bold"
-                        style={{
-                          backgroundColor: isHistoryCompleted ? historyCompletedTone.accentBg : toneAccentBg[tone],
-                          color: isHistoryCompleted ? historyCompletedTone.accent : toneAccentColor[tone],
-                        }}
-                      >
-                        {orders.length}
-                      </span>
-                      <div className="ml-2 flex-1 border-t border-white/[0.04]" />
-                      {isCollapsed ? (
-                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-                      ) : (
-                        <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
-                      )}
-                    </button>
-                    {!isCollapsed ? (
-                      <div className="px-3 pb-4 pt-2 md:px-5">
-                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                          {orders.map((order) => (
-                          <OrderCard
-                            key={order.id}
-                            order={order}
-                            boardMode={boardMode}
-                            onMarkServed={handleMarkServed}
-                            onOpenDetail={handleOpenOrder}
-                            onFireTableWave={handleFireTableWave}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </section>
-
-        <Sheet open={!!selectedOrderId} onOpenChange={(open) => !open && setSelectedOrderId(null)}>
-          <SheetContent
-            side="right"
-            className="w-full border-l border-white/15 bg-[linear-gradient(180deg,rgba(8,13,24,0.98),rgba(12,19,34,0.97))] p-0 sm:max-w-[520px]"
-          >
-            {selectedOrder && selectedIdentifier ? (
-              <div className="flex h-full flex-col">
-                <div className="border-b border-white/10 px-4 pb-4 pt-5">
-                  <SheetHeader className="space-y-1 text-left">
-                    <SheetTitle className="flex items-center gap-2 text-cyan-100">
-                      <selectedIdentifier.Icon className="h-4 w-4" />
-                      <span>{selectedIdentifier.text}</span>
-                      {selectedIsCounterOrder ? (
-                        <>
-                          <span
-                            className={cn(
-                              "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-semibold",
-                              paymentStateClass[selectedOrder.paymentState ?? "unpaid"]
-                            )}
-                          >
-                            {selectedOrder.paymentState === "paid" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}
-                            <span>{selectedOrder.paymentState === "paid" ? "Paid" : "Unpaid"}</span>
-                          </span>
-                          {selectedOrder.paymentState === "paid" && selectedOrder.paymentMethod ? (
-                            <span
-                              className={cn(
-                                "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-semibold",
-                                paymentMethodClass[selectedOrder.paymentMethod]
-                              )}
-                            >
-                              {selectedOrder.paymentMethod === "card" ? <CreditCard className="h-3.5 w-3.5" /> : null}
-                              {selectedOrder.paymentMethod === "cash" ? <Banknote className="h-3.5 w-3.5" /> : null}
-                              {selectedOrder.paymentMethod === "other" ? <ShoppingBag className="h-3.5 w-3.5" /> : null}
-                              <span className="capitalize">{selectedOrder.paymentMethod}</span>
-                            </span>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </SheetTitle>
-                    <SheetDescription className="text-xs text-muted-foreground">
-                      Opened {formatDateTime(selectedOrder.createdAt)} · {selectedElapsedMinutes}m ago
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                    <span className={cn("inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-semibold", sourceChipClass[selectedOrder.source])}>
-                      {selectedOrder.source === "dine_in_no_table" ? <Store className="h-3.5 w-3.5" /> : null}
-                      {selectedOrder.source === "pickup" ? <ShoppingBag className="h-3.5 w-3.5" /> : null}
-                      <span>{selectedSourceLabel}</span>
-                    </span>
-                    {selectedIsCounterOrder ? (
-                      <span className="inline-flex h-6 items-center gap-1 rounded-md border border-white/15 bg-white/[0.05] px-2 text-[11px] text-muted-foreground">
-                        <Users className="h-3.5 w-3.5" />
-                        <span>
-                          {selectedIsCounterDineIn
-                            ? selectedOrder.guestLabel.match(/\d+/)?.[0] ?? selectedOrder.guestLabel
-                            : selectedOrder.guestLabel}
-                        </span>
-                      </span>
-                    ) : null}
-                    <span
-                      className={cn(
-                        "inline-flex h-6 items-center rounded-md border px-2 text-[11px] font-semibold",
-                        boardMode === "history" && selectedOrder.status === "served"
-                          ? historyCompletedTone.chipClass
-                          : statusChipClass[selectedOrder.status]
-                      )}
-                    >
-                      {boardMode === "history" && selectedOrder.status === "served" ? "Completed" : statusChipLabel[selectedOrder.status]}
-                    </span>
-                    {!selectedIsCounterOrder ? (
-                      <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/[0.05] px-2 text-[11px] text-muted-foreground">
-                        {selectedOrder.sectionLabel}
-                      </span>
-                    ) : null}
-                    {!selectedIsCounterOrder ? (
-                      <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/[0.05] px-2 text-[11px] text-muted-foreground">
-                        {selectedOrder.guestLabel}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-                  {selectedIsCounterOrder ? (
-                    <section className="rounded-xl border border-white/12 bg-white/[0.03] p-3">
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Meal Progress
-                      </h3>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {counterStatusFlow.map((stepStatus, index) => (
-                          <div
-                            key={stepStatus}
-                            className={cn(
-                              "rounded-md border px-2 py-1.5 text-center",
-                              index <= selectedFlowIndex
-                                ? statusFilterToneClass[stepStatus].idle
-                                : "border-white/10 bg-black/20 text-muted-foreground"
-                            )}
-                          >
-                            <p className="text-[10px] font-semibold">{statusChipLabel[stepStatus]}</p>
-                            <p className="mt-0.5 text-[9px] font-medium opacity-85">
-                              {index < selectedFlowIndex
-                                ? formatMinutesCompact(selectedPerCompletedStageMinutes)
-                                : index === selectedFlowIndex
-                                  ? formatMinutesCompact(selectedCurrentStageMinutes)
-                                  : "0m"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                      {selectedOrder.status === "ready" ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleAdvanceCounterStatus(selectedOrder, "served")}
-                            className="inline-flex h-8 items-center rounded-md border border-emerald-300/50 bg-emerald-500/20 px-3 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
-                          >
-                            Mark Served
-                          </button>
-                        </div>
-                      ) : null}
-                      <div className="mt-3 grid grid-cols-3 gap-1.5 text-[11px]">
-                        <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground">Target</p>
-                          <p className="font-semibold text-foreground">{selectedTargetEtaMinutes}m</p>
-                        </div>
-                        <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground">Elapsed</p>
-                          <p className="font-semibold text-foreground">{selectedElapsedMinutes}m</p>
-                        </div>
-                        <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground">ETA</p>
-                          <p className={cn("font-semibold", selectedEtaLate ? "text-red-300" : "text-emerald-200")}>
-                            {selectedEtaLate ? `+${selectedElapsedMinutes - selectedTargetEtaMinutes}m` : `${selectedEtaRemaining}m`}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        {selectedEtaLate
-                          ? "Order is beyond target time."
-                          : "On track for pickup handoff."}
-                      </p>
-                    </section>
-                  ) : null}
-
-                  {selectedOrder.waves.length > 0 ? (
-                    <section>
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Waves
-                      </h3>
-                      <WaveStrip waves={selectedOrder.waves} />
-                    </section>
-                  ) : null}
-
-                  <section>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Items
-                      </h3>
-                      <span className="text-xs text-muted-foreground">{selectedOrder.itemCount} items</span>
-                    </div>
-                    <div className="space-y-2">
-                      {selectedOrder.items.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {item.qty}x {item.name}
-                            </p>
-                          </div>
-                          <span className="ml-3 inline-flex h-5 items-center rounded border border-white/15 px-1.5 text-[10px] font-semibold text-muted-foreground">
-                            {item.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-
-                  {selectedOrder.note ? (
-                    <section className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs italic text-amber-200/90">
-                      {selectedOrder.note}
-                    </section>
-                  ) : null}
-                </div>
-
-                <div className="border-t border-white/10 p-4" />
-              </div>
-            ) : null}
-          </SheetContent>
-        </Sheet>
-      </div>
-    </main>
+    <StaffFilterProvider>
+      <OrdersPageContent />
+    </StaffFilterProvider>
   )
 }

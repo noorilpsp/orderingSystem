@@ -36,6 +36,7 @@ import {
 import type { Menu } from "@/types/menu"
 import type { Category } from "@/types/category"
 import { isStationSettingsView } from "@/lib/kds/stationSettingsView"
+import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 
 type Step = "upload" | "preview" | "result"
 
@@ -70,6 +71,7 @@ export function MenuImportModal({
   menus,
   onImport,
 }: MenuImportModalProps) {
+  const { kdsEnabled } = useMerchantKdsEnabled()
   const [step, setStep] = useState<Step>("upload")
   const [rawRows, setRawRows] = useState<Record<string, string | undefined>[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
@@ -95,7 +97,7 @@ export function MenuImportModal({
   }, [open, defaultMenuId, menuId])
 
   useEffect(() => {
-    if (!open || !locationId) {
+    if (!open || !locationId || !kdsEnabled) {
       setStationCatalog([])
       return
     }
@@ -129,7 +131,7 @@ export function MenuImportModal({
     return () => {
       cancelled = true
     }
-  }, [open, locationId])
+  }, [open, locationId, kdsEnabled])
 
   const stationHint = useMemo(
     () => formatStationCatalogHint(stationCatalog),
@@ -250,7 +252,7 @@ export function MenuImportModal({
           {menuHint && (
             <p className="text-xs text-muted-foreground pt-1">Menus: {menuHint}</p>
           )}
-          {stationHint && (
+          {kdsEnabled && stationHint && (
             <p className="text-xs text-muted-foreground">
               Active prep stations: {stationHint}
             </p>
@@ -333,8 +335,12 @@ export function MenuImportModal({
                     <th className="text-left p-2 font-medium">Category</th>
                     <th className="text-left p-2 font-medium">Menu</th>
                     <th className="text-left p-2 font-medium">Photo</th>
-                    <th className="text-left p-2 font-medium">Prep station</th>
-                    <th className="text-left p-2 font-medium">Kitchen lane</th>
+                    {kdsEnabled ? (
+                      <>
+                        <th className="text-left p-2 font-medium">Prep station</th>
+                        <th className="text-left p-2 font-medium">Kitchen lane</th>
+                      </>
+                    ) : null}
                     <th className="text-left p-2 font-medium">Status</th>
                     <th className="text-left p-2 font-medium">Issues</th>
                   </tr>
@@ -363,8 +369,12 @@ export function MenuImportModal({
                         <td className="p-2 text-xs text-muted-foreground max-w-[120px] truncate">
                           {row?.photoUrl ? "Yes" : "—"}
                         </td>
-                        <td className="p-2 text-xs">{row?.defaultStation ?? "—"}</td>
-                        <td className="p-2 text-xs">{row?.defaultSubstation ?? "—"}</td>
+                        {kdsEnabled ? (
+                          <>
+                            <td className="p-2 text-xs">{row?.defaultStation ?? "—"}</td>
+                            <td className="p-2 text-xs">{row?.defaultSubstation ?? "—"}</td>
+                          </>
+                        ) : null}
                         <td className="p-2">{row?.status ?? (importAsDrafts ? "draft" : "live")}</td>
                         <td className="p-2 text-xs text-muted-foreground">
                           {issues.length > 0 ? issues.map((i) => i.message).join("; ") : "OK"}

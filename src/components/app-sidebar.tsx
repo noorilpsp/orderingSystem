@@ -58,6 +58,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 
 const operationsItems = [
   { title: "Home", href: "/dashboard", icon: Home },
@@ -165,6 +166,7 @@ export function AppSidebar() {
   const [searchExpanded, setSearchExpanded] = React.useState(false)
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
+  const { kdsEnabled } = useMerchantKdsEnabled()
 
   const [openTooltips, setOpenTooltips] = React.useState<Set<string>>(new Set())
 
@@ -184,10 +186,18 @@ export function AppSidebar() {
 
   const filterItems = React.useCallback(
     (items: any[]) => {
-      if (!searchQuery) return items
-      return items.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
+      const featureFiltered = items.filter((item) => {
+        if (item.href === "/kds" || item.href === "/dashboard/kds") {
+          return kdsEnabled
+        }
+        return true
+      })
+      if (!searchQuery) return featureFiltered
+      return featureFiltered.filter((item) =>
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
     },
-    [searchQuery],
+    [searchQuery, kdsEnabled],
   )
 
   const filterCollapsibleSections = React.useCallback(

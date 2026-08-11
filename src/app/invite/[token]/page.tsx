@@ -170,10 +170,10 @@ export default function InvitePage({ params }: RouteParams) {
     window.location.href = `/invite/${token}`;
   };
 
-  const signupUrl = `/signup?returnTo=${encodeURIComponent(
+  const signupUrl = `/staff/signup?returnTo=${encodeURIComponent(
     `/invite/${token}`,
   )}${invitation ? `&email=${encodeURIComponent(invitation.email)}` : ""}`;
-  const loginUrl = `/login?returnTo=${encodeURIComponent(`/invite/${token}`)}`;
+  const loginUrl = `/staff/login?returnTo=${encodeURIComponent(`/invite/${token}`)}`;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">

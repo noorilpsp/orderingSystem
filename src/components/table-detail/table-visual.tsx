@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { Edit3, Plus } from "lucide-react"
+import { CheckCircle2, Edit3, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { TABLE_COLOR_STATES, getTableDetailColorState } from "@/lib/table-color-state"
@@ -17,6 +17,9 @@ interface TableVisualProps {
   onSelectSeat: (seatNumber: number | null) => void
   status?: TableStatus
   onAddItemsForSeat?: (seatNumber: number) => void
+  waiterRequested?: boolean
+  onAcknowledgeWaiter?: () => void
+  waiterAckPending?: boolean
 }
 
 function SeatBadge({
@@ -74,6 +77,9 @@ export function TableVisual({
   onSelectSeat,
   status = "seated",
   onAddItemsForSeat,
+  waiterRequested = false,
+  onAcknowledgeWaiter,
+  waiterAckPending = false,
 }: TableVisualProps) {
   const selected = seats.find((s) => s.number === selectedSeat)
   const colorConfig = TABLE_COLOR_STATES[getTableDetailColorState(status)]
@@ -101,40 +107,59 @@ export function TableVisual({
           </div>
 
           {/* Table surface */}
-          <button
-            type="button"
-            onClick={() => onSelectSeat(null)}
-            className={cn(
-              "relative z-0 isolate flex h-28 w-60 cursor-pointer items-center justify-center overflow-visible rounded-xl border-2 transition-all duration-300 hover:brightness-110",
-              isTableSelected && "ring-2 ring-primary ring-offset-2 ring-offset-card scale-[1.02]"
-            )}
-            style={{
-              backgroundColor: colorConfig.fill,
-              backgroundImage:
-                "linear-gradient(165deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 38%, rgba(15,23,42,0.22) 100%), radial-gradient(120% 90% at 18% 16%, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 48%)",
-              borderColor: "rgba(255,255,255,0.18)",
-              filter: "brightness(1.1)",
-              boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 7px 16px rgba(2,6,23,0.3), ${colorConfig.glow}, inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -10px 14px rgba(2,6,23,0.24)`,
-            }}
-          >
-            <span
-              className="pointer-events-none absolute -inset-3 -z-10 rounded-[16px] animate-table-aura"
-              style={{ backgroundColor: colorConfig.fill, filter: "blur(11px)" }}
-            />
-            <span className="pointer-events-none absolute inset-[3px] rounded-[10px] border border-white/7" />
-            <span className="pointer-events-none absolute left-1/2 top-2 h-2 w-40 -translate-x-1/2 rounded-full bg-white/8 blur-[0.8px]" />
-            <span className={cn("relative z-10 flex flex-col items-center gap-0.5", colorConfig.textClass)}>
-              <span className="text-xl font-bold tracking-[0.08em] drop-shadow-[0_1px_6px_rgba(2,6,23,0.55)]">
-                {"T-"}
-                {tableNumber}
-              </span>
-              {seatCapacity > 0 && (
-                <span className="text-[11px] font-medium tracking-wide opacity-80">
-                  {seatCapacity} {seatCapacity === 1 ? "seat" : "seats"}
-                </span>
+          <div className="relative w-60">
+            <button
+              type="button"
+              onClick={() => onSelectSeat(null)}
+              className={cn(
+                "relative z-0 isolate flex h-28 w-60 cursor-pointer items-center justify-center overflow-visible rounded-xl border-2 transition-all duration-300 hover:brightness-110",
+                isTableSelected && "ring-2 ring-primary ring-offset-2 ring-offset-card scale-[1.02]"
               )}
-            </span>
-          </button>
+              style={{
+                backgroundColor: colorConfig.fill,
+                backgroundImage:
+                  "linear-gradient(165deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 38%, rgba(15,23,42,0.22) 100%), radial-gradient(120% 90% at 18% 16%, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 48%)",
+                borderColor: "rgba(255,255,255,0.18)",
+                filter: "brightness(1.1)",
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 7px 16px rgba(2,6,23,0.3), ${colorConfig.glow}, inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -10px 14px rgba(2,6,23,0.24)`,
+              }}
+            >
+              <span
+                className="pointer-events-none absolute -inset-3 -z-10 rounded-[16px] animate-table-aura"
+                style={{ backgroundColor: colorConfig.fill, filter: "blur(11px)" }}
+              />
+              <span className="pointer-events-none absolute inset-[3px] rounded-[10px] border border-white/7" />
+              <span className="pointer-events-none absolute left-1/2 top-2 h-2 w-40 -translate-x-1/2 rounded-full bg-white/8 blur-[0.8px]" />
+              <span className={cn("relative z-10 flex flex-col items-center gap-0.5", colorConfig.textClass)}>
+                <span className="text-xl font-bold tracking-[0.08em] drop-shadow-[0_1px_6px_rgba(2,6,23,0.55)]">
+                  {"T-"}
+                  {tableNumber}
+                </span>
+                {seatCapacity > 0 && (
+                  <span className="text-[11px] font-medium tracking-wide opacity-80">
+                    {seatCapacity} {seatCapacity === 1 ? "seat" : "seats"}
+                  </span>
+                )}
+              </span>
+            </button>
+            {waiterRequested && onAcknowledgeWaiter && (
+              <div className="absolute inset-x-2 bottom-2 z-20">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={waiterAckPending}
+                  className="h-7 w-full gap-1 rounded-lg bg-emerald-400 text-[11px] font-semibold text-black shadow-lg hover:bg-emerald-300 disabled:opacity-60"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onAcknowledgeWaiter()
+                  }}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {waiterAckPending ? "Saving…" : "Handled"}
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Bottom seats */}
           <div className="flex items-center gap-7">

@@ -6,6 +6,8 @@ import { items, categoryItems, itemTags, itemAllergens, itemCustomizations } fro
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 import { getLocationStations, getSubstationKeysForStation } from "@/lib/kds/getLocationStations";
+import { isLocationKdsEnabled } from "@/lib/merchant-features";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -156,6 +158,7 @@ export async function POST(request: NextRequest) {
       photoUrl,
       calories,
       status,
+      featured,
       useCustomHours,
       customSchedule,
       displayOrder,
@@ -165,6 +168,7 @@ export async function POST(request: NextRequest) {
       customizationGroupIds,
       defaultStation,
       defaultSubstation,
+      i18n,
     } = body;
 
     if (!locationId || !name || price === undefined) {
@@ -206,38 +210,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate defaultStation against active location_stations
+    // Validate defaultStation against active location_stations (only when KDS enabled)
+    const kdsEnabled = await isLocationKdsEnabled(locationId);
     let validatedDefaultStation: string | null = null;
-    if (defaultStation != null && defaultStation !== "") {
-      const stationKey = String(defaultStation).trim();
-      if (stationKey.length > 50) {
-        return posFailure("BAD_REQUEST", "defaultStation must be at most 50 characters", { status: 400 });
-      }
-      const activeStations = await getLocationStations(locationId);
-      const isValid = activeStations.some((s) => s.key === stationKey);
-      if (!isValid) {
-        return posFailure(
-          "BAD_REQUEST",
-          "defaultStation must be an active station key for this location",
-          { status: 400 }
-        );
-      }
-      validatedDefaultStation = stationKey;
-    }
-
-    // Validate defaultSubstation against configured substations for the station
     let validatedDefaultSubstation: string | null = null;
-    if (defaultSubstation != null && defaultSubstation !== "" && validatedDefaultStation) {
-      const key = String(defaultSubstation).trim().toLowerCase();
-      if (key.length <= 50) {
-        const allowedKeys = await getSubstationKeysForStation(locationId, validatedDefaultStation);
-        if (allowedKeys.has(key)) {
-          validatedDefaultSubstation = key;
+    if (kdsEnabled) {
+      if (defaultStation != null && defaultStation !== "") {
+        const stationKey = String(defaultStation).trim();
+        if (stationKey.length > 50) {
+          return posFailure("BAD_REQUEST", "defaultStation must be at most 50 characters", { status: 400 });
+        }
+        const activeStations = await getLocationStations(locationId);
+        const isValid = activeStations.some((s) => s.key === stationKey);
+        if (!isValid) {
+          return posFailure(
+            "BAD_REQUEST",
+            "defaultStation must be an active station key for this location",
+            { status: 400 }
+          );
+        }
+        validatedDefaultStation = stationKey;
+      }
+
+      if (defaultSubstation != null && defaultSubstation !== "" && validatedDefaultStation) {
+        const key = String(defaultSubstation).trim().toLowerCase();
+        if (key.length <= 50) {
+          const allowedKeys = await getSubstationKeysForStation(locationId, validatedDefaultStation);
+          if (allowedKeys.has(key)) {
+            validatedDefaultSubstation = key;
+          }
         }
       }
     }
 
     // Create item
+    const nextStatus = status || "draft";
+    const nextFeatured = Boolean(featured);
+
     const [newItem] = await db
       .insert(items)
       .values({
@@ -247,12 +256,14 @@ export async function POST(request: NextRequest) {
         price: price.toString(),
         photoUrl: photoUrl || null,
         calories: calories || null,
-        status: status || "draft",
+        status: nextStatus,
+        featured: nextFeatured,
         useCustomHours: useCustomHours ?? false,
         customSchedule: customSchedule || null,
         displayOrder: displayOrder ?? 0,
         defaultStation: validatedDefaultStation,
         defaultSubstation: validatedDefaultSubstation,
+        i18n: i18n !== undefined ? normalizeCatalogI18n(i18n) : null,
       })
       .returning();
 

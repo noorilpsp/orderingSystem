@@ -5,6 +5,11 @@ import { CustomizationsContent } from "@/components/customizations-content"
 import { CustomizationDrawer } from "@/components/customization-drawer"
 import { CustomizationsToolbar } from "@/components/customizations-toolbar"
 import { useMenu } from "../menu-context"
+import {
+  CUSTOMIZATION_TEMPLATES,
+  customizationGroupFromTemplate,
+} from "@/lib/menu/customization-templates"
+import { applyCustomizationTemplatePack } from "@/lib/menu/customization-template-packs"
 import { toast } from "sonner"
 import type { CustomizationGroup } from "@/types/customization"
 
@@ -18,8 +23,6 @@ export default function MenuCustomizationsPage() {
   } = useMenu()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<CustomizationGroup | null>(null)
-  const [showUnsavedModal, setShowUnsavedModal] = useState(false)
-  const [pendingClose, setPendingClose] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
   const handleCreateGroup = useCallback(() => {
@@ -58,7 +61,6 @@ export default function MenuCustomizationsPage() {
       const group = customizationGroups.find((g) => g.id === id)
       if (!group) return
 
-      // Check if group is being used by items
       if (group.itemCount > 0) {
         const confirmDelete = confirm(
           `This customization group is used by ${group.itemCount} items. Deleting it will remove it from all items. Continue?`,
@@ -81,6 +83,67 @@ export default function MenuCustomizationsPage() {
       toast.success(`${group.name} duplicated`)
     },
     [customizationGroups, duplicateCustomizationGroup],
+  )
+
+  const uniqueGroupName = useCallback(
+    (baseName: string) => {
+      const taken = new Set(
+        customizationGroups.map((group) => group.name.toLowerCase()),
+      )
+      if (!taken.has(baseName.toLowerCase())) return baseName
+      let index = customizationGroups.length + 1
+      let candidate = `${baseName} ${index}`
+      while (taken.has(candidate.toLowerCase())) {
+        index += 1
+        candidate = `${baseName} ${index}`
+      }
+      return candidate
+    },
+    [customizationGroups],
+  )
+
+  const handleUseTemplate = useCallback(
+    async (templateId: string) => {
+      const template = CUSTOMIZATION_TEMPLATES.find((entry) => entry.id === templateId)
+      if (!template) {
+        toast.error("Template not found")
+        return
+      }
+
+      const groupData = customizationGroupFromTemplate(template)
+      groupData.name = uniqueGroupName(template.name)
+
+      await createCustomizationGroup(groupData)
+    },
+    [createCustomizationGroup, uniqueGroupName],
+  )
+
+  const handleUseTemplatePack = useCallback(
+    async (packId: string) => {
+      try {
+        const usedNames = new Set<string>()
+        const pack = await applyCustomizationTemplatePack(
+          packId,
+          createCustomizationGroup,
+          (baseName) => {
+            let name = uniqueGroupName(baseName)
+            let suffix = 2
+            while (usedNames.has(name.toLowerCase())) {
+              name = uniqueGroupName(`${baseName} ${suffix}`)
+              suffix += 1
+            }
+            usedNames.add(name.toLowerCase())
+            return name
+          },
+        )
+        toast.success(`${pack.name} created`)
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to create advanced pack"
+        toast.error(message)
+      }
+    },
+    [createCustomizationGroup, uniqueGroupName],
   )
 
   const handleDrawerClose = () => {
@@ -115,6 +178,8 @@ export default function MenuCustomizationsPage() {
             onEditGroup={handleEditGroup}
             onDeleteGroup={handleDeleteGroup}
             onDuplicateGroup={handleDuplicateGroup}
+            onUseTemplate={handleUseTemplate}
+            onUseTemplatePack={handleUseTemplatePack}
           />
         </div>
       </div>

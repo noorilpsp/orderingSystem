@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,8 +30,11 @@ import {
   Star,
   X,
   Eye,
+  Loader2,
 } from "lucide-react"
 import type { CustomizationGroup, CustomizationsContentProps } from "@/types/customization"
+import { CUSTOMIZATION_TEMPLATES } from "@/lib/menu/customization-templates"
+import { CUSTOMIZATION_TEMPLATE_PACKS } from "@/lib/menu/customization-template-packs"
 import { toast } from "sonner"
 
 export function CustomizationsContent({
@@ -40,7 +43,11 @@ export function CustomizationsContent({
   onEditGroup,
   onDeleteGroup,
   onDuplicateGroup,
+  onUseTemplate,
+  onUseTemplatePack,
 }: CustomizationsContentProps) {
+  const templatesRef = useRef<HTMLDivElement>(null)
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null)
   const [showInfoBanner, setShowInfoBanner] = useState(true)
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
@@ -57,10 +64,137 @@ export function CustomizationsContent({
     setDeleteDialog({ open: false, groupId: "", groupName: "" })
   }
 
+  const handleUseTemplate = async (templateId: string) => {
+    if (!onUseTemplate) {
+      toast.error("Templates are unavailable right now")
+      return
+    }
+    try {
+      setCreatingTemplateId(templateId)
+      await onUseTemplate(templateId)
+    } finally {
+      setCreatingTemplateId(null)
+    }
+  }
+
+  const handleUseTemplatePack = async (packId: string) => {
+    if (!onUseTemplatePack) {
+      toast.error("Advanced packs are unavailable right now")
+      return
+    }
+    try {
+      setCreatingTemplateId(packId)
+      await onUseTemplatePack(packId)
+    } finally {
+      setCreatingTemplateId(null)
+    }
+  }
+
+  const advancedPacksSection = (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-semibold">Advanced starter packs</h2>
+        <p className="text-sm text-gray-600">
+          Create linked groups with conditional pricing, quantities, or secondary groups
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {CUSTOMIZATION_TEMPLATE_PACKS.map((pack) => {
+          const isCreating = creatingTemplateId === pack.id
+          return (
+            <Card key={pack.id} className="p-4 transition-shadow hover:shadow-md">
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">{pack.icon}</div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">{pack.name}</h3>
+                  <p className="mt-1 text-xs text-gray-600">{pack.description}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Creates {pack.createsGroupCount} groups
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {pack.features.map((feature) => (
+                      <Badge key={feature} variant="secondary" className="text-[10px]">
+                        {feature}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 w-full bg-transparent"
+                    disabled={creatingTemplateId !== null}
+                    onClick={() => void handleUseTemplatePack(pack.id)}
+                  >
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating…
+                      </>
+                    ) : (
+                      "Use pack"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  const templatesSection = (
+    <div ref={templatesRef} className="space-y-8">
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Quick Start Templates</h2>
+          <p className="text-sm text-gray-600">Create common customization groups with one click</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {CUSTOMIZATION_TEMPLATES.map((template) => {
+            const isCreating = creatingTemplateId === template.id
+            return (
+              <Card key={template.id} className="p-4 transition-shadow hover:shadow-md">
+                <div className="flex items-start gap-3">
+                  <div className="text-3xl">{template.icon}</div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold">{template.name}</h3>
+                    <p className="mt-1 text-xs text-gray-600">
+                      {template.options.length} options included
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full bg-transparent"
+                      disabled={creatingTemplateId !== null}
+                      onClick={() => void handleUseTemplate(template.id)}
+                    >
+                      {isCreating ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating…
+                        </>
+                      ) : (
+                        "Use Template"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+
+      {advancedPacksSection}
+    </div>
+  )
+
   if (groups.length === 0) {
     return (
       <div className="space-y-8">
-        {/* Empty State */}
         <EmptyState
           icon={<Settings2 className="w-16 h-16 text-gray-300" />}
           title="No customization groups yet"
@@ -71,44 +205,13 @@ export function CustomizationsContent({
           }}
           secondaryAction={{
             label: "Browse Templates",
-            onClick: () => toast.info("Templates feature coming soon"),
+            onClick: () => {
+              templatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+            },
           }}
         />
 
-        {/* Templates Section */}
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Quick Start Templates</h2>
-            <p className="text-sm text-gray-600">Create common customization groups with one click</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { name: "Pizza Size", icon: "🍕", options: 3 },
-              { name: "Spice Level", icon: "🌶️", options: 3 },
-              { name: "Protein Choice", icon: "🍖", options: 4 },
-              { name: "Side Options", icon: "🍟", options: 5 },
-            ].map((template) => (
-              <Card key={template.name} className="p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-3">
-                  <div className="text-3xl">{template.icon}</div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold">{template.name}</h3>
-                    <p className="text-xs text-gray-600 mt-1">{template.options} options included</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-3 w-full bg-transparent"
-                      onClick={() => toast.success(`Using ${template.name} template`)}
-                    >
-                      Use Template
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+        {templatesSection}
       </div>
     )
   }
@@ -116,7 +219,6 @@ export function CustomizationsContent({
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Info Banner */}
         {showInfoBanner && (
           <div className="bg-blue-50 dark:bg-blue-950/40 border-l-4 border-blue-400 dark:border-blue-600 p-4 rounded-lg">
             <div className="flex items-start gap-3">
@@ -141,7 +243,6 @@ export function CustomizationsContent({
           </div>
         )}
 
-        {/* Customization Groups Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {groups.map((group) => (
             <CustomizationGroupCard
@@ -163,7 +264,8 @@ export function CustomizationsContent({
           ))}
         </div>
 
-        {/* Delete Confirmation Dialog */}
+        {templatesSection}
+
         <DeleteConfirmationDialog
           open={deleteDialog.open}
           onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
@@ -197,13 +299,11 @@ function CustomizationGroupCard({ group, onEdit, onDuplicate, onDelete }: Custom
   return (
     <Card className="p-6 hover:shadow-lg transition-shadow">
       <div className="space-y-4">
-        {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
             <h3 className="text-xl font-semibold">{group.name}</h3>
             <p className="text-sm text-gray-600">{group.customerInstructions}</p>
 
-            {/* Rules Badges */}
             <div className="flex flex-wrap gap-2">
               {group.rules.required && (
                 <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100">
@@ -215,7 +315,6 @@ function CustomizationGroupCard({ group, onEdit, onDuplicate, onDelete }: Custom
               </Badge>
             </div>
 
-            {/* Usage Stats */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-2 text-sm text-gray-600 cursor-help w-fit">
@@ -241,7 +340,6 @@ function CustomizationGroupCard({ group, onEdit, onDuplicate, onDelete }: Custom
             </Tooltip>
           </div>
 
-          {/* Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm">
@@ -272,10 +370,8 @@ function CustomizationGroupCard({ group, onEdit, onDuplicate, onDelete }: Custom
 
         <Separator />
 
-        {/* Options Section */}
         <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
           <div className="space-y-3">
-            {/* Preview Options */}
             <div className="space-y-2">
               {(isExpanded ? group.options : previewOptions).map((option) => (
                 <div
@@ -296,7 +392,6 @@ function CustomizationGroupCard({ group, onEdit, onDuplicate, onDelete }: Custom
               ))}
             </div>
 
-            {/* Expand/Collapse Button */}
             {hasMoreOptions && (
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full" aria-expanded={isExpanded}>
@@ -316,12 +411,11 @@ function CustomizationGroupCard({ group, onEdit, onDuplicate, onDelete }: Custom
             )}
           </div>
 
-          <CollapsibleContent className="space-y-3 mt-3">{/* Additional content when expanded */}</CollapsibleContent>
+          <CollapsibleContent className="space-y-3 mt-3" />
         </Collapsible>
 
         <Separator />
 
-        {/* Footer Actions */}
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onEdit} className="flex-1 bg-transparent">
             <Edit className="w-4 h-4 mr-2" />

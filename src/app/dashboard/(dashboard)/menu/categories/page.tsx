@@ -8,6 +8,7 @@ import { EditCategoryDrawer } from "@/components/drawers/edit-category-drawer"
 // import { DeleteCategoryDialog } from "@/components/modals/delete-category-dialog"
 import { useMenu } from "../menu-context"
 import type { Category } from "@/types/category"
+import type { CatalogI18n } from "@/lib/catalog-i18n"
 
 export default function MenuCategoriesPage() {
   const { categories, items, menus = [], createCategory, updateCategory, deleteCategory, reorderCategories } = useMenu()
@@ -57,10 +58,11 @@ export default function MenuCategoriesPage() {
       description?: string
       menuIds: string[]
       emoji?: string
+      i18n?: CatalogI18n | null
     }) => {
       const newCategory = {
         ...categoryData,
-        order: categories.length + 1,
+        displayOrder: categories.length + 1,
         menuNames: mapMenuIdsToNames(categoryData.menuIds),
       }
       createCategory(newCategory)
@@ -88,6 +90,7 @@ export default function MenuCategoriesPage() {
         description?: string
         menuIds: string[]
         emoji?: string
+        i18n?: CatalogI18n | null
       },
     ) => {
       try {

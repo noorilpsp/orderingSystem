@@ -5,6 +5,7 @@ import { locationStations } from "@/lib/db/schema/location-stations";
 import { locationSubstations } from "@/lib/db/schema/location-substations";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
 import { verifyLocationAccess } from "@/lib/location-access";
+import { assertLocationKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posSuccess, posFailure, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -48,6 +49,9 @@ export async function GET(request: NextRequest) {
         status: 403,
       });
     }
+
+    const kdsGate = await assertLocationKdsEnabled(locationId);
+    if (kdsGate) return kdsGate;
 
     const locationRow = await db.query.merchantLocations.findFirst({
       where: eq(merchantLocations.id, locationId),
@@ -127,6 +131,9 @@ export async function POST(request: NextRequest) {
         status: 403,
       });
     }
+
+    const kdsGate = await assertLocationKdsEnabled(locationId);
+    if (kdsGate) return kdsGate;
 
     const locationRow = await db.query.merchantLocations.findFirst({
       where: eq(merchantLocations.id, locationId),

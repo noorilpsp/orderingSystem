@@ -248,7 +248,9 @@ export function buildFloorMapLiveDetail(
     const waves =
       floorTable.waves && floorTable.waves.length > 0
         ? floorTable.waves.map((w) => ({ type: w.type, status: w.status }))
-        : buildFallbackWaves(floorTable.stage, floorTable.alerts?.includes("food_ready") ?? false)
+        : Array.isArray(floorTable.waves)
+          ? []
+          : buildFallbackWaves(floorTable.stage, floorTable.alerts?.includes("food_ready") ?? false)
     const billTotal =
       typeof floorTable.billTotal === "number" && Number.isFinite(floorTable.billTotal)
         ? floorTable.billTotal
@@ -264,7 +266,18 @@ export function buildFloorMapLiveDetail(
       server,
       seats: [],
       waves,
-      alerts: (floorTable.alerts ?? []).map(mapFloorAlertToDetail),
+      alerts: [
+        ...(floorTable.alerts ?? []).map(mapFloorAlertToDetail),
+        ...(floorTable.stage === "bill"
+          ? [
+              {
+                type: "bill_requested" as const,
+                severity: "info" as const,
+                message: "Bill requested",
+              },
+            ]
+          : []),
+      ],
       billTotal,
     }
   }

@@ -3,11 +3,16 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
 import type { MenuItem } from "@/types/menu-item"
 import type { Category } from "@/types/category"
-import type { CustomizationGroup } from "@/types/customization"
+import type {
+  CreateCustomizationGroupInput,
+  CreatedCustomizationGroup,
+  CustomizationGroup,
+} from "@/types/customization"
 import type { Menu } from "@/types/menu"
 import type { ImportRow, ImportOptions } from "@/lib/menu/import-items"
 import { toast } from "sonner"
 import { useLocations } from "@/lib/hooks/useLocations"
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 
 function formatMenuMutationError(message: string): string {
   const lower = message.toLowerCase()
@@ -60,7 +65,10 @@ interface MenuContextType {
   reorderCategories: (categories: Category[]) => Promise<void>
 
   // Customization Groups CRUD
-  createCustomizationGroup: (group: Omit<CustomizationGroup, "id" | "itemCount" | "itemNames">) => Promise<void>
+  createCustomizationGroup: (
+    group: CreateCustomizationGroupInput,
+    options?: { silent?: boolean },
+  ) => Promise<CreatedCustomizationGroup | null>
   updateCustomizationGroup: (id: string, updates: Partial<CustomizationGroup>) => Promise<void>
   deleteCustomizationGroup: (id: string) => Promise<void>
   duplicateCustomizationGroup: (id: string) => Promise<void>
@@ -255,6 +263,8 @@ function transformItem(dbItem: any): MenuItem {
     },
     defaultStation: dbItem.defaultStation ?? undefined,
     defaultSubstation: dbItem.defaultSubstation ?? undefined,
+    featured: Boolean(dbItem.featured),
+    i18n: normalizeCatalogI18n(dbItem.i18n),
   }
 }
 
@@ -265,7 +275,8 @@ function transformCategory(dbCategory: any): Category {
     name: dbCategory.name,
     emoji: dbCategory.emoji || undefined,
     description: dbCategory.description || undefined,
-    order: dbCategory.displayOrder,
+    i18n: normalizeCatalogI18n(dbCategory.i18n),
+    displayOrder: dbCategory.displayOrder ?? dbCategory.order ?? 0,
     itemCount: dbCategory.itemCount || 0,
     menuIds: dbCategory.menuIds || [],
     menuNames: dbCategory.menuNames || [],
@@ -364,6 +375,7 @@ function transformCustomizationGroup(dbGroup: any): CustomizationGroup & {
     name: dbGroup.name,
     customerInstructions: dbGroup.customerInstructions || "",
     internalNotes: dbGroup.internalNotes,
+    i18n: normalizeCatalogI18n(dbGroup.i18n),
     rules: {
       min: dbGroup.minSelections || 0,
       max: dbGroup.maxSelections || undefined,
@@ -388,6 +400,7 @@ function transformCustomizationGroup(dbGroup: any): CustomizationGroup & {
         priceDelta: parseFloat(opt.price || "0"),
         isDefault,
         order: opt.displayOrder || index,
+        i18n: normalizeCatalogI18n(opt.i18n),
       };
     }) || [],
     itemCount: dbGroup.itemCount || 0,
@@ -590,7 +603,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         ])
 
       // Unwrap POS envelope { ok, data } — all list APIs return posSuccess
-      const unwrap = <T>(json: unknown, label: string): T[] => {
+      const unwrap = <T,>(json: unknown, label: string): T[] => {
         if (process.env.NODE_ENV === "development") {
           const ok = json && typeof json === "object" && "ok" in (json as object)
           const hasData = json && typeof json === "object" && "data" in (json as object)
@@ -659,6 +672,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       nutrition: item.nutrition,
       defaultStation: item.defaultStation ?? undefined,
       defaultSubstation: item.defaultSubstation ?? undefined,
+      featured: item.featured ?? false,
+      i18n: item.i18n ?? null,
     }
     setItems((prev) => [...prev, optimisticItem])
 
@@ -681,6 +696,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           photoUrl: item.image,
           calories: item.nutrition?.calories,
           status: item.status || "draft",
+          featured: item.featured ?? false,
           useCustomHours: item.availabilityMode === "custom",
           customSchedule: schedule,
           displayOrder: 0,
@@ -690,6 +706,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           customizationGroupIds: item.customizationGroups || [],
           defaultStation: item.defaultStation ?? null,
           defaultSubstation: item.defaultSubstation ?? null,
+          i18n: item.i18n ?? null,
         }),
       })
 
@@ -740,6 +757,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           photoUrl: updates.image,
           calories: updates.nutrition?.calories,
           status: updates.status,
+          featured: updates.featured,
           useCustomHours: updates.availabilityMode === "custom",
           customSchedule: schedule,
           categoryIds: updates.categories,
@@ -748,6 +766,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           customizationGroupIds: updates.customizationGroups,
           defaultStation: updates.defaultStation !== undefined ? updates.defaultStation : undefined,
           defaultSubstation: updates.defaultSubstation !== undefined ? updates.defaultSubstation : undefined,
+          ...(updates.i18n !== undefined ? { i18n: updates.i18n ?? null } : {}),
         }),
       })
 
@@ -939,6 +958,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           description: category.description,
           displayOrder: category.displayOrder,
           menuIds: category.menuIds || [],
+          i18n: category.i18n ?? null,
         }),
       })
 
@@ -975,6 +995,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       if (updates.description !== undefined) body.description = updates.description || null
       if (updates.displayOrder !== undefined) body.displayOrder = updates.displayOrder
       if (updates.menuIds !== undefined) body.menuIds = updates.menuIds
+      if (updates.i18n !== undefined) body.i18n = updates.i18n ?? null
 
       console.log('updateCategory - id:', id, 'body:', body)
 
@@ -1073,15 +1094,13 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   }, [categories, locationId])
 
   // Customization Groups CRUD
-  const createCustomizationGroup = useCallback(async (group: Omit<CustomizationGroup, "id" | "itemCount" | "itemNames"> & {
-    conditionalPricing?: any;
-    conditionalQuantities?: any;
-    secondaryGroups?: any;
-    defaultSelections?: any;
-  }) => {
+  const createCustomizationGroup = useCallback(async (
+    group: CreateCustomizationGroupInput,
+    options?: { silent?: boolean },
+  ): Promise<CreatedCustomizationGroup | null> => {
     if (!locationId) {
       toast.error("No location selected")
-      return
+      return null
     }
 
     try {
@@ -1094,15 +1113,18 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           name: group.name,
           customerInstructions: group.customerInstructions,
           internalNotes: group.internalNotes,
+          i18n: group.i18n ?? null,
           isRequired: group.rules.required,
           minSelections: group.rules.min,
           maxSelections: group.rules.max,
           displayOrder: 0,
           options: group.options.map((opt, index) => ({
+            id: opt.id,
             name: opt.name,
             price: opt.priceDelta,
             displayOrder: opt.order ?? index,
             isDefault: opt.isDefault || false,
+            i18n: opt.i18n ?? null,
           })),
           useConditionalPricing: group.conditionalPricing?.enabled || false,
           conditionalPricingBaseGroupId: group.conditionalPricing?.basedOnGroupId && group.conditionalPricing.basedOnGroupId !== "" 
@@ -1124,8 +1146,24 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         throw new Error(error.error || 'Failed to create customization group')
       }
 
-      toast.success(`${group.name} created`)
+      const created = await response.json()
+      if (!options?.silent) {
+        toast.success(`${group.name} created`)
+      }
       await fetchData()
+
+      if (typeof created?.id !== "string") return null
+
+      const createdOptions = Array.isArray(created.options)
+        ? created.options
+            .map((option: { id?: unknown; name?: unknown }) => ({
+              id: typeof option?.id === "string" ? option.id : "",
+              name: typeof option?.name === "string" ? option.name : "",
+            }))
+            .filter((option: { id: string; name: string }) => option.id.length > 0)
+        : []
+
+      return { id: created.id, options: createdOptions }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create customization group'
       toast.error(errorMessage)
@@ -1148,6 +1186,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           name: updates.name,
           customerInstructions: updates.customerInstructions,
           internalNotes: updates.internalNotes,
+          i18n: updates.i18n ?? null,
           isRequired: updates.rules?.required,
           minSelections: updates.rules?.min,
           maxSelections: updates.rules?.max,
@@ -1157,6 +1196,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
             price: opt.priceDelta || 0,
             displayOrder: index,
             isDefault: opt.isDefault || false,
+            i18n: opt.i18n ?? null,
           })),
           // Include advanced features (ensure empty strings are converted to null for UUID fields)
           useConditionalPricing: updates.conditionalPricing?.enabled || false,

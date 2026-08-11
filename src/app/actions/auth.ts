@@ -254,7 +254,7 @@ export async function signup(data: { email: string; password: string; returnTo?:
         email: validatedEmail,
         password: validatedPassword,
         options: {
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/login`,
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/staff/login`,
         },
       });
 
@@ -397,8 +397,8 @@ export async function logout(): Promise<void> {
     console.error("Logout error:", error);
   }
   
-  // Always redirect to login page (redirect throws, so this never returns)
-  redirect("/login");
+  // Always redirect to staff login page (redirect throws, so this never returns)
+  redirect("/staff/login");
 }
 
 const forgotPasswordSchema = z.object({
@@ -423,7 +423,7 @@ export async function forgotPassword(data: { email: string }) {
     // Note: Supabase will send the email with a reset link
     // We don't check for errors here to prevent email enumeration attacks
     await supabase.auth.resetPasswordForEmail(validatedEmail, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/reset-password`,
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/staff/reset-password`,
     });
 
     // Always return success to prevent email enumeration

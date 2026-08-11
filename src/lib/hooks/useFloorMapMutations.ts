@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { fireAndForget } from "@/lib/pos/fireAndForget";
 import { invalidatePostSeatingCaches } from "@/lib/view-cache";
 import type { FloorMapView } from "@/lib/floor-map/floorMapView";
+import { patchFloorMapViewAcknowledgeService } from "@/lib/floor-map/floorMapView";
+import type { AcknowledgeServiceType } from "@/lib/floor-map/acknowledgeTableService";
 
 export type UseFloorMapMutationsOptions = {
   patch: (updater: (prev: FloorMapView) => FloorMapView) => void;
@@ -247,5 +249,62 @@ export function useFloorMapMutations({
     [view, patch, refresh]
   );
 
-  return { seatParty, markTableAvailable };
+  const acknowledgeService = useCallback(
+    async (
+      tableId: string,
+      requestType: AcknowledgeServiceType = "waiter",
+    ): Promise<boolean> => {
+      if (!view) return false;
+
+      const optimisticPatch = (prev: FloorMapView): FloorMapView =>
+        patchFloorMapViewAcknowledgeService(prev, tableId, requestType);
+
+      const result = await mutateThenRefresh({
+        label: requestType === "bill" ? "Acknowledge bill request" : "Acknowledge service",
+        patch,
+        refresh,
+        view,
+        optimisticPatch,
+        requestFn: async () => {
+          const res = await fetchPos(
+            `/api/tables/${encodeURIComponent(tableId)}/acknowledge-service`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ requestType }),
+            },
+          );
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || payload?.ok !== true) {
+            const msg =
+              (payload?.error && typeof payload.error === "object" && payload.error.message) ||
+              (typeof payload?.error === "string" ? payload.error : null);
+            throw new Error(
+              msg ??
+                (requestType === "bill"
+                  ? "Failed to mark bill request handled"
+                  : "Failed to mark waiter request handled"),
+            );
+          }
+          return payload.data as { alreadyHandled?: boolean };
+        },
+        onSuccess: (data) => {
+          if (requestType === "bill") {
+            toast.success(
+              data?.alreadyHandled ? "Bill request already handled" : "Bill request handled",
+            );
+            return;
+          }
+          toast.success(
+            data?.alreadyHandled ? "Waiter request already handled" : "Waiter request handled",
+          );
+        },
+      });
+
+      return result != null;
+    },
+    [view, patch, refresh],
+  );
+
+  return { seatParty, markTableAvailable, acknowledgeService };
 }

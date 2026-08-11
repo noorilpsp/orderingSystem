@@ -1,7 +1,7 @@
 import { unstable_noStore } from "next/cache"
 import Image from "next/image"
 
-import TopMenu from "../login/components/TopMenu"
+import TopMenu from "../staff/login/components/TopMenu"
 import LogoutContent from "./components/LogoutContent"
 
 export default async function LogoutPage() {

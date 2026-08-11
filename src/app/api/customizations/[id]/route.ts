@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { customizationGroups, customizationOptions, conditionalPrices, conditionalQuantities, secondaryGroupRules } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -172,6 +173,7 @@ export async function PUT(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.customerInstructions !== undefined) updateData.customerInstructions = body.customerInstructions;
     if (body.internalNotes !== undefined) updateData.internalNotes = body.internalNotes;
+    if (body.i18n !== undefined) updateData.i18n = normalizeCatalogI18n(body.i18n);
     if (body.isRequired !== undefined) updateData.isRequired = body.isRequired;
     if (body.minSelections !== undefined) updateData.minSelections = body.minSelections;
     if (body.maxSelections !== undefined) updateData.maxSelections = body.maxSelections;
@@ -218,6 +220,7 @@ export async function PUT(
             name: option.name,
             price: option.price?.toString() || "0",
             displayOrder: option.displayOrder ?? index,
+            i18n: normalizeCatalogI18n(option.i18n),
           }))
         ).returning();
         

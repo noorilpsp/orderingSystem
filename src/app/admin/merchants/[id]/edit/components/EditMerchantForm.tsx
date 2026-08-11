@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { optimizeImage } from '@/lib/utils/imageOptimization'
 import { uploadImage, updateMerchant } from '@/app/actions/merchants'
 
@@ -58,6 +59,7 @@ const formSchema = z.object({
   ownerEmail: z.string().email('Enter a valid owner email'),
   subscriptionTier: z.string().min(1, 'Subscription tier is required'),
   subscriptionExpiresAt: z.string().optional().or(z.literal('')),
+  kdsEnabled: z.boolean(),
 })
 
 type MerchantFormValues = z.infer<typeof formSchema>
@@ -75,6 +77,7 @@ type Merchant = {
   subscriptionExpiresAt: Date | null
   timezone: string
   currency: string
+  kdsEnabled: boolean
 }
 
 type Location = {
@@ -116,6 +119,7 @@ export function EditMerchantForm({ merchant, location }: EditMerchantFormProps) 
     subscriptionExpiresAt: merchant.subscriptionExpiresAt
       ? new Date(merchant.subscriptionExpiresAt).toISOString().split('T')[0]
       : '',
+    kdsEnabled: merchant.kdsEnabled,
   })
 
   const [errors, setErrors] = useState<Partial<Record<keyof MerchantFormValues, string>>>({})
@@ -363,7 +367,7 @@ export function EditMerchantForm({ merchant, location }: EditMerchantFormProps) 
         </div>
       )}
 
-      <Accordion type="multiple" defaultValue={['business', 'location', 'owner']}>
+      <Accordion type="multiple" defaultValue={['business', 'modules', 'location', 'owner']}>
         <AccordionItem value="business">
           <AccordionTrigger className="text-left text-lg font-semibold">
             Business Information
@@ -450,6 +454,30 @@ export function EditMerchantForm({ merchant, location }: EditMerchantFormProps) 
                   placeholder="Internal notes..."
                 />
               </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="modules">
+          <AccordionTrigger className="text-left text-lg font-semibold">
+            Modules / Access
+          </AccordionTrigger>
+          <AccordionContent>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+              <div className="min-w-0 space-y-1">
+                <Label htmlFor="kds-enabled" className="text-base font-medium">
+                  Kitchen Display (KDS)
+                </Label>
+                <p className="text-muted-foreground text-sm">
+                  When enabled, staff get KDS screens, station settings, and item prep-station
+                  fields. When off, orders are not routed to KDS.
+                </p>
+              </div>
+              <Switch
+                id="kds-enabled"
+                checked={values.kdsEnabled}
+                onCheckedChange={(checked) => setField('kdsEnabled', checked)}
+              />
             </div>
           </AccordionContent>
         </AccordionItem>

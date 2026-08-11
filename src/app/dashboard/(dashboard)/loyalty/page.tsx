@@ -1,6 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import {
+  LoyaltyProgramSettingsCard,
+  LoyaltySampleDataBanner,
+} from "@/components/dashboard/loyalty-program-settings-card"
+import { LoyaltyRewardsManager } from "@/components/dashboard/loyalty-rewards-manager"
+import { LoyaltyInsightsPanel } from "@/components/dashboard/loyalty-insights-panel"
+import { useTenant } from "@/lib/contexts/TenantContext"
+import type { LoyaltyMemberRow } from "@/lib/loyalty/loyaltyMembersView"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -69,7 +77,7 @@ import { Separator } from "@/components/ui/separator"
 import { Calendar } from "@/components/ui/calendar"
 import { Trophy, Users, Award, Percent, Gift, Coins, Star, CalendarIcon, Search, RotateCw, Download, Plus, ChevronDown, X, Target, UserPlus, BarChart3, FileText, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, MoreVertical, Eye, Edit, Copy, Trash2, Play, Pause, ChevronLeft, ChevronRight, AlertCircle, Filter, ArrowUpDown, Coffee, Cake, Pizza, Wine, Beer, IceCream, Sparkles, Zap, Crown, ArrowRight, ArrowLeft, Check, Info, CheckCircle, AlertTriangle, Settings, Clock, MapPin, GripVertical, Ticket, Minus, Lightbulb, ChevronUp, CalendarDays, Trash, Send, CheckCircleIcon, Activity, Flame, Mail, ShoppingBag, UserX, MessageSquare } from 'lucide-react'
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, CartesianGrid, BarChart, Bar, Area, AreaChart, PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend } from "recharts"
-import { format } from "date-fns"
+import { format, formatDistanceToNow } from "date-fns"
 import {
   Form,
   FormControl,
@@ -83,6 +91,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 // KPI Data
 const loyaltyKPIs = [
@@ -704,6 +713,7 @@ const topPerformers = [
 ]
 
 export default function LoyaltyPage() {
+  const { currentMerchantId } = useTenant()
   const [searchQuery, setSearchQuery] = useState("")
   const [tierFilter, setTierFilter] = useState("all")
   const [rewardTypeFilter, setRewardTypeFilter] = useState("all")
@@ -720,7 +730,68 @@ export default function LoyaltyPage() {
   const [tiersPage, setTiersPage] = useState(1)
   const [membersPage, setMembersPage] = useState(1)
   const [isTableLoading, setIsTableLoading] = useState(false)
+  const [membersSearchInput, setMembersSearchInput] = useState("")
+  const [membersSearch, setMembersSearch] = useState("")
+  const [loyaltyMembers, setLoyaltyMembers] = useState<LoyaltyMemberRow[]>([])
+  const [membersTotalCount, setMembersTotalCount] = useState(0)
+  const [membersFetchError, setMembersFetchError] = useState<string | null>(null)
   const itemsPerPage = 20
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setMembersSearch(membersSearchInput.trim())
+      setMembersPage(1)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [membersSearchInput])
+
+  const fetchLoyaltyMembers = useCallback(async () => {
+    if (!currentMerchantId) {
+      setLoyaltyMembers([])
+      setMembersTotalCount(0)
+      return
+    }
+    setIsTableLoading(true)
+    setMembersFetchError(null)
+    try {
+      const params = new URLSearchParams({
+        merchantId: currentMerchantId,
+        page: String(membersPage),
+        pageSize: String(itemsPerPage),
+      })
+      if (membersSearch) params.set("search", membersSearch)
+      const response = await fetch(`/api/loyalty/members?${params.toString()}`, {
+        credentials: "include",
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(
+          typeof payload.error === "string" ? payload.error : "Failed to load members",
+        )
+      }
+      const data = await response.json()
+      setLoyaltyMembers(Array.isArray(data.members) ? data.members : [])
+      setMembersTotalCount(typeof data.totalCount === "number" ? data.totalCount : 0)
+    } catch (error) {
+      setMembersFetchError(
+        error instanceof Error ? error.message : "Failed to load members",
+      )
+      setLoyaltyMembers([])
+      setMembersTotalCount(0)
+    } finally {
+      setIsTableLoading(false)
+    }
+  }, [currentMerchantId, itemsPerPage, membersPage, membersSearch])
+
+  useEffect(() => {
+    if (activeTab !== "members") return
+    void fetchLoyaltyMembers()
+  }, [activeTab, fetchLoyaltyMembers])
+
+  const membersTotalPages = Math.max(1, Math.ceil(membersTotalCount / itemsPerPage))
+  const membersPageStart =
+    membersTotalCount === 0 ? 0 : (membersPage - 1) * itemsPerPage + 1
+  const membersPageEnd = Math.min(membersPage * itemsPerPage, membersTotalCount)
 
   const [timelineView, setTimelineView] = useState<"aggregate" | "member">("aggregate")
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
@@ -932,7 +1003,7 @@ export default function LoyaltyPage() {
 
   const handleSelectAllMembers = (checked: boolean) => {
     if (checked) {
-      setSelectedMembers(membersMockData.map(m => m.id))
+      setSelectedMembers(loyaltyMembers.map((m) => m.id))
     } else {
       setSelectedMembers([])
     }
@@ -1456,6 +1527,7 @@ export default function LoyaltyPage() {
 
   // New sidebar and insights state
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const isLargeScreen = useMediaQuery("(min-width: 1024px)")
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastUpdated, setLastUpdated] = useState("12s ago")
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null)
@@ -1533,8 +1605,13 @@ export default function LoyaltyPage() {
   }
 
   return (
-    <div className="relative">
-      <div className={`min-h-screen bg-background p-6 transition-all duration-300 ${sidebarOpen ? 'mr-[440px]' : ''}`}>
+    <>
+      <div className="flex h-full min-h-0 w-full max-w-full overflow-hidden">
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="bg-background p-6">
+        <LoyaltyProgramSettingsCard />
+        <LoyaltyRewardsManager />
+        <LoyaltySampleDataBanner />
         {/* Header */}
         <header
           role="banner"
@@ -1542,7 +1619,7 @@ export default function LoyaltyPage() {
           className="space-y-4"
         >
           {/* Title Row */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Trophy
                 className="h-8 w-8"
@@ -1553,7 +1630,16 @@ export default function LoyaltyPage() {
                 Loyalty & Rewards
               </h1>
             </div>
-            <span className="text-sm text-muted-foreground">Updated 1m ago</span>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="hidden text-sm text-muted-foreground sm:inline">Updated 1m ago</span>
+              <Button
+                variant={sidebarOpen ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setSidebarOpen((open) => !open)}
+              >
+                {sidebarOpen ? "Hide insights" : "Show insights"}
+              </Button>
+            </div>
           </div>
 
           {/* Controls Row 1 - Date Range & Search */}
@@ -2816,12 +2902,14 @@ export default function LoyaltyPage() {
                       type="search"
                       placeholder="Search members..."
                       className="w-[200px]"
+                      value={membersSearchInput}
+                      onChange={(event) => setMembersSearchInput(event.target.value)}
                     />
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" disabled>
                       <Filter className="mr-2 h-4 w-4" />
                       Filter
                     </Button>
-                    <Button size="sm">
+                    <Button size="sm" disabled>
                       <Plus className="mr-2 h-4 w-4" />
                       Add Member
                     </Button>
@@ -2829,41 +2917,47 @@ export default function LoyaltyPage() {
                 </div>
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <Select defaultValue="all-members">
-                      <SelectTrigger className="w-[140px] h-8">
-                        <SelectValue />
+                    <Select defaultValue="all-members" disabled>
+                      <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue placeholder="Activity (soon)" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all-members">All Members</SelectItem>
-                        <SelectItem value="active">Active Only</SelectItem>
-                        <SelectItem value="idle">Idle</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Select defaultValue="all-tiers">
-                      <SelectTrigger className="w-[140px] h-8">
-                        <SelectValue />
+                    <Select defaultValue="all-tiers" disabled>
+                      <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue placeholder="Tier (soon)" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all-tiers">All Tiers</SelectItem>
-                        <SelectItem value="bronze">Bronze</SelectItem>
-                        <SelectItem value="silver">Silver</SelectItem>
-                        <SelectItem value="gold">Gold</SelectItem>
-                        <SelectItem value="platinum">Platinum</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <span>Showing 1-{membersMockData.length} of 2,847</span>
+                  <span>
+                    {membersTotalCount === 0
+                      ? "No members"
+                      : `Showing ${membersPageStart}-${membersPageEnd} of ${membersTotalCount.toLocaleString()}`}
+                  </span>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Member list is live; tier column is still a placeholder.
+                </p>
               </CardHeader>
               <CardContent>
+                {membersFetchError ? (
+                  <p className="mb-4 text-sm text-destructive">{membersFetchError}</p>
+                ) : null}
                 <div className="overflow-x-auto rounded-lg border">
                   <Table role="table" aria-label="Program members list">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[40px]">
                           <Checkbox
-                            checked={selectedMembers.length === membersMockData.length}
+                            checked={
+                              loyaltyMembers.length > 0 &&
+                              selectedMembers.length === loyaltyMembers.length
+                            }
                             onCheckedChange={handleSelectAllMembers}
                             aria-label="Select all members"
                           />
@@ -2888,7 +2982,22 @@ export default function LoyaltyPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {membersMockData.map((member) => (
+                      {isTableLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                            Loading members…
+                          </TableCell>
+                        </TableRow>
+                      ) : loyaltyMembers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                            {currentMerchantId
+                              ? "No loyalty members yet."
+                              : "Select a merchant to view members."}
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        loyaltyMembers.map((member) => (
                         <TableRow
                           key={member.id}
                           className="group cursor-pointer transition-colors hover:bg-muted/50"
@@ -2907,63 +3016,60 @@ export default function LoyaltyPage() {
                             <div className="flex items-center gap-3">
                               <Avatar>
                                 <AvatarFallback>
-                                  {member.name.split(" ").map(n => n[0]).join("")}
+                                  {member.name.split(" ").map((n) => n[0]).join("")}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
                                 <div className="font-semibold">{member.name}</div>
                                 <div className="text-sm text-muted-foreground">
-                                  {member.email}
+                                  {member.email ?? "—"}
+                                </div>
+                                {member.phone ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {member.phone}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">—</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-semibold">
+                              {member.balance.toLocaleString()}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">
+                                {member.rewardsRedeemed.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {member.rewardsRedeemed === 1 ? "redemption" : "redemptions"}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {new Date(member.joinedAt).toLocaleDateString()}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {member.lastVisitAt ? (
+                              <div>
+                                <div className="text-sm">
+                                  {format(new Date(member.lastVisitAt), "MMM d, yyyy")}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  {member.phone}
+                                  {formatDistanceToNow(new Date(member.lastVisitAt), {
+                                    addSuffix: true,
+                                  })}
                                 </div>
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="gap-1">
-                              <span>{member.tierEmoji}</span>
-                              <span className="text-xs">{member.tier}</span>
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-semibold">
-                                {member.points.toLocaleString()}
-                              </div>
-                              <div className="flex items-center gap-1 text-xs text-success">
-                                <ArrowUp className="h-3 w-3" />
-                                +{member.pointsDelta}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{member.rewardsRedeemed}</div>
-                              <div className="text-xs text-muted-foreground">rewards</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="text-sm">{member.joinedDate}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {member.joinedDaysAgo} days
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="text-sm">{member.lastVisitRelative}</div>
-                              <Badge
-                                variant={member.activityColor as any}
-                                className="mt-1"
-                              >
-                                {member.activityStatus === "active" && "🟢 Active"}
-                                {member.activityStatus === "idle" && "🟡 Idle"}
-                                {member.activityStatus === "inactive" && "🔴 Inactive"}
-                              </Badge>
-                            </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">No visits yet</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-2">
@@ -2971,6 +3077,7 @@ export default function LoyaltyPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                                disabled
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
@@ -2978,43 +3085,22 @@ export default function LoyaltyPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                                disabled
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View Profile
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit Member
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Gift className="mr-2 h-4 w-4" />
-                                    Send Reward
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Award className="mr-2 h-4 w-4" />
-                                    Adjust Points
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem className="text-destructive">
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Remove Member
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -3022,27 +3108,31 @@ export default function LoyaltyPage() {
                 {/* Pagination */}
                 <div className="mt-4 flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Showing 1-{membersMockData.length} of 2,847 members
+                    {membersTotalCount === 0
+                      ? "No members to display"
+                      : `Showing ${membersPageStart}-${membersPageEnd} of ${membersTotalCount.toLocaleString()} members`}
                   </p>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={membersPage <= 1 || isTableLoading}
+                      onClick={() => setMembersPage((page) => Math.max(1, page - 1))}
+                    >
                       <ChevronLeft className="h-4 w-4" />
                       Previous
                     </Button>
-                    <Button variant="outline" size="sm">
-                      1
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      2
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      3
-                    </Button>
-                    <span className="text-sm text-muted-foreground">...</span>
-                    <Button variant="ghost" size="sm">
-                      143
-                    </Button>
-                    <Button variant="outline" size="sm">
+                    <span className="text-sm text-muted-foreground">
+                      Page {membersPage} of {membersTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={membersPage >= membersTotalPages || isTableLoading}
+                      onClick={() =>
+                        setMembersPage((page) => Math.min(membersTotalPages, page + 1))
+                      }
+                    >
                       Next
                       <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -6043,12 +6133,13 @@ export default function LoyaltyPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Insights Sidebar */}
-        {sidebarOpen && (
-          <div className="fixed right-0 top-0 w-[420px] h-screen overflow-y-auto bg-background border-l p-6 space-y-4 z-40">
-            {/* Close button */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">Insights</h3>
+          </div>
+        </div>
+
+        {sidebarOpen ? (
+          <aside className="sticky top-0 hidden h-[calc(100dvh-4rem)] w-[300px] shrink-0 flex-col overflow-y-auto border-l bg-background p-4 lg:flex 2xl:w-[340px] 2xl:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Insights</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -6058,103 +6149,31 @@ export default function LoyaltyPage() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-
-            {/* Live Metrics */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center justify-between">
-                  Live Metrics
-                  <Badge variant="secondary" className="text-xs">Real-time</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Flame className="h-4 w-4 text-orange-600" />
-                    <span className="text-sm font-medium">Active Sessions</span>
-                  </div>
-                  <span className="text-sm font-bold">154</span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Tier Upgrades Today</span>
-                  </div>
-                  <span className="text-sm font-bold text-primary">23</span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium">New Members</span>
-                  </div>
-                  <span className="text-sm font-bold text-blue-600">78</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Alerts & Notifications */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center justify-between">
-                  Alerts & Notifications
-                  <Button variant="link" size="sm" className="h-auto p-0">See all</Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start justify-between cursor-pointer" onClick={() => setSelectedAlert("low-tier-engagement")}>
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className={`h-5 w-5 ${selectedAlert === "low-tier-engagement" ? "text-orange-500" : "text-muted-foreground"}`} />
-                    <div>
-                      <div className="text-sm font-medium">Low Tier Engagement Alert</div>
-                      <div className="text-xs text-muted-foreground">Tier: Gold members showing 25% decline in activity</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">2m ago</div>
-                </div>
-                <Separator />
-                <div className="flex items-start justify-between cursor-pointer" onClick={() => setSelectedAlert("reward-performance")}>
-                  <div className="flex items-start gap-2">
-                    <Percent className={`h-5 w-5 ${selectedAlert === "reward-performance" ? "text-orange-500" : "text-muted-foreground"}`} />
-                    <div>
-                      <div className="text-sm font-medium">Reward Performance Issue</div>
-                      <div className="text-xs text-muted-foreground">Reward: Wine Pairing redemption rate dropped by 18%</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">5h ago</div>
-                </div>
-                <Separator />
-                <div className="flex items-start justify-between cursor-pointer" onClick={() => setSelectedAlert("upcoming-milestone")}>
-                  <div className="flex items-start gap-2">
-                    <Target className={`h-5 w-5 ${selectedAlert === "upcoming-milestone" ? "text-green-500" : "text-muted-foreground"}`} />
-                    <div>
-                      <div className="text-sm font-medium">Upcoming Milestone</div>
-                      <div className="text-xs text-muted-foreground">50 members expected to reach Platinum tier next week</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">1d ago</div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" onClick={() => setSidebarOpen(false)}>
-                  Dismiss
-                </Button>
-                <Button size="sm" onClick={() => setSelectedAlert(null)}>
-                  Mark Read
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+            <LoyaltyInsightsPanel
+              selectedAlert={selectedAlert}
+              onSelectAlert={setSelectedAlert}
+              onDismiss={() => setSidebarOpen(false)}
+              onMarkRead={() => setSelectedAlert(null)}
+            />
+          </aside>
+        ) : null}
       </div>
-    </div>
+
+      <Sheet open={sidebarOpen && !isLargeScreen} onOpenChange={setSidebarOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Insights</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <LoyaltyInsightsPanel
+              selectedAlert={selectedAlert}
+              onSelectAlert={setSelectedAlert}
+              onDismiss={() => setSidebarOpen(false)}
+              onMarkRead={() => setSelectedAlert(null)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }

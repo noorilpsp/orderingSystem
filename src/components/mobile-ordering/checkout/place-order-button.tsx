@@ -1,5 +1,7 @@
 "use client";
 
+import { useGuestT } from "@/lib/guest-i18n";
+
 interface PlaceOrderButtonProps {
   total: number;
   isEnabled: boolean;
@@ -11,6 +13,8 @@ export function PlaceOrderButton({
   isEnabled,
   onClick,
 }: PlaceOrderButtonProps) {
+  const t = useGuestT();
+
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4">
       <div className="max-w-md mx-auto">
@@ -24,7 +28,7 @@ export function PlaceOrderButton({
           disabled={!isEnabled}
           onClick={onClick}
         >
-          Place Order • €{total.toFixed(2)}
+          {t("checkout.placeOrder")} • €{total.toFixed(2)}
         </button>
       </div>
     </div>

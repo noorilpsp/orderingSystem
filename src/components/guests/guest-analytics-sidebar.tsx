@@ -71,7 +71,7 @@ export function GuestAnalyticsSidebar({ guest }: AnalyticsSidebarProps) {
   const breakdown = {
     frequency: Math.min(10, Math.round((guest.vipScore / 100) * 10)),
     spend: Math.min(10, Math.round((guest.avgSpend / 310) * 10)),
-    loyalty: Math.min(10, Math.round((guest.totalVisits / 18) * 10)),
+    visitFrequency: Math.min(10, Math.round((guest.totalVisits / 18) * 10)),
     engagement: Math.min(10, Math.round(guest.vipScore / 12)),
     reliability: Math.max(0, 10 - guest.noShows * 3),
   }
@@ -107,10 +107,20 @@ export function GuestAnalyticsSidebar({ guest }: AnalyticsSidebarProps) {
         <div className="mt-4 flex flex-col gap-2">
           <ScoreBar label="Frequency" value={breakdown.frequency} />
           <ScoreBar label="Spend" value={breakdown.spend} />
-          <ScoreBar label="Loyalty" value={breakdown.loyalty} />
+          <ScoreBar label="Visit frequency" value={breakdown.visitFrequency} />
           <ScoreBar label="Engagement" value={breakdown.engagement} />
           <ScoreBar label="Reliability" value={breakdown.reliability} />
         </div>
+        {guest.loyaltyPoints != null ? (
+          <div className="mt-4 rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Points balance
+            </p>
+            <p className="mt-1 text-lg font-bold text-foreground">
+              {guest.loyaltyPoints.toLocaleString()} pts
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {/* Revenue Impact */}

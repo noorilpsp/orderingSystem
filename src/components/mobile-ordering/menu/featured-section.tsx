@@ -5,6 +5,8 @@ import React from "react"
 import { useState, useRef } from "react";
 import { Plus, Minus, Trash2 } from "lucide-react";
 import type { MenuItem, CartItem } from "@/lib/menu-data";
+import { resolveCatalogText } from "@/lib/catalog-i18n";
+import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
 
 interface FeaturedSectionProps {
   items: MenuItem[];
@@ -21,6 +23,8 @@ export function FeaturedSection({
   onRemoveFromCart,
   onItemClick,
 }: FeaturedSectionProps) {
+  const t = useGuestT();
+  const { locale } = useGuestLocale();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [pressedItems, setPressedItems] = useState<Set<string>>(new Set());
 
@@ -37,38 +41,45 @@ export function FeaturedSection({
     onAddToCart(item);
   };
 
-  return (
-    <div className="px-4 py-6 mb-2">
-      <h2 className="text-lg font-bold text-foreground mb-4">✨ Featured</h2>
+  if (items.length === 0) return null;
 
-      {/* Horizontal scrollable container */}
+  return (
+    <div className="mb-2 px-4 py-6 lg:px-0">
+      <h2 className="mb-4 text-lg font-bold text-foreground">✨ {t("menu.featured")}</h2>
+
+      {/* Phone: horizontal scroll. Tablet/desktop: grid. */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory"
+        className="flex gap-2 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:pb-0 lg:grid-cols-4 lg:gap-8 xl:grid-cols-5"
       >
         {items.map((item) => {
           const cartItem = cartItems.find((c) => c.id === item.id);
           const quantity = cartItem?.quantity || 0;
           const isPressed = pressedItems.has(item.id);
+          const localized = resolveCatalogText(
+            locale,
+            { name: item.name, description: item.description },
+            item.i18n,
+          );
 
           return (
             <div
               key={item.id}
-              className="flex-shrink-0 w-[calc(40%-4px)] min-w-[120px] snap-start"
+              className="w-[calc(40%-4px)] min-w-[120px] flex-shrink-0 snap-start md:w-auto md:min-w-0"
               onClick={() => onItemClick(item)}
             >
               <div className="menu-item-controls relative aspect-square bg-gray-200 rounded-lg overflow-hidden">
                 {/* Image */}
                 <img
                   src={item.image || "/placeholder.svg"}
-                  alt={item.name}
+                  alt={localized.name}
                   className="w-full h-full object-cover"
                 />
 
                 {/* Status Badge */}
                 {item.status === "soldout" && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white font-semibold">Sold Out</span>
+                    <span className="text-white font-semibold">{t("menu.soldOut")}</span>
                   </div>
                 )}
 
@@ -86,7 +97,7 @@ export function FeaturedSection({
                           transitionDuration: "200ms",
                           transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
                         }}
-                        aria-label={`Add ${item.name} to cart`}
+                        aria-label={t("menu.addItemAria", { name: localized.name })}
                       >
                         <Plus className="h-4 w-4" />
                       </button>
@@ -99,7 +110,7 @@ export function FeaturedSection({
                             onRemoveFromCart(item.id);
                           }}
                           className="sheen-overlay relative flex h-6 w-6 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl ring-1 ring-white/10 transition-colors hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
-                          aria-label={`Remove ${item.name} from cart`}
+                          aria-label={t("menu.removeItemAria", { name: localized.name })}
                         >
                           {quantity === 1 ? (
                             <Trash2 className="h-4 w-4 text-current" />
@@ -120,7 +131,7 @@ export function FeaturedSection({
                             transitionDuration: "200ms",
                             transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
                           }}
-                          aria-label={`Add more ${item.name}`}
+                          aria-label={t("menu.addMoreAria", { name: localized.name })}
                         >
                           <Plus className="h-4 w-4 text-current" />
                         </button>
@@ -133,10 +144,10 @@ export function FeaturedSection({
               {/* Item info */}
               <div className="mt-2">
                 <h3 className="font-semibold text-sm text-foreground line-clamp-1">
-                  {item.name}
+                  {localized.name}
                 </h3>
                 <p className="text-xs text-muted-foreground line-clamp-1">
-                  {item.description}
+                  {localized.description}
                 </p>
                 <p className="text-sm font-semibold text-foreground mt-1">
                   €{item.price.toFixed(2)}

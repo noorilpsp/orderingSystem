@@ -4,7 +4,7 @@
  * Caller must have validated auth and location access.
  */
 
-import { eq, and, isNotNull, desc, inArray, gte, or } from "drizzle-orm";
+import { eq, and, isNotNull, isNull, desc, inArray, gte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   customers,
@@ -13,7 +13,7 @@ import {
   orderItems,
   reservations,
 } from "@/lib/db/schema/orders";
-import { merchantLocations } from "@/lib/db/schema";
+import { merchantLocations, loyaltyAccounts, merchants, normalizeLoyaltySettings } from "@/lib/db/schema";
 import type {
   GuestsView,
   GuestsUnifiedGuest,
@@ -47,16 +47,26 @@ export async function buildGuestsView(
 ): Promise<GuestsView | null> {
   const locationRow = await db.query.merchantLocations.findFirst({
     where: eq(merchantLocations.id, locationId),
-    columns: { id: true, name: true },
+    columns: { id: true, name: true, merchantId: true },
   });
   if (!locationRow) return null;
 
   const locationName = locationRow.name ?? "Restaurant";
+  const merchantId = locationRow.merchantId;
+
+  const merchantRow = merchantId
+    ? await db.query.merchants.findFirst({
+        where: eq(merchants.id, merchantId),
+        columns: { loyaltySettings: true },
+      })
+    : null;
+  const loyaltySettings = normalizeLoyaltySettings(merchantRow?.loyaltySettings);
 
   const custRows = await db.query.customers.findMany({
     where: eq(customers.locationId, locationId),
     columns: {
       id: true,
+      userId: true,
       name: true,
       email: true,
       phone: true,
@@ -76,6 +86,38 @@ export async function buildGuestsView(
       guests: [],
       segmentCounts: { all: 0, vip: 0, regular: 0, new: 0, at_risk: 0, flagged: 0 },
     };
+  }
+
+  const linkedUserIds = [
+    ...new Set(
+      custRows
+        .map((c) => c.userId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+
+  const balanceByUserId = new Map<string, number>();
+  if (merchantId && linkedUserIds.length > 0) {
+    const accountScope =
+      loyaltySettings.pointsScope === "location"
+        ? and(
+            eq(loyaltyAccounts.merchantId, merchantId),
+            eq(loyaltyAccounts.locationId, locationId),
+            inArray(loyaltyAccounts.userId, linkedUserIds),
+          )
+        : and(
+            eq(loyaltyAccounts.merchantId, merchantId),
+            isNull(loyaltyAccounts.locationId),
+            inArray(loyaltyAccounts.userId, linkedUserIds),
+          );
+
+    const accountRows = await db.query.loyaltyAccounts.findMany({
+      where: accountScope,
+      columns: { userId: true, balance: true },
+    });
+    for (const account of accountRows) {
+      balanceByUserId.set(account.userId, account.balance);
+    }
   }
 
   const customerIds = custRows.map((c) => c.id);
@@ -431,6 +473,9 @@ export async function buildGuestsView(
       staffNotes: notes,
       upcomingReservations: upcoming,
       favoriteItems,
+      loyaltyPointsBalance: c.userId
+        ? (balanceByUserId.get(c.userId) ?? 0)
+        : null,
     });
   }
 

@@ -81,6 +81,8 @@ export interface GuestsUnifiedGuest {
   upcomingReservations: GuestsUpcomingReservation[];
   /** Derived: favorite items from order history. */
   favoriteItems: GuestsFavoriteItem[];
+  /** Real loyalty points balance when customer is linked to an auth user; null if walk-in only. */
+  loyaltyPointsBalance: number | null;
 }
 
 export interface GuestsViewSegmentCounts {

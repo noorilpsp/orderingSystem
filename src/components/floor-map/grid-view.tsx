@@ -35,6 +35,7 @@ import {
 } from "@/lib/floor-map-data"
 import type { Wave, WaveStatus, DetailAlert } from "@/lib/table-detail-data"
 import type { FloorMapLiveDetail } from "@/lib/floor-map-live-detail"
+import { hasBillRequest, hasWaiterRequestAlert } from "@/lib/floor-map/acknowledgeTableService"
 import { useViewportPrefetch } from "@/hooks/use-viewport-prefetch"
 
 interface GridViewProps {
@@ -46,6 +47,7 @@ interface GridViewProps {
   onTableTap: (tableId: string) => void
   onTablePrefetch?: (tableId: string) => void
   onMarkAvailable?: (tableId: string) => void
+  onAcknowledgeService?: (tableId: string, requestType: "waiter" | "bill") => void
 }
 
 // ── Urgency ordering ───────────────────────────────────────────────────────
@@ -183,6 +185,7 @@ const TableCard = React.memo(function TableCard({
   onTap,
   onPrefetch,
   onMarkAvailable,
+  onAcknowledgeService,
   cardIndex,
   sectionConfig,
 }: {
@@ -193,6 +196,7 @@ const TableCard = React.memo(function TableCard({
   onTap: () => void
   onPrefetch?: () => void
   onMarkAvailable?: () => void
+  onAcknowledgeService?: (requestType: "waiter" | "bill") => void
   cardIndex: number
   sectionConfig?: Record<string, { name: string }>
 }) {
@@ -210,11 +214,19 @@ const TableCard = React.memo(function TableCard({
   const hasSpecial = detail?.seats.some((s) => s.specialOccasion)
   const quickActions = getQuickActions(table, waves)
 
-  const colorState = getFloorTableColorState({ status: table.status, reserved, alerts, waves })
+  const colorState = getFloorTableColorState({
+    status: table.status,
+    reserved,
+    alerts,
+    waves,
+    stage: table.stage,
+  })
   const cardColors = TABLE_CARD_COLOR_STATES[colorState]
   const tableColorVisual = TABLE_COLOR_STATES[colorState]
   const isUrgent = colorState === "needs_attention"
   const isIdle = !isOccupiedColorState(colorState)
+  const showWaiterHandled = hasWaiterRequestAlert(table.alerts) && !!onAcknowledgeService
+  const showBillHandled = hasBillRequest(table.stage) && !!onAcknowledgeService
 
   const viewportPrefetchRef = useViewportPrefetch(
     table.id,
@@ -337,6 +349,40 @@ const TableCard = React.memo(function TableCard({
       )}
 
       {/* ── Footer ──────────────────────────────────────────────── */}
+      {showWaiterHandled && (
+        <div className="border-t border-white/4 px-4 py-2.5">
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 w-full gap-2 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAcknowledgeService?.("waiter")
+            }}
+          >
+            <Check className="h-3.5 w-3.5" />
+            Waiter Handled
+          </Button>
+        </div>
+      )}
+
+      {showBillHandled && (
+        <div className="border-t border-white/4 px-4 py-2.5">
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 w-full gap-2 rounded-lg bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAcknowledgeService?.("bill")
+            }}
+          >
+            <CreditCard className="h-3.5 w-3.5" />
+            Check Delivered
+          </Button>
+        </div>
+      )}
+
       {colorState === "cleaning" && onMarkAvailable && (
         <div className="border-t border-white/4 px-4 py-2.5">
           <Button
@@ -449,6 +495,7 @@ export function GridView({
   onTableTap,
   onTablePrefetch,
   onMarkAvailable,
+  onAcknowledgeService,
 }: GridViewProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<TableColorState>>(() => {
     const initial = new Set<TableColorState>()
@@ -472,6 +519,7 @@ export function GridView({
               reserved,
               alerts: detail?.alerts ?? [],
               waves: detail?.waves ?? [],
+              stage: t.stage,
             })
             return colorState === status
           })
@@ -597,6 +645,11 @@ export function GridView({
                           onPrefetch={onTablePrefetch ? () => onTablePrefetch(table.id) : undefined}
                           onMarkAvailable={
                             onMarkAvailable ? () => onMarkAvailable(table.id) : undefined
+                          }
+                          onAcknowledgeService={
+                            onAcknowledgeService
+                              ? (requestType) => onAcknowledgeService(table.id, requestType)
+                              : undefined
                           }
                           cardIndex={idx}
                           sectionConfig={sectionConfig}

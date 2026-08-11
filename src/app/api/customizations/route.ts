@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { customizationGroups, customizationOptions, conditionalPrices, conditionalQuantities, secondaryGroupRules, itemCustomizations } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -169,6 +170,7 @@ export async function POST(request: NextRequest) {
       name,
       customerInstructions,
       internalNotes,
+      i18n,
       isRequired,
       minSelections,
       maxSelections,
@@ -182,7 +184,7 @@ export async function POST(request: NextRequest) {
       defaultSelections,
       defaultOptionIds,
       displayOrder,
-      options, // Array of { name, price, displayOrder }
+      options, // Array of { name, price, displayOrder, i18n? }
     } = body;
 
     if (!locationId || !name) {
@@ -235,6 +237,7 @@ export async function POST(request: NextRequest) {
         name,
         customerInstructions: customerInstructions || null,
         internalNotes: internalNotes || null,
+        i18n: normalizeCatalogI18n(i18n),
         isRequired: isRequired ?? false,
         minSelections: minSelections ?? 0,
         maxSelections: maxSelections || null,
@@ -255,11 +258,12 @@ export async function POST(request: NextRequest) {
     
     if (options && Array.isArray(options) && options.length > 0) {
       insertedOptions = await db.insert(customizationOptions).values(
-        options.map((opt: { id?: string; name: string; price: number; displayOrder?: number; isDefault?: boolean }, index: number) => ({
+        options.map((opt: { id?: string; name: string; price: number; displayOrder?: number; isDefault?: boolean; i18n?: unknown }, index: number) => ({
           groupId: newGroup.id,
           name: opt.name,
           price: opt.price.toString(),
           displayOrder: opt.displayOrder ?? index,
+          i18n: normalizeCatalogI18n(opt.i18n),
         }))
       ).returning();
       

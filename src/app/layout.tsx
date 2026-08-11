@@ -34,7 +34,7 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=location.pathname;if(p.startsWith("/reservations")||p.startsWith("/kds")){document.documentElement.classList.add("dark");if(p.startsWith("/reservations"))document.documentElement.dataset.opsReservations="true";return;}if(p.startsWith("/mobile")){var t=localStorage.getItem("theme");if(t==="night")document.documentElement.classList.add("dark");else if(t==="vivid")document.documentElement.classList.add("vivid");}}catch(e){}})();`,
+            __html: `(function(){try{var p=location.pathname;if(p.startsWith("/reservations")||p.startsWith("/kds")){document.documentElement.classList.add("dark");if(p.startsWith("/reservations"))document.documentElement.dataset.opsReservations="true";return;}if(p.startsWith("/mobile")||p.startsWith("/menu/")){var t=localStorage.getItem("theme");if(t==="night")document.documentElement.classList.add("dark");else if(t==="vivid")document.documentElement.classList.add("vivid");}}catch(e){}})();`,
           }}
         />
       </head>

@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { tags } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/tags
  * Create a new tag
- * Body: { locationId, name, color? }
+ * Body: { locationId, name, color?, i18n? }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { locationId, name, color } = body;
+    const { locationId, name, color, i18n } = body;
 
     if (!locationId || !name) {
       return NextResponse.json(
@@ -177,6 +178,7 @@ export async function POST(request: NextRequest) {
         locationId,
         name,
         color: color || null,
+        i18n: normalizeCatalogI18n(i18n),
       })
       .returning();
 

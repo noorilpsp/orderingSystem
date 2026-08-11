@@ -21,15 +21,15 @@ export type GetOrdersViewResult =
  * Caller should render no-location state when error === "NO_LOCATION".
  */
 export async function getOrdersView(): Promise<GetOrdersViewResult> {
-  const locationId = await getCurrentLocationId();
-  if (!locationId?.trim()) {
-    return { error: "NO_LOCATION" };
-  }
-
   const supabase = await supabaseServer();
   const authResult = await getPosUserId(supabase);
   if (!authResult.ok) {
     return { error: "UNAUTHORIZED" };
+  }
+
+  const locationId = await getCurrentLocationId();
+  if (!locationId?.trim()) {
+    return { error: "NO_LOCATION" };
   }
 
   const ctx = await getPosMerchantContext(authResult.userId);

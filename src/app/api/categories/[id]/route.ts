@@ -6,6 +6,7 @@ import { categories, menuCategories, categoryItems, menus } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
 import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -203,6 +204,7 @@ export async function PUT(
     if (body.emoji !== undefined) updateData.emoji = body.emoji || null;
     if (body.description !== undefined) updateData.description = body.description || null;
     if (body.displayOrder !== undefined) updateData.displayOrder = body.displayOrder;
+    if (body.i18n !== undefined) updateData.i18n = normalizeCatalogI18n(body.i18n);
 
     // Update category
     const [updatedCategory] = await db

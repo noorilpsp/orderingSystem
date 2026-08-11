@@ -108,9 +108,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
-          <SidebarInset className="flex flex-col">
+          <SidebarInset className="flex min-h-0 min-w-0 flex-1 flex-col">
             <DashboardHeader />
-            <main className="flex flex-1 flex-col gap-4" aria-label="Main content">
+            <main className="flex min-h-0 flex-1 flex-col gap-4 min-w-0 overflow-hidden" aria-label="Main content">
               {children}
             </main>
             <FloatingActionButton />

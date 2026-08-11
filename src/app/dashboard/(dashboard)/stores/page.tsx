@@ -3,9 +3,11 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
+import { coerceTaxRatePercent } from "@/lib/tax-rate"
 import {
   Save,
   X,
@@ -46,7 +48,9 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useTenant } from "@/lib/contexts/TenantContext"
 import { useLocations } from "@/lib/hooks/useLocations"
+import { buildPublicMenuUrl } from "@/lib/public-menu/buildPublicMenuUrl";
 import type { MerchantLocation, OpeningHours, OrderModes } from "@/lib/db/schema/merchant-locations"
+import { DEFAULT_PICKUP_INSTRUCTIONS } from "@/lib/guest-menu/types"
 
 // Zod Schema
 const storeInfoSchema = z.object({
@@ -70,6 +74,7 @@ const storeInfoSchema = z.object({
   website: z.string().url("Invalid URL").optional().or(z.literal("")),
   instagram: z.string().optional(),
   facebook: z.string().optional(),
+  tiktok: z.string().optional(),
   openingHours: z.array(
     z.object({
       day: z.number(),
@@ -92,10 +97,13 @@ const storeInfoSchema = z.object({
     dineIn: z.boolean(),
     pickup: z.boolean(),
     delivery: z.boolean(),
+    dineInGuestSessionMode: z.enum(["staff_seated", "self_service"]).default("staff_seated"),
+    pickupInstructions: z.string().max(500).optional(),
   }),
   deliveryRadius: z.number().optional(),
   deliveryFee: z.number().optional(),
   minimumOrder: z.number().optional(),
+  taxRate: z.number().min(0).max(100),
   storeStatus: z.enum(["active", "inactive", "coming-soon"]),
   publicListing: z.boolean(),
   timezone: z.string(),
@@ -204,25 +212,54 @@ function dbOpeningHoursToForm(
 }
 
 // Helper: Convert form order modes to database JSONB format
-function formOrderModesToDb(formModes: { dineIn: boolean; pickup: boolean; delivery: boolean }, deliverySettings?: { radius?: number; fee?: number; minimumOrder?: number }): OrderModes {
+function formOrderModesToDb(
+  formModes: {
+    dineIn: boolean;
+    pickup: boolean;
+    delivery: boolean;
+    dineInGuestSessionMode: "staff_seated" | "self_service";
+    pickupInstructions?: string;
+  },
+  deliverySettings?: { radius?: number; fee?: number; minimumOrder?: number },
+  existing?: OrderModes | null,
+): OrderModes {
+  const instructions = formModes.pickupInstructions?.trim() ?? "";
   return {
-    dine_in: { enabled: formModes.dineIn },
-    pickup: { enabled: formModes.pickup },
+    dine_in: {
+      enabled: formModes.dineIn,
+      guest_session_mode: formModes.dineInGuestSessionMode,
+    },
+    pickup: {
+      enabled: formModes.pickup,
+      estimated_time_minutes: existing?.pickup?.estimated_time_minutes,
+      instructions,
+    },
     delivery: {
       enabled: formModes.delivery,
       radius_km: deliverySettings?.radius,
       delivery_fee: deliverySettings?.fee,
       minimum_order: deliverySettings?.minimumOrder,
+      estimated_time_minutes: existing?.delivery?.estimated_time_minutes,
     },
   }
 }
 
 // Helper: Convert database JSONB order modes to form format
-function dbOrderModesToForm(dbModes: OrderModes | null | undefined): { dineIn: boolean; pickup: boolean; delivery: boolean } {
+function dbOrderModesToForm(dbModes: OrderModes | null | undefined): {
+  dineIn: boolean;
+  pickup: boolean;
+  delivery: boolean;
+  dineInGuestSessionMode: "staff_seated" | "self_service";
+  pickupInstructions: string;
+} {
+  const storedInstructions = dbModes?.pickup?.instructions;
   return {
     dineIn: dbModes?.dine_in?.enabled ?? true,
     pickup: dbModes?.pickup?.enabled ?? true,
     delivery: dbModes?.delivery?.enabled ?? false,
+    dineInGuestSessionMode:
+      dbModes?.dine_in?.guest_session_mode === "self_service" ? "self_service" : "staff_seated",
+    pickupInstructions: storedInstructions ?? DEFAULT_PICKUP_INSTRUCTIONS,
   }
 }
 
@@ -268,7 +305,6 @@ export default function StoresPage() {
   // UI state
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [urlCopied, setUrlCopied] = useState(false)
-  const [showSocialMedia, setShowSocialMedia] = useState(false)
   const [selectedPreset, setSelectedPreset] = useState<string>("")
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -305,6 +341,7 @@ export default function StoresPage() {
       website: "",
       instagram: "",
       facebook: "",
+      tiktok: "",
       openingHours: dayNames.map((_, index) => ({
         day: index,
         closed: false,
@@ -320,10 +357,13 @@ export default function StoresPage() {
         dineIn: true,
         pickup: true,
         delivery: false,
+        dineInGuestSessionMode: "staff_seated",
+        pickupInstructions: DEFAULT_PICKUP_INSTRUCTIONS,
       },
       deliveryRadius: 5,
       deliveryFee: 5.99,
       minimumOrder: 15,
+      taxRate: 21,
       storeStatus: "active",
       publicListing: true,
       timezone: "Europe/Brussels",
@@ -405,6 +445,7 @@ export default function StoresPage() {
       website: location.websiteUrl ?? "",
       instagram: location.instagramHandle ?? "",
       facebook: location.facebookUrl ?? "",
+      tiktok: location.tiktokHandle ?? "",
       openingHours: openingHoursData,
       enableTables: location.enableTables ?? false,
       enableReservations: location.enableReservations ?? false,
@@ -416,6 +457,7 @@ export default function StoresPage() {
       deliveryRadius: location.orderModes?.delivery?.radius_km ?? 5,
       deliveryFee: location.orderModes?.delivery?.delivery_fee ?? 5.99,
       minimumOrder: location.orderModes?.delivery?.minimum_order ?? 15,
+      taxRate: coerceTaxRatePercent(location.taxRate),
       storeStatus: dbStatusToForm(location.status),
       publicListing: location.visibleInDirectory ?? true,
       timezone: location.timezone ?? "Europe/Brussels",
@@ -467,7 +509,8 @@ export default function StoresPage() {
   }
 
   const copyStoreUrl = () => {
-    navigator.clipboard.writeText(`https://berrytap.app/${storeSlug}`)
+    const origin = typeof window !== "undefined" ? window.location.origin : ""
+    navigator.clipboard.writeText(buildPublicMenuUrl({ storeSlug, origin }))
     setUrlCopied(true)
     toast.success("Store URL copied to clipboard")
     setTimeout(() => setUrlCopied(false), 2000)
@@ -500,17 +543,23 @@ export default function StoresPage() {
         website: data.website,
         instagram: data.instagram,
         facebook: data.facebook,
+        tiktok: data.tiktok,
         openingHours: formOpeningHoursToDb(data.openingHours),
         enableTables: data.enableTables,
         enableReservations: data.enableReservations,
         maxPartySize: data.maxPartySize,
         bookingWindow: data.bookingWindow,
         enableOnlineOrders: data.enableOnlineOrders,
-        orderModes: formOrderModesToDb(data.orderModes, {
-          radius: data.deliveryRadius,
-          fee: data.deliveryFee,
-          minimumOrder: data.minimumOrder,
-        }),
+        orderModes: formOrderModesToDb(
+          data.orderModes,
+          {
+            radius: data.deliveryRadius,
+            fee: data.deliveryFee,
+            minimumOrder: data.minimumOrder,
+          },
+          currentLocation?.orderModes,
+        ),
+        taxRate: data.taxRate,
         storeStatus: formStatusToDb(data.storeStatus),
         publicListing: data.publicListing,
         timezone: data.useBusinessTimezone ? null : data.timezone,
@@ -594,6 +643,7 @@ export default function StoresPage() {
         website: savedLocation.websiteUrl ?? "",
         instagram: savedLocation.instagramHandle ?? "",
         facebook: savedLocation.facebookUrl ?? "",
+        tiktok: savedLocation.tiktokHandle ?? "",
         openingHours: savedOpeningHours,
         enableTables: savedLocation.enableTables ?? false,
         enableReservations: savedLocation.enableReservations ?? false,
@@ -605,6 +655,7 @@ export default function StoresPage() {
         deliveryRadius: savedLocation.orderModes?.delivery?.radius_km ?? 5,
         deliveryFee: savedLocation.orderModes?.delivery?.delivery_fee ?? 5.99,
         minimumOrder: savedLocation.orderModes?.delivery?.minimum_order ?? 15,
+        taxRate: coerceTaxRatePercent(savedLocation.taxRate),
         storeStatus: dbStatusToForm(savedLocation.status),
         publicListing: savedLocation.visibleInDirectory ?? true,
         timezone: savedLocation.timezone ?? "Europe/Brussels",
@@ -639,7 +690,7 @@ export default function StoresPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [currentMerchantId, currentLocationId, logoUrl, bannerUrl, form])
+  }, [currentMerchantId, currentLocationId, currentLocation, logoUrl, bannerUrl, form])
 
   const handleDiscard = useCallback(() => {
     // Re-load current location data
@@ -665,6 +716,7 @@ export default function StoresPage() {
         website: currentLocation.websiteUrl ?? "",
         instagram: currentLocation.instagramHandle ?? "",
         facebook: currentLocation.facebookUrl ?? "",
+        tiktok: currentLocation.tiktokHandle ?? "",
         openingHours: openingHoursData,
         enableTables: currentLocation.enableTables ?? false,
         enableReservations: currentLocation.enableReservations ?? false,
@@ -676,6 +728,7 @@ export default function StoresPage() {
         deliveryRadius: currentLocation.orderModes?.delivery?.radius_km ?? 5,
         deliveryFee: currentLocation.orderModes?.delivery?.delivery_fee ?? 5.99,
         minimumOrder: currentLocation.orderModes?.delivery?.minimum_order ?? 15,
+        taxRate: coerceTaxRatePercent(currentLocation.taxRate),
         storeStatus: dbStatusToForm(currentLocation.status),
         publicListing: currentLocation.visibleInDirectory ?? true,
         timezone: currentLocation.timezone ?? "Europe/Brussels",
@@ -715,6 +768,7 @@ export default function StoresPage() {
       setBannerPreview("/placeholder.svg")
       setBannerUrl(undefined)
     }
+
     toast.info("Changes discarded")
   }, [currentLocation, form])
 
@@ -1160,6 +1214,7 @@ export default function StoresPage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
               {isDirty ? (
+
                 <>
                   <div className="h-2 w-2 rounded-full bg-amber-500" />
                   <span className="text-muted-foreground">Unsaved changes</span>
@@ -1180,7 +1235,11 @@ export default function StoresPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleDiscard} disabled={!isDirty || isSaving}>
+            <Button
+              variant="outline"
+              onClick={handleDiscard}
+              disabled={!isDirty || isSaving}
+            >
               Discard
             </Button>
             <Button variant="outline" disabled={isSaving}>
@@ -1301,7 +1360,7 @@ export default function StoresPage() {
                   </Label>
                   <div className="flex gap-2">
                     <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-muted border rounded-lg">
-                      <span className="text-sm text-muted-foreground">https://berrytap.app/</span>
+                      <span className="text-sm text-muted-foreground">/menu/</span>
                       <Input
                         id="storeSlug"
                         {...register("storeSlug")}
@@ -1449,68 +1508,74 @@ export default function StoresPage() {
 
                 {/* Website & Social Media */}
                 <div className="space-y-4">
-                  <button
-                    type="button"
-                    className="flex items-center justify-between w-full text-sm font-medium"
-                    onClick={() => setShowSocialMedia(!showSocialMedia)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Globe className="w-4 h-4" />
-                      Website & Social Media
-                    </span>
-                    {showSocialMedia ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Globe className="w-4 h-4" />
+                    Website & Social Media
+                  </div>
 
-                  {showSocialMedia && (
-                    <div className="space-y-4 pt-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="website">
-                          <Globe className="w-4 h-4 inline mr-2" />
-                          Website URL
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="website"
-                            type="url"
-                            {...register("website")}
-                            placeholder="https://your-store.com"
-                            className={cn("flex-1", errors.website && "border-red-500")}
-                          />
-                          {watch("website") && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => window.open(watch("website"), "_blank")}
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                        {errors.website && <p className="text-xs text-red-500">{errors.website.message}</p>}
+                  <div className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="website">
+                        <Globe className="w-4 h-4 inline mr-2" />
+                        Website URL
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="website"
+                          type="url"
+                          {...register("website")}
+                          placeholder="https://your-store.com"
+                          className={cn("flex-1", errors.website && "border-red-500")}
+                        />
+                        {watch("website") && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => window.open(watch("website"), "_blank")}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
+                      {errors.website && <p className="text-xs text-red-500">{errors.website.message}</p>}
+                    </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="instagram">Instagram</Label>
-                        <div className="flex gap-2">
-                          <span className="inline-flex items-center px-3 border border-r-0 rounded-l-lg bg-gray-50 text-gray-600">
-                            @
-                          </span>
-                          <Input
-                            id="instagram"
-                            {...register("instagram")}
-                            placeholder="username"
-                            className="rounded-l-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="facebook">Facebook</Label>
-                        <Input id="facebook" {...register("facebook")} placeholder="Facebook page URL or username" />
+                    <div className="space-y-2">
+                      <Label htmlFor="instagram">Instagram</Label>
+                      <div className="flex gap-2">
+                        <span className="inline-flex items-center px-3 border border-r-0 rounded-l-lg bg-gray-50 text-gray-600">
+                          @
+                        </span>
+                        <Input
+                          id="instagram"
+                          {...register("instagram")}
+                          placeholder="username"
+                          className="rounded-l-none"
+                        />
                       </div>
                     </div>
-                  )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="facebook">Facebook</Label>
+                      <Input id="facebook" {...register("facebook")} placeholder="Facebook page URL or username" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="tiktok">TikTok</Label>
+                      <div className="flex gap-2">
+                        <span className="inline-flex items-center px-3 border border-r-0 rounded-l-lg bg-gray-50 text-gray-600">
+                          @
+                        </span>
+                        <Input
+                          id="tiktok"
+                          {...register("tiktok")}
+                          placeholder="username"
+                          className="rounded-l-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2016,9 +2081,67 @@ export default function StoresPage() {
                               <Label htmlFor="dineIn" className="text-sm font-normal cursor-pointer">
                                 Dine-in
                               </Label>
-                              <p className="text-xs text-muted-foreground">Order at table, eat in restaurant</p>
+                              <p className="text-xs text-muted-foreground">
+                                Order at table — choose self pickup or delivery to table
+                              </p>
                             </div>
                           </div>
+
+                          {orderModes.dineIn && (
+                            <div className="ml-7 space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
+                              <Label className="text-xs font-medium text-muted-foreground">
+                                How guests get their order
+                              </Label>
+                              <RadioGroup
+                                value={orderModes.dineInGuestSessionMode}
+                                onValueChange={(value) =>
+                                  setValue(
+                                    "orderModes.dineInGuestSessionMode",
+                                    value as "staff_seated" | "self_service",
+                                    { shouldDirty: true },
+                                  )
+                                }
+                                className="space-y-2"
+                              >
+                                <div className="flex items-start gap-2">
+                                  <RadioGroupItem
+                                    value="staff_seated"
+                                    id="dineInGuestSessionStaffSeated"
+                                    className="mt-0.5"
+                                  />
+                                  <div>
+                                    <Label
+                                      htmlFor="dineInGuestSessionStaffSeated"
+                                      className="text-sm font-normal cursor-pointer"
+                                    >
+                                      Delivery to table
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                      Staff bring the order to the guest&apos;s table (tray / table service)
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <RadioGroupItem
+                                    value="self_service"
+                                    id="dineInGuestSessionSelfService"
+                                    className="mt-0.5"
+                                  />
+                                  <div>
+                                    <Label
+                                      htmlFor="dineInGuestSessionSelfService"
+                                      className="text-sm font-normal cursor-pointer"
+                                    >
+                                      Self pickup
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                      Guests order from the table QR and pick up the order themselves
+                                    </p>
+                                  </div>
+                                </div>
+                              </RadioGroup>
+                            </div>
+                          )}
 
                           <div className="flex items-start gap-3">
                             <Checkbox
@@ -2035,6 +2158,22 @@ export default function StoresPage() {
                               <p className="text-xs text-muted-foreground">Order ahead, pick up at store</p>
                             </div>
                           </div>
+
+                          {orderModes.pickup ? (
+                            <div className="ml-8 space-y-2 border-l-2 border-border/70 pl-4">
+                              <Label htmlFor="pickupInstructions">Pickup instructions</Label>
+                              <Textarea
+                                id="pickupInstructions"
+                                rows={2}
+                                maxLength={500}
+                                placeholder={DEFAULT_PICKUP_INSTRUCTIONS}
+                                {...register("orderModes.pickupInstructions")}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Shown in the guest menu when pickup is selected. Leave blank to hide.
+                              </p>
+                            </div>
+                          ) : null}
 
                           <div className="flex items-start gap-3">
                             <Checkbox
@@ -2099,6 +2238,25 @@ export default function StoresPage() {
                       </div>
                     </div>
                   )}
+
+                  <div className="border-t pt-4 space-y-2">
+                    <Label htmlFor="taxRate">Tax rate (%)</Label>
+                    <Input
+                      id="taxRate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="max-w-xs"
+                      {...register("taxRate", { valueAsNumber: true })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Applied to guest cart, checkout, and placed orders for this store.
+                    </p>
+                    {errors.taxRate ? (
+                      <p className="text-xs text-red-600">{errors.taxRate.message}</p>
+                    ) : null}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2166,7 +2324,10 @@ export default function StoresPage() {
                       Visible in Public Directory
                     </Label>
                     <p className="text-sm text-muted-foreground">List this store in the public BerryTap directory</p>
-                    <p className="text-xs text-muted-foreground">Store URL will still work: berrytap.app/{storeSlug}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Guest menu URL: /menu/{storeSlug} — use Dashboard → Tables for per-table QR links
+                      (?table=12)
+                    </p>
                   </div>
                   <Switch
                     id="publicListing"
@@ -2223,6 +2384,11 @@ export default function StoresPage() {
                   <CardTitle className="text-base">Quick Tips</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">
+                    <Link href="/dashboard/loyalty" className="font-medium text-primary underline">
+                      Manage loyalty program →
+                    </Link>
+                  </p>
                   <div className="flex gap-3">
                     <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
                       <span className="text-orange-600 dark:text-orange-400 font-bold">1</span>

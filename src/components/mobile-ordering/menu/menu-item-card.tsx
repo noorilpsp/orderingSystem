@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react"
-
-import { useState } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { Plus, Minus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { MenuItem } from "@/lib/menu-data";
+import { cn } from "@/lib/utils";
+import { resolveTagLabel } from "@/lib/catalog-i18n";
+import { useGuestT, useGuestLocale, useLocalizedCatalogText } from "@/lib/guest-i18n";
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -14,6 +15,8 @@ interface MenuItemCardProps {
   onRemoveFromCart?: (itemId: string) => void;
   onItemClick?: (item: MenuItem) => void;
   quantity?: number;
+  /** row = phone list; tile = tablet/desktop grid card */
+  variant?: "row" | "tile";
 }
 
 export function MenuItemCard({
@@ -22,10 +25,19 @@ export function MenuItemCard({
   onRemoveFromCart,
   onItemClick,
   quantity = 0,
+  variant = "row",
 }: MenuItemCardProps) {
+  const t = useGuestT();
+  const { locale } = useGuestLocale();
+  const { name: localizedName, description: localizedDescription } =
+    useLocalizedCatalogText(
+      { name: item.name, description: item.description },
+      item.i18n,
+    );
   const [isPressed, setIsPressed] = useState(false);
   const isSoldOut = item.status === "soldout";
   const isInCart = quantity > 0;
+  const isTile = variant === "tile";
 
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -34,141 +46,240 @@ export function MenuItemCard({
     onAddToCart(item);
   };
 
+  const overlayControlClass =
+    "sheen-overlay absolute bottom-1 right-1 flex items-center gap-1.5 rounded-full border border-white/26 bg-black/78 px-2 py-1 text-white backdrop-blur-2xl shadow-[0_10px_24px_rgba(0,0,0,0.4)] ring-1 ring-white/10 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl";
+  const overlayAddClass = cn(
+    "sheen-overlay absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl shadow-[0_10px_24px_rgba(0,0,0,0.4)] ring-1 ring-white/10 hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84 transition-all",
+    isPressed ? "scale-125" : "scale-100",
+  );
+  const qtyBtnClass =
+    "sheen-overlay relative flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-foreground transition-colors hover:bg-muted";
+
+  const overlayQuantityControls = !isSoldOut ? (
+    !isInCart ? (
+      <button
+        type="button"
+        onClick={handleAddClick}
+        className={overlayAddClass}
+        style={{
+          transitionDuration: "200ms",
+          transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}
+        aria-label={t("menu.addItemAria", { name: localizedName })}
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    ) : (
+      <div className={overlayControlClass}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemoveFromCart?.(item.id);
+          }}
+          className="sheen-overlay relative flex h-6 w-6 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl ring-1 ring-white/10 transition-colors hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
+          aria-label={t("menu.removeItemAria", { name: localizedName })}
+        >
+          {quantity === 1 ? (
+            <Trash2 className="h-4 w-4 text-current" />
+          ) : (
+            <Minus className="h-4 w-4 text-current" />
+          )}
+        </button>
+        <span className="w-4 text-center text-xs font-semibold text-current">
+          {quantity}
+        </span>
+        <button
+          type="button"
+          onClick={handleAddClick}
+          className={cn(
+            "sheen-overlay relative flex h-6 w-6 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl ring-1 ring-white/10 transition-all hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84",
+            isPressed ? "scale-125" : "scale-100",
+          )}
+          style={{
+            transitionDuration: "200ms",
+            transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}
+          aria-label={t("menu.addMoreAria", { name: localizedName })}
+        >
+          <Plus className="h-4 w-4 text-current" />
+        </button>
+      </div>
+    )
+  ) : null;
+
+  const tileQuantityControls = !isSoldOut ? (
+    !isInCart ? (
+      <button
+        type="button"
+        onClick={handleAddClick}
+        className={cn(
+          "inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-border/70 bg-foreground px-3.5 text-sm font-semibold text-background transition hover:opacity-90",
+          isPressed && "scale-105",
+        )}
+        aria-label={t("menu.addItemAria", { name: localizedName })}
+      >
+        <Plus className="h-4 w-4" />
+        {t("menu.add")}
+      </button>
+    ) : (
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/60 p-1">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemoveFromCart?.(item.id);
+          }}
+          className={qtyBtnClass}
+          aria-label={t("menu.removeItemAria", { name: localizedName })}
+        >
+          {quantity === 1 ? (
+            <Trash2 className="h-3.5 w-3.5" />
+          ) : (
+            <Minus className="h-3.5 w-3.5" />
+          )}
+        </button>
+        <span className="min-w-5 text-center text-sm font-semibold text-foreground">
+          {quantity}
+        </span>
+        <button
+          type="button"
+          onClick={handleAddClick}
+          className={cn(qtyBtnClass, isPressed && "scale-110")}
+          aria-label={t("menu.addMoreAria", { name: localizedName })}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
+  ) : null;
+
+  const tags =
+    item.tags.length > 0 ? (
+      <div className="flex flex-wrap gap-1">
+        {item.tags.map((tag) => {
+          let toneClass =
+            "border-zinc-400/35 bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 vivid:text-zinc-100";
+          const tagKey = tag.name.trim().toLowerCase();
+          const tagEmoji =
+            tagKey === "vegetarian" ? "🌱" : tagKey === "spicy" ? "🌶️" : "";
+
+          if (tagKey === "vegetarian") {
+            toneClass =
+              "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100";
+          } else if (tagKey === "spicy") {
+            toneClass =
+              "border-rose-400/45 bg-rose-500/20 text-rose-800 dark:text-rose-200 vivid:text-rose-100";
+          } else if (tagKey === "gluten-free" || tagKey === "gluten free") {
+            toneClass =
+              "border-sky-400/45 bg-sky-500/20 text-sky-800 dark:text-sky-200 vivid:text-sky-100";
+          }
+
+          const label = resolveTagLabel(locale, tag.name, tag.i18n);
+
+          return (
+            <span
+              key={tag.name}
+              className={`sheen-overlay relative inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium backdrop-blur-md ring-1 ring-white/10 ${toneClass}`}
+            >
+              {tagEmoji}
+              {label}
+            </span>
+          );
+        })}
+      </div>
+    ) : null;
+
+  if (isTile) {
+    return (
+      <div
+        onClick={() => onItemClick?.(item)}
+        className={cn(
+          "menu-item-controls flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition hover:border-border hover:bg-card/90",
+          isSoldOut && "opacity-60",
+        )}
+      >
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+          <Image
+            src={item.image || "/placeholder.svg"}
+            alt={localizedName}
+            fill
+            className={cn("object-cover", isSoldOut && "grayscale")}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 25vw"
+          />
+          {isSoldOut ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <Badge variant="destructive" className="text-xs font-semibold">
+                {t("menu.soldOut")}
+              </Badge>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5 p-3">
+          <h3
+            className={cn(
+              "font-semibold text-foreground",
+              isSoldOut && "text-muted-foreground",
+            )}
+          >
+            {localizedName}
+          </h3>
+          <p className="line-clamp-2 text-sm text-muted-foreground">
+            {localizedDescription}
+          </p>
+          {tags}
+          <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+            <p className="font-semibold text-foreground">
+              €{item.price.toFixed(2)}
+            </p>
+            {tileQuantityControls}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       onClick={() => onItemClick?.(item)}
-      className={`flex gap-3 cursor-pointer ${
-        isSoldOut ? "opacity-60" : ""
-      }`}
+      className={cn("flex cursor-pointer gap-3", isSoldOut && "opacity-60")}
     >
-      {/* Text Content */}
-      <div className="flex flex-1 flex-col justify-between min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col justify-between">
         <div className="flex flex-col gap-1">
           <h3
-            className={`font-semibold text-foreground ${
-              isSoldOut ? "text-muted-foreground" : ""
-            }`}
+            className={cn(
+              "font-semibold text-foreground",
+              isSoldOut && "text-muted-foreground",
+            )}
           >
-            {item.name}
+            {localizedName}
           </h3>
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {item.description}
+          <p className="line-clamp-2 text-sm text-muted-foreground">
+            {localizedDescription}
           </p>
-          {item.tags.length > 0 && (
-            <div className="flex gap-1">
-              {item.tags.map((tag) => {
-                let toneClass =
-                  "border-zinc-400/35 bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 vivid:text-zinc-100";
-                const tagEmoji =
-                  tag === "Vegetarian"
-                    ? "🌱"
-                    : tag === "Spicy"
-                      ? "🌶️"
-                      : "";
-
-                if (tag === "Vegetarian") {
-                  toneClass =
-                    "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100";
-                } else if (tag === "Spicy") {
-                  toneClass =
-                    "border-rose-400/45 bg-rose-500/20 text-rose-800 dark:text-rose-200 vivid:text-rose-100";
-                } else if (tag === "Gluten-Free") {
-                  toneClass =
-                    "border-sky-400/45 bg-sky-500/20 text-sky-800 dark:text-sky-200 vivid:text-sky-100";
-                }
-
-                return (
-                  <span
-                    key={tag}
-                    className={`sheen-overlay relative inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium backdrop-blur-md ring-1 ring-white/10 ${toneClass}`}
-                  >
-                    {tagEmoji}
-                    {tag}
-                  </span>
-                );
-              })}
-            </div>
-          )}
+          {tags}
           <p className="font-semibold text-foreground">
             €{item.price.toFixed(2)}
           </p>
         </div>
       </div>
 
-      {/* Image with Add/Quantity Controls */}
-      <div className="menu-item-controls relative shrink-0 h-28 w-28">
-        <div className="relative h-full w-full overflow-hidden rounded-lg flex items-center justify-center">
+      <div className="menu-item-controls relative h-28 w-28 shrink-0">
+        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg">
           <Image
             src={item.image || "/placeholder.svg"}
-            alt={item.name}
+            alt={localizedName}
             fill
-            className={`object-cover ${isSoldOut ? "grayscale" : ""}`}
+            className={cn("object-cover", isSoldOut && "grayscale")}
           />
-          {isSoldOut && (
+          {isSoldOut ? (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <Badge
-                variant="destructive"
-                className="text-xs font-semibold"
-              >
-                Sold Out
+              <Badge variant="destructive" className="text-xs font-semibold">
+                {t("menu.soldOut")}
               </Badge>
             </div>
-          )}
-          {!isSoldOut && (
-            <>
-              {!isInCart ? (
-                <button
-                  type="button"
-                  onClick={handleAddClick}
-                  className={`sheen-overlay absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl shadow-[0_10px_24px_rgba(0,0,0,0.4)] ring-1 ring-white/10 hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84 transition-all ${
-                    isPressed ? "scale-125" : "scale-100"
-                  }`}
-                  style={{
-                    transitionDuration: "200ms",
-                    transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
-                  }}
-                  aria-label={`Add ${item.name} to cart`}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              ) : (
-                <div className="sheen-overlay absolute bottom-1 right-1 flex items-center gap-1.5 rounded-full border border-white/26 bg-black/78 px-2 py-1 text-white backdrop-blur-2xl shadow-[0_10px_24px_rgba(0,0,0,0.4)] ring-1 ring-white/10 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveFromCart?.(item.id);
-                    }}
-                    className="sheen-overlay relative flex h-6 w-6 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl ring-1 ring-white/10 transition-colors hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
-                    aria-label={`Remove ${item.name} from cart`}
-                  >
-                    {quantity === 1 ? (
-                      <Trash2 className="h-4 w-4 text-current" />
-                    ) : (
-                      <Minus className="h-4 w-4 text-current" />
-                    )}
-                  </button>
-                  <span className="w-4 text-center text-xs font-semibold text-current">
-                    {quantity}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddClick}
-                    className={`sheen-overlay relative flex h-6 w-6 items-center justify-center rounded-full border border-white/26 bg-black/78 text-white backdrop-blur-2xl ring-1 ring-white/10 transition-all hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84 ${
-                      isPressed ? "scale-125" : "scale-100"
-                    }`}
-                    style={{
-                      transitionDuration: "200ms",
-                      transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
-                    }}
-                    aria-label={`Add more ${item.name}`}
-                  >
-                    <Plus className="h-4 w-4 text-current" />
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+          ) : null}
+          {overlayQuantityControls}
         </div>
       </div>
     </div>

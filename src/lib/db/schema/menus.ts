@@ -15,6 +15,7 @@ import {
   } from "drizzle-orm/pg-core";
   import { relations } from "drizzle-orm";
   import { merchantLocations } from "./merchant-locations";
+  import type { CatalogI18n } from "@/lib/catalog-i18n";
   
   // =============================================================================
   // ENUMS
@@ -71,6 +72,8 @@ import {
       emoji: varchar("emoji", { length: 10 }),
       name: varchar("name", { length: 255 }).notNull(),
       description: text("description"),
+      /** Optional locale overrides (e.g. Arabic). Primary name/description stay English. */
+      i18n: jsonb("i18n").$type<CatalogI18n>(),
       displayOrder: integer("display_order").notNull().default(0),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -117,6 +120,8 @@ import {
         .references(() => merchantLocations.id, { onDelete: "cascade" }),
       name: varchar("name", { length: 100 }).notNull(),
       color: varchar("color", { length: 7 }), // Hex color like #FF5733
+      /** Optional locale overrides (e.g. Arabic). Primary name stays English. */
+      i18n: jsonb("i18n").$type<CatalogI18n>(),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (table) => [
@@ -159,10 +164,13 @@ import {
         .references(() => merchantLocations.id, { onDelete: "cascade" }),
       name: varchar("name", { length: 255 }).notNull(),
       description: text("description"),
+      /** Optional locale overrides (e.g. Arabic). Primary name/description stay English. */
+      i18n: jsonb("i18n").$type<CatalogI18n>(),
       price: decimal("price", { precision: 10, scale: 2 }).notNull(),
       photoUrl: varchar("photo_url", { length: 500 }),
       calories: integer("calories"),
       status: itemStatusEnum("status").notNull().default("draft"),
+      featured: boolean("featured").notNull().default(false),
       useCustomHours: boolean("use_custom_hours").notNull().default(false),
       customSchedule: jsonb("custom_schedule"),
       displayOrder: integer("display_order").notNull().default(0),
@@ -255,6 +263,8 @@ import {
       name: varchar("name", { length: 255 }).notNull(),
       customerInstructions: text("customer_instructions"),
       internalNotes: text("internal_notes"),
+      /** Optional locale overrides (e.g. Arabic). Primary copy stays English. */
+      i18n: jsonb("i18n").$type<CatalogI18n>(),
       isRequired: boolean("is_required").notNull().default(false),
       minSelections: integer("min_selections").notNull().default(0),
       maxSelections: integer("max_selections"), // null = unlimited
@@ -286,6 +296,8 @@ import {
         .notNull()
         .references(() => customizationGroups.id, { onDelete: "cascade" }),
       name: varchar("name", { length: 255 }).notNull(),
+      /** Optional locale overrides (e.g. Arabic). Primary name stays English. */
+      i18n: jsonb("i18n").$type<CatalogI18n>(),
       price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0.00"),
       displayOrder: integer("display_order").notNull().default(0),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

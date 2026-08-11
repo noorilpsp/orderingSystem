@@ -8,6 +8,7 @@ import { LocationProvider } from "@/lib/contexts/LocationContext";
 import { LocationMenuProvider } from "@/lib/contexts/LocationMenuContext";
 import { RestaurantHydrationRunner } from "@/components/restaurant-hydration-runner";
 import { TablePageSkeleton } from "@/components/table-detail/TablePageSkeleton";
+import { primeIncomingOrderAlertAudio } from "@/lib/orders/incoming-order-alert-sound";
 
 /** Shared full-screen loading UI for ops routes. Use for initial load to keep experience continuous. */
 export function OpsLoadingFallback() {
@@ -25,6 +26,11 @@ function OpsProvidersInner({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // Unlock /orders alert audio (and notification permission) on any ops gesture.
+    return primeIncomingOrderAlertAudio();
   }, []);
 
   const LoadingUI = pathname.startsWith("/table/") ? TablePageSkeleton : OpsLoadingFallback;

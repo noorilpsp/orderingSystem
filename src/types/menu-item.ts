@@ -1,7 +1,11 @@
+import type { CatalogI18n } from "@/lib/catalog-i18n"
+
 export interface MenuItem {
   id: string
   name: string
   description?: string
+  /** Optional Arabic (etc.) overrides for guest menu. */
+  i18n?: CatalogI18n | null
   price: number
   currency: string
   image?: string
@@ -25,6 +29,8 @@ export interface MenuItem {
   defaultStation?: string | null
   /** Kitchen lane/substation (grill, fryer, cold_prep). Only used when defaultStation is kitchen. */
   defaultSubstation?: string | null
+  /** Show on guest menu Featured strip when live. */
+  featured?: boolean
   // Legacy fields for backward compatibility
   category?: string
   categoryId?: string
@@ -36,6 +42,8 @@ export interface Category {
   name: string
   emoji?: string
   itemCount: number
+  /** Overview / legacy ordering field (distinct from dashboard `displayOrder`). */
   order: number
   isExpanded: boolean
+  i18n?: CatalogI18n | null
 }

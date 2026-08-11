@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MapPin, Phone, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { CallWaiterButton } from "@/components/ui/call-waiter-button";
+import { useGuestT } from "@/lib/guest-i18n";
 
 interface Restaurant {
   name: string;
@@ -17,9 +18,9 @@ interface ActionButtonsProps {
 }
 
 export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
+  const t = useGuestT();
 
   const handleGetDirections = () => {
-    // In a real app, this would open maps with the restaurant location
     const address = encodeURIComponent(restaurant.address);
     window.open(`https://www.google.com/maps/search/?api=1&query=${address}`, "_blank");
   };
@@ -33,10 +34,9 @@ export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 z-50">
         <div className="max-w-md mx-auto">
           <div className="flex gap-3">
-            <CallWaiterButton 
+            <CallWaiterButton
               className="flex-1 h-12 text-base"
               onCall={async () => {
-                // Simulate API call
                 await new Promise((resolve) => setTimeout(resolve, 800));
               }}
             />
@@ -46,7 +46,7 @@ export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
             >
               <Link href="/mobile">
                 <ShoppingCart className="w-5 h-5 mr-2" />
-                Order More
+                {t("confirm.orderMore")}
               </Link>
             </Button>
           </div>
@@ -55,7 +55,6 @@ export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
     );
   }
 
-  // Pickup variant
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 z-50">
       <div className="max-w-md mx-auto">
@@ -66,7 +65,7 @@ export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
               className="flex-1 h-12 rounded-lg bg-black text-white hover:bg-gray-900 text-base font-semibold"
             >
               <MapPin className="w-5 h-5 mr-2" />
-              Get Directions
+              {t("confirm.getDirections")}
             </Button>
             <Button
               onClick={handleCallRestaurant}
@@ -74,7 +73,7 @@ export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
               className="flex-1 h-12 rounded-lg text-base font-semibold"
             >
               <Phone className="w-5 h-5 mr-2" />
-              Call Restaurant
+              {t("confirm.callRestaurant")}
             </Button>
           </div>
           <Button
@@ -83,7 +82,7 @@ export function ActionButtons({ orderType, restaurant }: ActionButtonsProps) {
           >
             <Link href="/mobile">
               <ShoppingCart className="w-5 h-5 mr-2" />
-              Order More
+              {t("confirm.orderMore")}
             </Link>
           </Button>
         </div>

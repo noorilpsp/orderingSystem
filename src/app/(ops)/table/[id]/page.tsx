@@ -13,10 +13,10 @@ export default async function TablePage({
   const result = await getTableView(id);
 
   if (result.error === "UNAUTHORIZED") {
-    redirect("/login");
+    redirect("/staff/login");
   }
   if (result.error === "FORBIDDEN") {
-    redirect("/login");
+    redirect("/staff/login");
   }
   if (result.error === "NOT_FOUND") {
     notFound();

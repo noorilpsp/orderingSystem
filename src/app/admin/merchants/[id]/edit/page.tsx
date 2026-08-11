@@ -55,6 +55,7 @@ export default async function EditMerchantPage({ params }: PageProps) {
           subscriptionExpiresAt: merchant.subscriptionExpiresAt,
           timezone: merchant.defaultTimezone,
           currency: merchant.defaultCurrency,
+          kdsEnabled: merchant.features?.kds === true,
         }}
         location={
           firstLocation

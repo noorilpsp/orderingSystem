@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation"
 import { Bell, CalendarDays, ChefHat, Clock, Combine, ClipboardList, LayoutGrid, PencilRuler, ShoppingBasket, Table2, Users } from "lucide-react"
 
 import { getLastViewedFloorplanClientGlobal } from "@/lib/floor-map/lastViewedFloorplan"
+import { unlockIncomingOrderAlertAudio } from "@/lib/orders/incoming-order-alert-sound"
+import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 import { cn } from "@/lib/utils"
 
 type OpsNavItem = {
@@ -87,6 +89,7 @@ const items: OpsNavItem[] = [
 export function OpsBottomNav() {
   const pathname = usePathname()
   const [lastFloorplanId, setLastFloorplanId] = useState<string | null>(null)
+  const { kdsEnabled } = useMerchantKdsEnabled()
 
   useEffect(() => {
     setLastFloorplanId(getLastViewedFloorplanClientGlobal())
@@ -94,14 +97,16 @@ export function OpsBottomNav() {
 
   const resolvedItems = useMemo(
     () =>
-      items.map((item) => {
-        if (item.href !== "/floor-map" || !lastFloorplanId) return item
-        return {
-          ...item,
-          href: `/floor-map?floorplan=${encodeURIComponent(lastFloorplanId)}`,
-        }
-      }),
-    [lastFloorplanId]
+      items
+        .filter((item) => (item.href === "/kds" ? kdsEnabled : true))
+        .map((item) => {
+          if (item.href !== "/floor-map" || !lastFloorplanId) return item
+          return {
+            ...item,
+            href: `/floor-map?floorplan=${encodeURIComponent(lastFloorplanId)}`,
+          }
+        }),
+    [lastFloorplanId, kdsEnabled]
   )
 
   return (
@@ -114,6 +119,10 @@ export function OpsBottomNav() {
               key={item.href}
               prefetch={true}
               href={item.href}
+              onPointerDown={() => {
+                // Unlock during the nav click so /orders can autoplay without another tap.
+                void unlockIncomingOrderAlertAudio()
+              }}
               className={cn(
                 "group flex min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 rounded-xl border px-1 text-sm font-semibold transition-all sm:gap-2 sm:px-2",
                 isActive

@@ -1,8 +1,12 @@
+import type { CatalogI18n } from "@/lib/catalog-i18n"
+
 export interface Category {
   id: string
   name: string
   emoji?: string
   description?: string
+  /** Optional Arabic (etc.) overrides for guest menu. */
+  i18n?: CatalogI18n | null
   displayOrder: number
   itemCount: number
   menuIds: string[]

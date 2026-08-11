@@ -254,21 +254,13 @@ async function getTableLiveEnrichment(
     }
     const waves: { type: string; status: string }[] = [];
     const waveNumbers = [...waveItems.keys()].sort((a, b) => a - b);
-    if (waveNumbers.length === 0) {
-      waves.push(
-        { type: "drinks", status: "not_started" },
-        { type: "food", status: "not_started" },
-        { type: "dessert", status: "not_started" }
-      );
-    } else {
-      for (const wn of waveNumbers) {
-        const statuses = waveItems.get(wn) ?? [];
-        const firedAt = firedAtByWave.get(wn) ?? null;
-        waves.push({
-          type: WAVE_TYPES[(wn - 1) % WAVE_TYPES.length],
-          status: deriveTablePageWaveStatusFromItems(statuses, firedAt),
-        });
-      }
+    for (const wn of waveNumbers) {
+      const statuses = waveItems.get(wn) ?? [];
+      const firedAt = firedAtByWave.get(wn) ?? null;
+      waves.push({
+        type: WAVE_TYPES[(wn - 1) % WAVE_TYPES.length],
+        status: deriveTablePageWaveStatusFromItems(statuses, firedAt),
+      });
     }
     const serverName = sess.serverId ? staffByName.get(sess.serverId) ?? null : null;
     const guestCount =

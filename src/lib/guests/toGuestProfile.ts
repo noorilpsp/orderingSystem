@@ -67,6 +67,7 @@ export function toGuestProfile(g: GuestsUnifiedGuest): GuestProfile {
     preferences: g.preferences,
     tags: g.tags,
     vipScore: deriveVipScore(g),
+    loyaltyPoints: g.loyaltyPointsBalance,
     churnRisk: segmentToChurnRisk(g.segment),
     visitHistory: g.visits.map((v, i) => toVisitRecord(v, i)),
     daysSinceLastVisit: Math.floor(

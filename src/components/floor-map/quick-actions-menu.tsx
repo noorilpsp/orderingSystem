@@ -17,9 +17,12 @@ interface QuickActionsMenuProps {
   tableNumber: number
   position: { x: number; y: number }
   isCleaning?: boolean
+  hasWaiterRequest?: boolean
+  hasBillRequest?: boolean
   onClose: () => void
   onSeatParty?: () => void
   onMarkAvailable?: () => void
+  onAcknowledgeService?: (requestType: "waiter" | "bill") => void
 }
 
 const actions = [
@@ -35,9 +38,12 @@ export function QuickActionsMenu({
   tableNumber,
   position,
   isCleaning = false,
+  hasWaiterRequest = false,
+  hasBillRequest = false,
   onClose,
   onSeatParty,
   onMarkAvailable,
+  onAcknowledgeService,
 }: QuickActionsMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -93,17 +99,45 @@ export function QuickActionsMenu({
             Mark Available
           </button>
         ) : (
-          actions.map(({ icon: Icon, label, key, accent, isSeatParty }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={isSeatParty && onSeatParty ? onSeatParty : onClose}
-              className="group flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-foreground font-medium transition-all hover:bg-white/[0.08]"
-            >
-              <Icon className={cn("h-4 w-4 transition-colors", accent)} />
-              {label}
-            </button>
-          ))
+          <>
+            {hasWaiterRequest && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAcknowledgeService?.("waiter")
+                  onClose()
+                }}
+                className="group flex w-full items-center gap-2.5 px-3 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-white/[0.08]"
+              >
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 transition-colors" />
+                Waiter Handled
+              </button>
+            )}
+            {hasBillRequest && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAcknowledgeService?.("bill")
+                  onClose()
+                }}
+                className="group flex w-full items-center gap-2.5 px-3 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-white/[0.08]"
+              >
+                <CheckCircle2 className="h-4 w-4 text-amber-400 transition-colors" />
+                Check Delivered
+              </button>
+            )}
+            {actions.map(({ icon: Icon, label, key, accent, isSeatParty }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={isSeatParty && onSeatParty ? onSeatParty : onClose}
+                className="group flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-foreground font-medium transition-all hover:bg-white/[0.08]"
+              >
+                <Icon className={cn("h-4 w-4 transition-colors", accent)} />
+                {label}
+              </button>
+            ))}
+          </>
         )}
       </div>
     </div>

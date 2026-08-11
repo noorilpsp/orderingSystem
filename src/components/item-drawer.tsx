@@ -20,11 +20,20 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { MenuItem } from "@/types/menu-item"
 import { CategorySelector } from "@/components/category-selector"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { CustomizationDrawer } from "@/components/customization-drawer"
 import { UnsavedChangesModal } from "@/components/modals/unsaved-changes-modal"
 import { DeleteConfirmationDialog } from "@/components/modals/delete-confirmation-dialog"
@@ -32,15 +41,20 @@ import { PhotoUpload } from "@/components/photo-upload"
 import type { Photo } from "@/types/photo"
 import { useMenu } from "@/app/dashboard/(dashboard)/menu/menu-context"
 import { useStationSettingsView } from "@/lib/hooks/useStationSettingsView"
+import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 
 const menuItemSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Name is required").max(50),
   description: z.string().max(260).optional().nullable(),
+  nameAr: z.string().max(50).optional(),
+  descriptionAr: z.string().max(260).optional().nullable(),
   price: z.number().min(0),
   currency: z.string(),
   image: z.string().optional().nullable(),
   status: z.enum(["live", "draft", "hidden", "soldout"]),
+  featured: z.boolean().optional().default(false),
   categories: z.array(z.string()).min(1, "At least one category is required"),
   tags: z.array(z.string()).optional().default([]),
   dietaryTags: z.array(z.enum(["vegetarian", "vegan", "gluten-free"])).optional().default([]),
@@ -67,6 +81,8 @@ const menuItemSchema = z.object({
   defaultStation: z.string().max(50).optional().nullable(),
   defaultSubstation: z.string().max(50).optional().nullable(),
 })
+
+type MenuItemFormValues = z.infer<typeof menuItemSchema>
 
 interface ItemDrawerProps {
   item: MenuItem | null
@@ -99,8 +115,9 @@ const getOrderedTimeSlots = (selectedTime: string) => {
 }
 
 export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories }: ItemDrawerProps) {
-  const { locationId, customizationGroups, updateCustomizationGroup, deleteCustomizationGroup } = useMenu()
-  const { view: stationView } = useStationSettingsView(locationId)
+  const { locationId, customizationGroups, createCustomizationGroup, updateCustomizationGroup, deleteCustomizationGroup } = useMenu()
+  const { kdsEnabled } = useMerchantKdsEnabled()
+  const { view: stationView } = useStationSettingsView(kdsEnabled ? locationId : null)
   const activeStations = stationView?.stations?.filter((s) => s.isActive) ?? []
   const [activeTab, setActiveTab] = React.useState("basic")
   const [isSaving, setIsSaving] = React.useState(false)
@@ -114,16 +131,21 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
   const [dragOverIndex, setDragOverIndex] = React.useState<number | null>(null)
   const [editingCustomizationGroup, setEditingCustomizationGroup] = React.useState<string | null>(null)
   const [showCustomizationDrawer, setShowCustomizationDrawer] = React.useState(false)
+  const [attachGroupDialogOpen, setAttachGroupDialogOpen] = React.useState(false)
+  const [creatingGroupFromAttach, setCreatingGroupFromAttach] = React.useState(false)
 
-  const form = useForm<MenuItem>({
+  const form = useForm<MenuItemFormValues>({
     resolver: zodResolver(menuItemSchema) as any,
-    defaultValues: item || {
+    defaultValues: {
       id: "",
       name: "",
       description: "",
+      nameAr: "",
+      descriptionAr: "",
       price: 0,
       currency: "USD",
       status: "draft" as const,
+      featured: false,
       categories: [],
       tags: [],
       dietaryTags: [],
@@ -170,7 +192,11 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
     
     if (item) {
       console.log("Resetting form with item data")
-      form.reset(item)
+      form.reset({
+        ...item,
+        nameAr: item.i18n?.ar?.name ?? "",
+        descriptionAr: item.i18n?.ar?.description ?? "",
+      })
 
       // Initialize photo state if item has an image
       if (item.image) {
@@ -198,10 +224,13 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
         id: "",
         name: "",
         description: "",
+        nameAr: "",
+        descriptionAr: "",
         price: 0,
         currency: "USD",
         image: "",
         status: "draft",
+        featured: false,
         categories: [],
         tags: [],
         dietaryTags: [],
@@ -231,6 +260,8 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
       setDragOverIndex(null)
       setEditingCustomizationGroup(null)
       setShowCustomizationDrawer(false)
+      setAttachGroupDialogOpen(false)
+      setCreatingGroupFromAttach(false)
     }
   }, [isOpen, item])
 
@@ -239,6 +270,36 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
       setShowCustomizationDrawer(true)
     }
   }, [editingCustomizationGroup])
+
+  const attachedGroupIds = form.watch("customizationGroups") ?? []
+  const availableGroupsToAttach = customizationGroups.filter(
+    (group) => !attachedGroupIds.includes(group.id),
+  )
+
+  const resolveCustomizationGroup = (groupId: string) =>
+    customizationGroups.find((group) => group.id === groupId)
+
+  const openAttachGroupDialog = () => {
+    setAttachGroupDialogOpen(true)
+  }
+
+  const attachCustomizationGroup = (groupId: string) => {
+    const current = form.getValues("customizationGroups") ?? []
+    if (current.includes(groupId)) return
+    form.setValue("customizationGroups", [...current, groupId], {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+    setAttachGroupDialogOpen(false)
+    toast.success("Customization group attached")
+  }
+
+  const openCreateCustomizationGroup = () => {
+    setAttachGroupDialogOpen(false)
+    setCreatingGroupFromAttach(true)
+    setEditingCustomizationGroup(null)
+    setShowCustomizationDrawer(true)
+  }
 
   const handleClose = () => {
     if (isDirty) {
@@ -299,10 +360,30 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
         finalStatus = "draft"
       }
 
-      const itemData = {
-        ...formData,
+      const { nameAr, descriptionAr, ...restFormData } = formData
+      const itemData: MenuItem = {
+        ...restFormData,
+        description: restFormData.description ?? undefined,
+        image: restFormData.image ?? undefined,
         status: finalStatus,
+        featured: formData.featured ?? false,
+        tags: formData.tags ?? [],
+        dietaryTags: formData.dietaryTags ?? [],
+        customizationGroups: formData.customizationGroups ?? [],
+        customSchedule: formData.customSchedule ?? undefined,
+        nutrition: formData.nutrition
+          ? {
+              calories: formData.nutrition.calories ?? undefined,
+              allergens: formData.nutrition.allergens ?? [],
+            }
+          : undefined,
+        i18n: normalizeCatalogI18n({
+          ar: { name: nameAr, description: descriptionAr },
+        }),
         id: item?.id || `new-${Date.now()}`,
+        ...(kdsEnabled
+          ? {}
+          : { defaultStation: undefined, defaultSubstation: undefined }),
       }
       
       await onSave(itemData)
@@ -394,7 +475,14 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
 
   const nameValue = form.watch("name")
   const descriptionValue = form.watch("description")
+  const nameArValue = form.watch("nameAr")
+  const descriptionArValue = form.watch("descriptionAr")
   const statusValue = form.watch("status")
+  const featuredValue = form.watch("featured") ?? false
+
+  const handleFeaturedChange = (checked: boolean) => {
+    form.setValue("featured", checked, { shouldDirty: true, shouldValidate: true })
+  }
   const availabilityModeValue = form.watch("availabilityMode")
   const dietaryTagsValue = form.watch("dietaryTags")
   const tagsValue = form.watch("tags")
@@ -572,6 +660,44 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                       <span>{descriptionValue?.length || 0}/260</span>
                     </div>
                   </div>
+
+                  <div className="space-y-3 rounded-lg border border-border/70 bg-muted/30 p-4">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold">Arabic (guest menu)</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Optional. Guests who choose Arabic see this; otherwise English is shown.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="nameAr">Name (Arabic)</Label>
+                      <Input
+                        id="nameAr"
+                        dir="rtl"
+                        placeholder="مثال: سلطة سيزر"
+                        {...form.register("nameAr")}
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <span>{form.formState.errors.nameAr?.message}</span>
+                        <span>{nameArValue?.length || 0}/50</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="descriptionAr">Description (Arabic)</Label>
+                      <Textarea
+                        id="descriptionAr"
+                        dir="rtl"
+                        rows={3}
+                        placeholder="وصف اختياري بالعربية..."
+                        {...form.register("descriptionAr")}
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <span>{form.formState.errors.descriptionAr?.message}</span>
+                        <span>{descriptionArValue?.length || 0}/260</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <Separator />
@@ -596,9 +722,11 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                   </div>
                 </div>
 
+                {/* Prep Station (KDS) — only when merchant has KDS enabled */}
+                {kdsEnabled ? (
+                <>
                 <Separator />
 
-                {/* Prep Station (KDS) */}
                 <div className="space-y-4">
                   <h3 className="font-semibold">Prep Station (KDS)</h3>
                   <p className="text-sm text-muted-foreground">
@@ -689,6 +817,8 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                     </>
                   );
                 })()}
+                </>
+                ) : null}
 
                 <Separator />
 
@@ -872,23 +1002,25 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
 
               {/* TAB 2: CUSTOMIZATIONS */}
               <TabsContent value="customizations" className="mt-0 space-y-6">
-                {form.watch("customizationGroups")?.length === 0 ? (
+                {attachedGroupIds.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Settings2 className="mb-4 size-12 text-gray-400" />
                     <h3 className="mb-2 text-lg font-semibold">No customizations attached</h3>
                     <p className="mb-6 text-sm text-gray-600">
                       Add customization groups to let customers personalize this item
                     </p>
-                    <Button>
+                    <Button type="button" onClick={openAttachGroupDialog}>
                       <Plus className="mr-2 size-4" />
                       Attach First Group
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {form.watch("customizationGroups")?.map((group, index) => (
+                    {attachedGroupIds.map((groupId, index) => {
+                      const group = resolveCustomizationGroup(groupId)
+                      return (
                       <div
-                        key={index}
+                        key={groupId}
                         draggable
                         onDragStart={() => {
                           setDraggedIndex(index)
@@ -910,7 +1042,7 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                           e.preventDefault()
                           if (draggedIndex === null || draggedIndex === index) return
 
-                          const groups = form.watch("customizationGroups")
+                          const groups = form.getValues("customizationGroups") ?? []
                           const newGroups = [...groups]
                           const draggedItem = newGroups[draggedIndex]
                           newGroups.splice(draggedIndex, 1)
@@ -935,24 +1067,42 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                             )}
                           />
                           <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-semibold">{group}</h4>
-                              <div className="flex gap-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0 text-left">
+                                <h4 className="font-semibold truncate">
+                                  {group?.name ?? "Unknown group"}
+                                </h4>
+                                {group?.customerInstructions ? (
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                    {group.customerInstructions}
+                                  </p>
+                                ) : null}
+                                {group ? (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {group.options.length} option{group.options.length === 1 ? "" : "s"}
+                                    {group.rules.required ? " · Required" : ""}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="flex gap-1 shrink-0">
                                 <Button
+                                  type="button"
                                   variant="ghost"
                                   size="icon"
                                   className="size-8 hover:bg-orange-100 hover:text-orange-600"
-                                  onClick={() => setEditingCustomizationGroup(group)}
+                                  onClick={() => setEditingCustomizationGroup(groupId)}
                                   title="Configure customization group"
+                                  disabled={!group}
                                 >
                                   <Settings2 className="size-4" />
                                 </Button>
                                 <Button
+                                  type="button"
                                   variant="ghost"
                                   size="icon"
                                   className="size-8 hover:bg-red-100 hover:text-red-600"
                                   onClick={() => {
-                                    const groups = form.watch("customizationGroups")
+                                    const groups = form.getValues("customizationGroups") ?? []
                                     form.setValue(
                                       "customizationGroups",
                                       groups.filter((_, i) => i !== index),
@@ -968,8 +1118,14 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                           </div>
                         </div>
                       </div>
-                    ))}
-                    <Button variant="outline" className="w-full bg-transparent">
+                      )
+                    })}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full bg-transparent"
+                      onClick={openAttachGroupDialog}
+                    >
                       <Plus className="mr-2 size-4" />
                       Attach Customization Group
                     </Button>
@@ -1258,9 +1414,9 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
 
                   <RadioGroup
                     value={statusValue}
-                    onValueChange={(value: MenuItem["status"]) =>
+                    onValueChange={(value: MenuItem["status"]) => {
                       form.setValue("status", value, { shouldDirty: true, shouldValidate: true })
-                    }
+                    }}
                     className="space-y-3"
                   >
                     {/* Live Status */}
@@ -1411,6 +1567,26 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                       </div>
                     </label>
                   </RadioGroup>
+
+                  <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                    <div className="min-w-0 space-y-1">
+                      <Label htmlFor="featured-toggle" className="text-base font-medium">
+                        Featured
+                      </Label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Show this item in the guest menu Featured strip
+                        {statusValue !== "live"
+                          ? " (appears once status is Live)"
+                          : ""}
+                        .
+                      </p>
+                    </div>
+                    <Switch
+                      id="featured-toggle"
+                      checked={featuredValue}
+                      onCheckedChange={handleFeaturedChange}
+                    />
+                  </div>
                 </div>
               </TabsContent>
             </div>
@@ -1454,6 +1630,61 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
         isSaving={isSaving}
       />
 
+      <Dialog open={attachGroupDialogOpen} onOpenChange={setAttachGroupDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Attach customization group</DialogTitle>
+            <DialogDescription>
+              Choose an existing group to attach to this item, or create a new one.
+            </DialogDescription>
+          </DialogHeader>
+
+          {availableGroupsToAttach.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              {customizationGroups.length === 0
+                ? "No customization groups exist yet for this location."
+                : "All customization groups are already attached to this item."}
+            </div>
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {availableGroupsToAttach.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className="flex w-full flex-col items-start gap-0.5 rounded-lg border p-3 text-left transition-colors hover:border-orange-400 hover:bg-orange-50/50 dark:hover:bg-orange-950/20"
+                  onClick={() => attachCustomizationGroup(group.id)}
+                >
+                  <span className="font-medium">{group.name}</span>
+                  {group.customerInstructions ? (
+                    <span className="text-xs text-muted-foreground line-clamp-2">
+                      {group.customerInstructions}
+                    </span>
+                  ) : null}
+                  <span className="text-xs text-muted-foreground">
+                    {group.options.length} option{group.options.length === 1 ? "" : "s"}
+                    {group.rules.required ? " · Required" : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAttachGroupDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={openCreateCustomizationGroup}>
+              <Plus className="mr-2 size-4" />
+              Create New Group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <CustomizationDrawer
         group={
           editingCustomizationGroup
@@ -1473,12 +1704,21 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
         onClose={() => {
           setShowCustomizationDrawer(false)
           setEditingCustomizationGroup(null)
+          setCreatingGroupFromAttach(false)
         }}
         onSave={async (customization) => {
           try {
-            await updateCustomizationGroup(customization.id, customization)
+            if (editingCustomizationGroup) {
+              await updateCustomizationGroup(customization.id, customization)
+            } else {
+              const created = await createCustomizationGroup(customization)
+              if (creatingGroupFromAttach && created?.id) {
+                attachCustomizationGroup(created.id)
+              }
+            }
             setShowCustomizationDrawer(false)
             setEditingCustomizationGroup(null)
+            setCreatingGroupFromAttach(false)
           } catch (error) {
             console.error("Failed to save customization:", error)
           }
@@ -1486,12 +1726,20 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
         onDelete={async (id) => {
           try {
             await deleteCustomizationGroup(id)
+            const groups = form.getValues("customizationGroups") ?? []
+            form.setValue(
+              "customizationGroups",
+              groups.filter((groupId) => groupId !== id),
+              { shouldDirty: true, shouldValidate: true },
+            )
             setShowCustomizationDrawer(false)
             setEditingCustomizationGroup(null)
+            setCreatingGroupFromAttach(false)
           } catch (error) {
             console.error("Failed to delete customization:", error)
           }
         }}
+        availableGroups={customizationGroups}
       />
 
       {/* Delete Confirmation Dialog */}

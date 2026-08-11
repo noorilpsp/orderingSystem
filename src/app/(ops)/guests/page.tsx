@@ -8,7 +8,7 @@ export default async function GuestsPage() {
   const result = await getGuestsView()
 
   if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-    redirect("/login")
+    redirect("/staff/login")
   }
 
   return <GuestsClient initialGuestsView={result.error === "NO_LOCATION" ? null : result.data} />

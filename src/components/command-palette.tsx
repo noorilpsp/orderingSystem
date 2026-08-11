@@ -26,6 +26,7 @@ import {
   Filter,
   DollarSign,
 } from "lucide-react"
+import { unlockIncomingOrderAlertAudio } from "@/lib/orders/incoming-order-alert-sound"
 
 export function CommandPalette() {
   const router = useRouter()
@@ -127,7 +128,14 @@ export function CommandPalette() {
             <LayoutDashboard className="mr-2 h-4 w-4" />
             <span>Go to Dashboard</span>
           </CommandItem>
-          <CommandItem onSelect={() => runCommand(() => router.push("/orders"))}>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => {
+                void unlockIncomingOrderAlertAudio()
+                router.push("/orders")
+              })
+            }
+          >
             <ShoppingCart className="mr-2 h-4 w-4" />
             <span>Go to Orders</span>
           </CommandItem>

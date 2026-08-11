@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
-import { merchants } from "@/db/schema";
+import { merchants, normalizeLoyaltySettings } from "@/lib/db/schema/merchants";
 import { merchantUsers } from "@/lib/db/schema/merchant-users";
 import type { Merchant } from "@/lib/db/schema/merchants";
 import { unstable_cache } from "@/lib/unstable-cache";
@@ -311,6 +311,48 @@ export async function PUT(
         ...(body.notifyTips !== undefined && { weekly_reports: body.notifyTips }),
         ...(body.notifyMarketing !== undefined && { marketing_emails: body.notifyMarketing }),
       } as any;
+    }
+
+    // Loyalty points settings (merchant-wide)
+    if (body.loyaltySettings !== undefined && body.loyaltySettings !== null) {
+      const incoming = body.loyaltySettings as {
+        enabled?: boolean;
+        pointsScope?: string;
+        pointsPerDollar?: number;
+        redeemPointsPerDollarOff?: number;
+        allowOpenWalletRedeem?: boolean;
+        pointsExpirationMonths?: number;
+      };
+      const existingMerchant = await db.query.merchants.findFirst({
+        where: eq(merchants.id, merchantId),
+        columns: { loyaltySettings: true },
+      });
+      const existing = normalizeLoyaltySettings(
+        existingMerchant?.loyaltySettings as Parameters<typeof normalizeLoyaltySettings>[0],
+      );
+      updateData.loyaltySettings = {
+        ...existing,
+        enabled: incoming.enabled !== false,
+        pointsScope: incoming.pointsScope === "location" ? "location" : "merchant",
+        pointsPerDollar:
+          typeof incoming.pointsPerDollar === "number" && incoming.pointsPerDollar > 0
+            ? Math.floor(incoming.pointsPerDollar)
+            : existing.pointsPerDollar,
+        redeemPointsPerDollarOff:
+          typeof incoming.redeemPointsPerDollarOff === "number" &&
+          incoming.redeemPointsPerDollarOff > 0
+            ? Math.floor(incoming.redeemPointsPerDollarOff)
+            : existing.redeemPointsPerDollarOff,
+        allowOpenWalletRedeem:
+          incoming.allowOpenWalletRedeem !== undefined
+            ? incoming.allowOpenWalletRedeem !== false
+            : existing.allowOpenWalletRedeem,
+        pointsExpirationMonths:
+          typeof incoming.pointsExpirationMonths === "number" &&
+          incoming.pointsExpirationMonths >= 0
+            ? Math.floor(incoming.pointsExpirationMonths)
+            : existing.pointsExpirationMonths,
+      };
     }
 
     // Debug: Log what we're updating

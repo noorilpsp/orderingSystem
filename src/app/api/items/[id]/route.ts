@@ -6,7 +6,9 @@ import { items, categoryItems, itemTags, itemAllergens, itemCustomizations } fro
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { getSubstationKeysForStation } from "@/lib/kds/getLocationStations";
 import { getLocationStations } from "@/lib/kds/getLocationStations";
+import { isLocationKdsEnabled } from "@/lib/merchant-features";
 import { unstable_cache } from "@/lib/unstable-cache";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 
 export const runtime = "nodejs";
 
@@ -213,13 +215,18 @@ export async function PUT(
     if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
     if (body.calories !== undefined) updateData.calories = body.calories;
     if (body.status !== undefined) updateData.status = body.status;
+    if (body.featured !== undefined) updateData.featured = Boolean(body.featured);
     if (body.useCustomHours !== undefined) updateData.useCustomHours = body.useCustomHours;
     if (body.customSchedule !== undefined) updateData.customSchedule = body.customSchedule;
     if (body.displayOrder !== undefined) updateData.displayOrder = body.displayOrder;
+    if (body.i18n !== undefined) updateData.i18n = normalizeCatalogI18n(body.i18n);
 
     if (body.defaultStation !== undefined) {
       const locationId = existingItem.location.id;
-      if (body.defaultStation == null || body.defaultStation === "") {
+      const kdsEnabled = await isLocationKdsEnabled(locationId);
+      if (!kdsEnabled) {
+        // Preserve existing station data; ignore updates while KDS is disabled.
+      } else if (body.defaultStation == null || body.defaultStation === "") {
         updateData.defaultStation = null;
       } else {
         const stationKey = String(body.defaultStation).trim();
@@ -243,7 +250,10 @@ export async function PUT(
 
     if (body.defaultSubstation !== undefined) {
       const locationId = existingItem.location.id;
-      if (body.defaultSubstation == null || body.defaultSubstation === "") {
+      const kdsEnabled = await isLocationKdsEnabled(locationId);
+      if (!kdsEnabled) {
+        // Preserve existing substation data; ignore updates while KDS is disabled.
+      } else if (body.defaultSubstation == null || body.defaultSubstation === "") {
         updateData.defaultSubstation = null;
       } else {
         const stationKey = updateData.defaultStation ?? existingItem.defaultStation;

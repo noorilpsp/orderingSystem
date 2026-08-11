@@ -68,6 +68,8 @@ import {
   type DashboardOrderMetrics,
   type TableLiveMetrics,
 } from "@/lib/store/order-analytics"
+import { useLocations } from "@/lib/hooks/useLocations"
+import { TableQrDialog } from "@/components/dashboard/table-qr-dialog"
 
 type ViewMode = "grid" | "list"
 type TableStatus = "all" | "available" | "occupied" | "reserved" | "cleaning"
@@ -118,6 +120,8 @@ const mockStaffWorkload = [
 ]
 
 export default function TablesPage() {
+  const { locations } = useLocations()
+  const storeSlug = locations.find((location) => location.storeSlug)?.storeSlug ?? ""
   const storeTables = useRestaurantStore((s) => s.tables)
   const storeOrders = useRestaurantStore((s) => s.orders)
   const tableMetricsById = useMemo(
@@ -155,6 +159,7 @@ export default function TablesPage() {
   )
   const [isInsightsCollapsed, setIsInsightsCollapsed] = useState(false)
   const [showCollapseButton, setShowCollapseButton] = useState(false)
+  const [qrTableNumber, setQrTableNumber] = useState<string | null>(null)
 
   const hasActiveFilters = statusFilter !== "all" || floorFilter !== "all" || searchQuery !== ""
 
@@ -717,7 +722,11 @@ export default function TablesPage() {
               sessionId={sessionId}
             />
 
-            <TableDetails table={selectedTableData} />
+            <TableDetails
+              table={selectedTableData}
+              storeSlug={storeSlug}
+              onShowQr={(tableNumber) => setQrTableNumber(tableNumber)}
+            />
 
             <div className="flex gap-2 pt-4 border-t">
               <Button variant="outline" onClick={() => setSelectedTable(null)} className="flex-1">
@@ -1371,12 +1380,30 @@ function TableTile({ table, onClick }: { table: any; onClick: () => void }) {
           </div>
         </div>
       )}
+      {storeSlug && qrTableNumber ? (
+        <TableQrDialog
+          open={!!qrTableNumber}
+          onOpenChange={(open) => {
+            if (!open) setQrTableNumber(null)
+          }}
+          storeSlug={storeSlug}
+          tableNumber={qrTableNumber}
+        />
+      ) : null}
     </div>
   )
 }
 
 // Table Details Component
-function TableDetails({ table }: { table: any }) {
+function TableDetails({
+  table,
+  storeSlug,
+  onShowQr,
+}: {
+  table: any
+  storeSlug: string
+  onShowQr: (tableNumber: string) => void
+}) {
   const { toast } = useToast()
 
   return (
@@ -1387,7 +1414,23 @@ function TableDetails({ table }: { table: any }) {
           <MapPin className="h-4 w-4" />
           {table.section} • Seats {table.capacity}
         </div>
-        <Button variant="outline" size="sm" className="w-full bg-transparent" disabled>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full bg-transparent"
+          disabled={!storeSlug}
+          onClick={() => {
+            if (!storeSlug) {
+              toast({
+                title: "Store URL not configured",
+                description: "Set a store slug in Dashboard → Stores before generating table QR codes.",
+                variant: "destructive",
+              })
+              return
+            }
+            onShowQr(String(table.number))
+          }}
+        >
           <QrCode className="h-4 w-4 mr-2" />
           View QR Code
         </Button>

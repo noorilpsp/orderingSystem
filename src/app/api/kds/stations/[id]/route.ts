@@ -5,6 +5,7 @@ import { locationStations } from "@/lib/db/schema/location-stations";
 import { merchantUsers } from "@/lib/db/schema/merchant-users";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { assertMerchantKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posSuccess, posFailure, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -45,6 +46,9 @@ export async function PATCH(
     if (!existing) {
       return posFailure("NOT_FOUND", "Station not found", { status: 404 });
     }
+
+    const kdsGate = await assertMerchantKdsEnabled(existing.location.merchantId);
+    if (kdsGate) return kdsGate;
 
     const membership = await db.query.merchantUsers.findFirst({
       where: and(

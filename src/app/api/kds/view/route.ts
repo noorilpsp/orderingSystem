@@ -3,6 +3,7 @@ import { getPosUserId } from "@/lib/pos/posAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getPosMerchantContext } from "@/lib/pos/posMerchantContext";
 import { buildKdsView } from "@/lib/kds/buildKdsView";
+import { assertLocationKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -35,6 +36,9 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       );
     }
+
+    const kdsGate = await assertLocationKdsEnabled(locationId);
+    if (kdsGate) return kdsGate;
 
     const view = await buildKdsView(locationId);
     if (!view) {

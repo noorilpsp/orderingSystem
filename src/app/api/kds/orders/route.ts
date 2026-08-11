@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { orders } from "@/lib/db/schema/orders";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
+import { assertLocationKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -42,6 +43,9 @@ export async function GET(request: NextRequest) {
     if (!location) {
       return posFailure("NOT_FOUND", "Location not found", { status: 404 });
     }
+
+    const kdsGate = await assertLocationKdsEnabled(locationId);
+    if (kdsGate) return kdsGate;
 
     const membership = await db.query.merchantUsers.findFirst({
       where: and(

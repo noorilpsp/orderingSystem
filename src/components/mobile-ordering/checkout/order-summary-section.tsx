@@ -3,6 +3,9 @@
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customizationGroups } from "@/lib/menu-item-modal-data";
+import { getGuestCartItemLineTotal } from "@/lib/public-menu/guest-cart-pricing";
+import type { GuestCustomizationGroup } from "@/lib/guest-menu/types";
+import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
 
 interface OrderItem {
   quantity: number;
@@ -14,20 +17,7 @@ interface OrderItem {
   specialInstructions?: string;
 }
 
-// Helper function to get customization display parts
-function getCustomizationParts(groupId: string, optionIds: string[]): { groupName: string; optionNames: string } | null {
-  const group = customizationGroups.find((g) => g.id === groupId);
-  if (!group) return null;
-
-  const optionNames = optionIds
-    .map((optId) => {
-      const option = group.options.find((o) => o.id === optId);
-      return option?.name || optId;
-    })
-    .join(", ");
-
-  return { groupName: group.name, optionNames };
-}
+const pricingGroups = customizationGroups as unknown as GuestCustomizationGroup[];
 
 interface OrderSummarySectionProps {
   items: OrderItem[];
@@ -94,34 +84,33 @@ export function OrderSummarySection({
                 {/* Customizations */}
                 {(item.selectedOptions || item.sauceQuantities || item.specialInstructions) && (
                   <div className="mt-1 space-y-1">
-                    {item.selectedOptions && Object.entries(item.selectedOptions).map(([groupId, optionIds]) => {
-                      const parts = getCustomizationParts(groupId, optionIds);
-                      return parts ? (
-                        <p key={groupId} className="text-sm">
-                          <span className="text-gray-700">{parts.groupName}:</span>
-                          <span className="text-gray-500 ml-1">{parts.optionNames}</span>
-                        </p>
-                      ) : null;
-                    })}
-                    {item.sauceQuantities && Object.entries(item.sauceQuantities).map(([sauceId, qty]) => (
-                      qty > 0 && (
-                        <p key={sauceId} className="text-sm">
-                          <span className="text-gray-700">Extra Sauce:</span>
-                          <span className="text-gray-500 ml-1">{sauceId} x{qty}</span>
-                        </p>
-                      )
-                    ))}
-                    {item.specialInstructions && (
+                    <GuestCustomizationDisplayLines
+                      groups={pricingGroups}
+                      selectedOptions={item.selectedOptions}
+                      textSizeClassName="text-sm"
+                    />
+                    {item.sauceQuantities &&
+                      Object.entries(item.sauceQuantities).map(([sauceId, qty]) =>
+                        qty > 0 ? (
+                          <p key={sauceId} className="text-sm text-teal-700">
+                            <span className="text-foreground/70">Extra Sauce:</span>{" "}
+                            {sauceId} x{qty}
+                          </p>
+                        ) : null,
+                      )}
+                    {item.specialInstructions ? (
                       <p className="text-sm">
-                        <span className="text-gray-700">Special Instructions:</span>
-                        <span className="text-gray-500 ml-1">{item.specialInstructions}</span>
+                        <span className="text-foreground/70">Instructions:</span>{" "}
+                        <span className="italic text-amber-700/90">
+                          {item.specialInstructions}
+                        </span>
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
               <span className="text-foreground font-medium ml-4 flex-shrink-0">
-                €{(item.price * item.quantity).toFixed(2)}
+                €{getGuestCartItemLineTotal(item, pricingGroups).toFixed(2)}
               </span>
             </div>
           ))}

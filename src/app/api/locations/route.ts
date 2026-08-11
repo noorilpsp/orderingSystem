@@ -178,6 +178,7 @@ export async function POST(request: NextRequest) {
       websiteUrl: body.website || null,
       instagramHandle: body.instagram || null,
       facebookUrl: body.facebook || null,
+      tiktokHandle: body.tiktok || null,
       enableTables: body.enableTables ?? false,
       enableReservations: body.enableReservations ?? false,
       maxPartySize: body.maxPartySize || 8,

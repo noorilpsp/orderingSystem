@@ -200,6 +200,7 @@ function SceneElement({
         reserved: statusInfo.reserved,
         alerts: statusInfo.alerts,
         waves: statusInfo.waves,
+        stage: statusInfo.stage,
       })
     : "available"
   const colorConfig = TABLE_COLOR_STATES[colorState]
@@ -375,6 +376,7 @@ function RichTableOverlay({
     reserved: statusInfo.reserved,
     alerts: statusInfo.alerts,
     waves: statusInfo.waves,
+    stage: statusInfo.stage,
   })
   const colorConfig = TABLE_COLOR_STATES[colorState]
   const isIdleTable =

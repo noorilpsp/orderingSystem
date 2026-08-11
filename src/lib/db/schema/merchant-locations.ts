@@ -52,7 +52,8 @@ export type OpeningHours = {
  *   "dine_in": { "enabled": boolean },
  *   "pickup": {
  *     "enabled": boolean,
- *     "estimated_time_minutes": number
+ *     "estimated_time_minutes": number,
+ *     "instructions": string
  *   },
  *   "delivery": {
  *     "enabled": boolean,
@@ -64,13 +65,18 @@ export type OpeningHours = {
  *   }
  * }
  */
+export type GuestSessionMode = "staff_seated" | "self_service";
+
 export type OrderModes = {
   dine_in?: {
     enabled: boolean;
+    guest_session_mode?: GuestSessionMode;
   };
   pickup?: {
     enabled: boolean;
     estimated_time_minutes?: number;
+    /** Shown in the guest menu when pickup is selected. */
+    instructions?: string;
   };
   delivery?: {
     enabled: boolean;
@@ -113,6 +119,7 @@ export const merchantLocations = pgTable(
     websiteUrl: varchar("website_url", { length: 500 }),
     instagramHandle: varchar("instagram_handle", { length: 100 }),
     facebookUrl: varchar("facebook_url", { length: 500 }),
+    tiktokHandle: varchar("tiktok_handle", { length: 100 }),
     // Opening Hours
     openingHours: jsonb("opening_hours").$type<OpeningHours>(),
     // Store Branding (Overrides - NULL means use merchant default)

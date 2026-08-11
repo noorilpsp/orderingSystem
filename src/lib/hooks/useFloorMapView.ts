@@ -38,6 +38,8 @@ export type UseFloorMapViewResult = {
 export type UseFloorMapViewOptions = {
   /** Server-fetched initial data. When provided and location matches, skip initial blocking fetch. */
   initialData?: FloorMapView | null;
+  /** Server render failed to load floor map (e.g. DB timeout). */
+  initialError?: string | null;
 };
 
 export function useFloorMapView(
@@ -46,11 +48,12 @@ export function useFloorMapView(
   options?: UseFloorMapViewOptions
 ): UseFloorMapViewResult {
   const initialData = options?.initialData;
+  const initialError = options?.initialError ?? null;
   const [view, setView] = useState<FloorMapView | null>(() =>
     pickInitialFloorMapView(initialData, locationId, floorplanId)
   );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [staleError, setStaleError] = useState<string | null>(null);
   const refreshInFlightRef = useRef(false);
   const viewRef = useRef<FloorMapView | null>(null);
@@ -141,6 +144,8 @@ export function useFloorMapView(
 
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
+  const initialErrorRef = useRef(initialError);
+  initialErrorRef.current = initialError;
   const consumedInitialDataRef = useRef(false);
   const hasInitialFromServer =
     initialData != null &&
@@ -160,6 +165,12 @@ export function useFloorMapView(
     const switchedLocation =
       prevLocationIdRef.current != null && prevLocationIdRef.current !== locationId;
     prevLocationIdRef.current = locationId;
+
+    if (!consumedInitialDataRef.current && initialErrorRef.current) {
+      consumedInitialDataRef.current = true;
+      setLoading(false);
+      return;
+    }
 
     const fromServer = initialDataRef.current;
     if (!consumedInitialDataRef.current && fromServer) {

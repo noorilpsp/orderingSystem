@@ -16,26 +16,45 @@ import { EmojiInputField } from "@/components/emoji-input-field"
 import { MenuSelector } from "@/components/menu-selector"
 import { UnsavedChangesModal } from "@/components/modals/unsaved-changes-modal"
 import type { Menu } from "@/types/menu"
+import type { CatalogI18n } from "@/lib/catalog-i18n"
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 
 const categorySchema = z.object({
   name: z.string().min(1, "Category name is required"),
   description: z.string().optional(),
+  nameAr: z.string().max(50).optional(),
+  descriptionAr: z.string().max(260).optional(),
   menuIds: z.array(z.string()),
   emoji: z.string().optional(),
 })
 
 type CategoryFormData = z.infer<typeof categorySchema>
 
+export type CreateCategorySaveData = {
+  name: string
+  description?: string
+  menuIds: string[]
+  emoji?: string
+  i18n?: CatalogI18n | null
+}
+
 interface CreateCategoryDrawerProps {
   isOpen: boolean
   onClose: () => void
   menus?: Menu[]
-  onSave: (data: {
-    name: string
-    description?: string
-    menuIds: string[]
-    emoji?: string
-  }) => void
+  onSave: (data: CreateCategorySaveData) => void
+}
+
+function toSaveData(formData: CategoryFormData): CreateCategorySaveData {
+  return {
+    name: formData.name,
+    description: formData.description,
+    menuIds: formData.menuIds,
+    emoji: formData.emoji,
+    i18n: normalizeCatalogI18n({
+      ar: { name: formData.nameAr, description: formData.descriptionAr },
+    }),
+  }
 }
 
 export function CreateCategoryDrawer({ isOpen, onClose, menus = [], onSave }: CreateCategoryDrawerProps) {
@@ -53,6 +72,8 @@ export function CreateCategoryDrawer({ isOpen, onClose, menus = [], onSave }: Cr
     defaultValues: {
       name: "",
       description: "",
+      nameAr: "",
+      descriptionAr: "",
       menuIds: [],
       emoji: "",
     },
@@ -68,11 +89,13 @@ export function CreateCategoryDrawer({ isOpen, onClose, menus = [], onSave }: Cr
   } = form
 
   const selectedMenuIds = watch("menuIds") || []
+  const nameArValue = watch("nameAr")
+  const descriptionArValue = watch("descriptionAr")
 
   const onSubmit = async (data: CategoryFormData) => {
     setIsSubmitting(true)
     try {
-      await onSave(data)
+      await onSave(toSaveData(data))
       toast.success("Category created successfully!")
       reset()
       onClose()
@@ -114,11 +137,7 @@ export function CreateCategoryDrawer({ isOpen, onClose, menus = [], onSave }: Cr
     setIsSubmitting(true)
     try {
       const formData = form.getValues()
-      const categoryData = {
-        ...formData,
-      }
-
-      await onSave(categoryData)
+      await onSave(toSaveData(formData))
       toast.success("Category created successfully!")
       reset()
       onClose()
@@ -204,6 +223,44 @@ export function CreateCategoryDrawer({ isOpen, onClose, menus = [], onSave }: Cr
                   {...register("description")}
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400">Not shown to customers</p>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border/70 bg-muted/30 p-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold">Arabic (guest menu)</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Guests who choose Arabic see this; otherwise English is shown.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="nameAr">Name (Arabic)</Label>
+                  <Input
+                    id="nameAr"
+                    dir="rtl"
+                    placeholder="مثال: المقبلات"
+                    {...register("nameAr")}
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>{errors.nameAr?.message}</span>
+                    <span>{nameArValue?.length || 0}/50</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="descriptionAr">Description (Arabic)</Label>
+                  <Textarea
+                    id="descriptionAr"
+                    dir="rtl"
+                    rows={3}
+                    placeholder="وصف اختياري بالعربية..."
+                    {...register("descriptionAr")}
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>{errors.descriptionAr?.message}</span>
+                    <span>{descriptionArValue?.length || 0}/260</span>
+                  </div>
+                </div>
               </div>
 
               {/* Add to Menus */}

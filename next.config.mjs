@@ -51,6 +51,36 @@ const nextConfig = {
       },
     ];
   },
+  async headers() {
+    return [
+      {
+        source: "/sw-orders-push.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          {
+            key: "Service-Worker-Allowed",
+            value: "/orders",
+          },
+        ],
+      },
+      {
+        source: "/menu/sw-guest-orders-push.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          {
+            key: "Service-Worker-Allowed",
+            value: "/menu/",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

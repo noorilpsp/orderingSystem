@@ -10,7 +10,6 @@ export type OrdersUnifiedStatus =
   | "preparing"
   | "ready"
   | "served"
-  | "closed"
   | "voided"
   | "refunded";
 
@@ -30,9 +29,31 @@ export interface OrdersUnifiedOrder {
   status: OrdersUnifiedStatus;
   createdAt: number;
   updatedAt: number;
+  /**
+   * Epoch ms when each counter-flow stage was entered (from order_timeline).
+   * Used for accurate meal-progress durations on pickup / dine-in.
+   */
+  stageEnteredAt?: Partial<Record<"sent" | "preparing" | "ready" | "served", number>>;
+  /** Pre-tax food/service subtotal when available. */
+  subtotal?: number;
+  /** Tax amount when available. */
+  taxAmount?: number;
   total: number;
   itemCount: number;
-  items: Array<{ id: string; name: string; qty: number; status: string }>;
+  items: Array<{
+    id: string;
+    name: string;
+    qty: number;
+    status: string;
+    price: number;
+    notes?: string | null;
+    customizations?: Array<{
+      groupName: string;
+      optionName: string;
+      optionPrice: number;
+      quantity: number;
+    }>;
+  }>;
   waves: Array<{ number: number; status: OrdersWaveStatus }>;
   /** For table: table UUID (for /table/[id] nav). */
   tableId?: string;
@@ -41,14 +62,32 @@ export interface OrdersUnifiedOrder {
   /** For pickup/delivery: order id for mutations */
   orderId?: string;
   note?: string;
+  /** Epoch ms guest requested pickup time, if scheduled. */
+  scheduledPickupAt?: number | null;
+  /** True while still parked before release to kitchen. */
+  scheduledParked?: boolean;
   paymentState?: OrdersPaymentState;
   paymentMethod?: OrdersPaymentMethod;
+  /**
+   * Quoted prep target in minutes (from staff accept ETA / estimatedReadyAt).
+   * Falls back to location default when not yet set.
+   */
+  targetEtaMinutes?: number;
 }
 
 export interface OrdersView {
   locationId: string;
   locationName: string;
   orders: OrdersUnifiedOrder[];
+  /** Default prep minutes from store pickup settings (accept overlay / missing targets). */
+  defaultPrepMinutes?: number;
+  /** Enabled fulfillment channels for filter chips (from store settings). */
+  channels?: {
+    deliveryToTable: boolean;
+    pickup: boolean;
+    selfPickup: boolean;
+    dineInMode: "staff_seated" | "self_service" | null;
+  };
 }
 
 export function isOrdersView(x: unknown): x is OrdersView {

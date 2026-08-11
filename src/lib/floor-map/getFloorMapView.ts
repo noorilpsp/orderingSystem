@@ -7,7 +7,7 @@ import { getCurrentLocationId } from "@/app/actions/location";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getPosMerchantContext } from "@/lib/pos/posMerchantContext";
 import { getPosUserId } from "@/lib/pos/posAuth";
-import { withDbRetry } from "@/lib/db/withDbRetry";
+import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry";
 import { buildFloorMapView } from "@/lib/floor-map/buildFloorMapView";
 import type { FloorMapView } from "@/lib/floor-map/floorMapView";
 
@@ -22,7 +22,10 @@ function devTimer(label: string, start: number): void {
 
 export type GetFloorMapViewResult =
   | { data: FloorMapView }
-  | { error: "UNAUTHORIZED" | "FORBIDDEN" | "NO_LOCATION" };
+  | {
+      error: "UNAUTHORIZED" | "FORBIDDEN" | "NO_LOCATION" | "DB_ERROR";
+      message?: string;
+    };
 
 /**
  * Fetch FloorMapView for server-side render.
@@ -60,14 +63,22 @@ export async function getFloorMapView(
   }
 
   const t3 = DEV ? performance.now() : 0;
-  const view = await withDbRetry(() =>
-    buildFloorMapView(locationId, authResult.userId, floorplanId)
-  );
-  if (DEV) devTimer("buildFloorMapView", t3);
-  if (!view) {
-    return { error: "NO_LOCATION" };
-  }
+  try {
+    const view = await withDbRetry(() =>
+      buildFloorMapView(locationId, authResult.userId, floorplanId),
+    );
+    if (DEV) devTimer("buildFloorMapView", t3);
+    if (!view) {
+      return { error: "NO_LOCATION" };
+    }
 
-  if (DEV) devTimer("getFloorMapView total", totalStart);
-  return { data: view };
+    if (DEV) devTimer("getFloorMapView total", totalStart);
+    return { data: view };
+  } catch (error) {
+    if (DEV) devTimer("buildFloorMapView (failed)", t3);
+    return {
+      error: "DB_ERROR",
+      message: toUserFacingDbError(error, "Failed to load floor map. Please try again."),
+    };
+  }
 }

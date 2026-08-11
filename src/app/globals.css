@@ -54,11 +54,19 @@
   --z-base: 0;
   --z-hero: 20;
   --z-sticky: 40;
+  --z-tab-bar: 45;
   --z-bottom-bar: 50;
   --z-toast: 60;
   --z-popover: 80;
   --z-modal-backdrop: 110;
   --z-modal-content: 111;
+
+  /* Set by GuestTabBar while the guest tab bar occupies the bottom edge.
+     The bar absorbs the safe-area inset, so bars stacked above it must not repeat it. */
+  --guest-tab-bar-height: 0rem;
+  --guest-tab-bar-pad-top: 0px;
+  --guest-tab-bar-pad-bottom: 0px;
+  --guest-bottom-bar-safe-pad: env(safe-area-inset-bottom);
 
   /* Mobile ordering liquid-glass (classic theme) */
   --glass-bg: rgba(255, 255, 255, 0.6);
@@ -164,6 +172,37 @@
 .mobile-ordering-root {
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+}
+
+/* Guest menu phone shell — tablet/desktop atmosphere + frame entrance */
+@media (min-width: 768px) {
+  .guest-phone-atmosphere-image {
+    animation: guest-phone-atmosphere-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .guest-phone-frame {
+    animation: guest-phone-frame-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes guest-phone-atmosphere-in {
+  from {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+  to {
+    opacity: 0.45;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes guest-phone-frame-in {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1289,6 +1328,27 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
       min-width: auto !important;
     }
 
+    /* Orders Live/Scheduled/History — keep compact inside h-9 segmented control */
+    .orders-board-tabs button {
+      min-height: 0 !important;
+      min-width: 0 !important;
+      height: 100% !important;
+    }
+
+    /* Orders All / Dine-in / Pickup — compact height */
+    .orders-source-filters button {
+      min-height: 0 !important;
+      min-width: 0 !important;
+      height: 2rem !important;
+    }
+
+    /* Orders All / New / Preparing / Ready — compact height */
+    .orders-status-filters button {
+      min-height: 0 !important;
+      min-width: 0 !important;
+      height: 2.125rem !important;
+    }
+
     /* Override for menu item add/quantity controls, cart trigger - keep compact sizing like original checkout app */
     .menu-item-controls button {
       min-height: unset !important;
@@ -1583,6 +1643,205 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
     animation: context-dot-pulse 2s ease-in-out infinite;
   }
 
+  @keyframes guest-order-ready-rainbow-flow {
+    0% {
+      background-position: 0% 50%;
+      box-shadow: 0 0 18px rgba(239, 68, 68, 0.45);
+    }
+    20% {
+      box-shadow: 0 0 22px rgba(249, 115, 22, 0.5);
+    }
+    40% {
+      box-shadow: 0 0 22px rgba(34, 197, 94, 0.5);
+    }
+    60% {
+      box-shadow: 0 0 22px rgba(59, 130, 246, 0.5);
+    }
+    80% {
+      box-shadow: 0 0 22px rgba(168, 85, 247, 0.5);
+    }
+    100% {
+      background-position: 200% 50%;
+      box-shadow: 0 0 18px rgba(236, 72, 153, 0.45);
+    }
+  }
+
+  @keyframes guest-order-ready-blink {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.88;
+      transform: scale(1.03);
+    }
+  }
+
+  @keyframes guest-order-ready-text-rainbow {
+    0% {
+      color: #ef4444;
+    }
+    16% {
+      color: #f97316;
+    }
+    33% {
+      color: #eab308;
+    }
+    50% {
+      color: #22c55e;
+    }
+    66% {
+      color: #3b82f6;
+    }
+    83% {
+      color: #a855f7;
+    }
+    100% {
+      color: #ec4899;
+    }
+  }
+
+  .guest-order-ready-rainbow {
+    border: 2px solid transparent;
+    background:
+      linear-gradient(
+        color-mix(in srgb, var(--card, #ffffff) 82%, transparent),
+        color-mix(in srgb, var(--card, #ffffff) 82%, transparent)
+      )
+        padding-box,
+      linear-gradient(
+        90deg,
+        #ef4444,
+        #f97316,
+        #eab308,
+        #22c55e,
+        #3b82f6,
+        #8b5cf6,
+        #ec4899,
+        #ef4444
+      )
+        border-box;
+    background-size: 200% 200%;
+    animation:
+      guest-order-ready-rainbow-flow 2.4s linear infinite,
+      guest-order-ready-blink 0.9s ease-in-out infinite;
+    will-change: transform, opacity, box-shadow, background-position;
+  }
+
+  .guest-order-ready-rainbow-icon {
+    animation: guest-order-ready-text-rainbow 2.4s linear infinite;
+  }
+
+  .guest-order-ready-rainbow-label {
+    animation: guest-order-ready-text-rainbow 2.4s linear infinite;
+    font-weight: 700;
+  }
+
+  /* Calm “alive” cues on guest order tracking (not a stressful countdown). */
+  @keyframes guest-order-live-breathe {
+    0%,
+    100% {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+  }
+
+  @keyframes guest-order-loading-sweep {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(120%);
+    }
+  }
+
+  @keyframes guest-order-estimate-pulse {
+    0%,
+    100% {
+      opacity: 0.78;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes guest-order-icon-sway {
+    0%,
+    100% {
+      transform: rotate(-6deg) translateY(0);
+    }
+    50% {
+      transform: rotate(6deg) translateY(-1px);
+    }
+  }
+
+  @keyframes guest-order-received-pulse {
+    0%,
+    100% {
+      border-color: color-mix(in oklab, var(--primary) 35%, transparent);
+      background-color: color-mix(in oklab, var(--primary) 8%, transparent);
+    }
+    50% {
+      border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+      background-color: color-mix(in oklab, var(--primary) 14%, transparent);
+    }
+  }
+
+  .guest-order-live-dot {
+    animation: guest-order-live-breathe 2.4s ease-in-out infinite;
+  }
+
+  .guest-order-track-pulse {
+    border-color: color-mix(in oklab, var(--primary) 40%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 10%, transparent);
+    animation: guest-order-received-pulse 2.8s ease-in-out infinite;
+  }
+
+  .guest-order-track-active {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    border-color: color-mix(in oklab, var(--primary) 40%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 10%, transparent);
+  }
+
+  .guest-order-track-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--primary) 22%, transparent) 45%,
+      color-mix(in oklab, var(--primary) 38%, white) 50%,
+      color-mix(in oklab, var(--primary) 22%, transparent) 55%,
+      transparent 100%
+    );
+    width: 55%;
+    animation: guest-order-loading-sweep 2.2s ease-in-out infinite;
+  }
+
+  .guest-order-track-active > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .guest-order-estimate-alive {
+    animation: guest-order-estimate-pulse 2.8s ease-in-out infinite;
+  }
+
+  .guest-order-track-icon-alive {
+    animation: guest-order-icon-sway 2.6s ease-in-out infinite;
+    transform-origin: center;
+  }
+
   @keyframes logo-float {
     0%, 100% { transform: translateY(0px) scale(1); }
     50% { transform: translateY(-6px) scale(1.01); }
@@ -1600,7 +1859,12 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
     }
     .dine-icon-float,
     .context-dot-pulse,
-    .logo-float {
+    .logo-float,
+    .guest-order-live-dot,
+    .guest-order-track-pulse,
+    .guest-order-track-active::after,
+    .guest-order-estimate-alive,
+    .guest-order-track-icon-alive {
       animation: none;
     }
   }
@@ -1698,4 +1962,75 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
 }
 .analytics-tab-content {
   animation: analytics-tab-fade 200ms ease-out;
+}
+
+/* Incoming order accept interrupt on /orders */
+@keyframes incoming-order-screen-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(245, 158, 11, 0);
+    background: radial-gradient(circle at 50% 45%, rgba(245, 158, 11, 0.12), transparent 55%);
+  }
+  50% {
+    box-shadow: inset 0 0 0 6px rgba(245, 158, 11, 0.28);
+    background: radial-gradient(circle at 50% 45%, rgba(245, 158, 11, 0.22), transparent 60%);
+  }
+}
+
+@keyframes incoming-order-ring {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+
+@keyframes incoming-order-accept-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.45);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 56px rgba(245, 158, 11, 0.65);
+  }
+}
+
+.incoming-order-overlay__pulse {
+  animation: incoming-order-screen-pulse 1.4s ease-in-out infinite;
+}
+
+.incoming-order-overlay__ring {
+  border: 2px solid rgba(251, 191, 36, 0.55);
+  animation: incoming-order-ring 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.incoming-order-overlay__ring--delay {
+  animation-delay: 0.55s;
+}
+
+.incoming-order-overlay__accept {
+  animation: incoming-order-accept-breathe 1.5s ease-in-out infinite;
+}
+
+.incoming-order-overlay__badge {
+  animation: incoming-order-accept-breathe 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .incoming-order-overlay__pulse,
+  .incoming-order-overlay__ring,
+  .incoming-order-overlay__ring--delay,
+  .incoming-order-overlay__accept,
+  .incoming-order-overlay__badge {
+    animation: none;
+  }
 }

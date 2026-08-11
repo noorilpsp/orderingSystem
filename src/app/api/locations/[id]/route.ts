@@ -232,6 +232,9 @@ export async function PUT(
     if (body.facebook !== undefined) {
       updateData.facebookUrl = body.facebook || null
     }
+    if (body.tiktok !== undefined) {
+      updateData.tiktokHandle = body.tiktok || null
+    }
 
     // Operational settings
     if (body.enableTables !== undefined) {
@@ -280,6 +283,14 @@ export async function PUT(
     }
     if (body.bannerUrl !== undefined) {
       updateData.bannerUrl = body.bannerUrl ?? null
+    }
+
+    // Tax rate (percent, e.g. 21 = 21%)
+    if (body.taxRate !== undefined && body.taxRate !== null) {
+      const taxRate = Number(body.taxRate)
+      if (Number.isFinite(taxRate) && taxRate >= 0 && taxRate <= 100) {
+        updateData.taxRate = taxRate.toFixed(2)
+      }
     }
 
     // Debug: Log the final update data

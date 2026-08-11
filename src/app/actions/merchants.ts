@@ -9,6 +9,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { merchants, merchantLocations } from "@/db/schema";
 import { isPlatformAdmin } from "@/lib/permissions";
+import { normalizeMerchantFeatures } from "@/lib/db/schema/merchants";
 
 // Configure Neon to use WebSocket for transaction support
 if (typeof globalThis.WebSocket === "undefined") {
@@ -77,6 +78,8 @@ const merchantSchema = z.object({
   subscriptionExpiresAt: z.string().optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   bannerUrl: z.string().optional().nullable(),
+  /** Platform module: Kitchen Display System. Default false. */
+  kdsEnabled: z.boolean().optional().default(false),
 });
 
 export async function createMerchant(data: unknown) {
@@ -121,6 +124,7 @@ export async function createMerchant(data: unknown) {
             : null,
           defaultTimezone: validated.timezone,
           defaultCurrency: "EUR",
+          features: normalizeMerchantFeatures({ kds: validated.kdsEnabled === true }),
         })
         .returning();
 
@@ -239,6 +243,10 @@ export async function updateMerchant(data: unknown) {
           ? new Date(validated.subscriptionExpiresAt)
           : null,
         defaultTimezone: validated.timezone,
+        features: normalizeMerchantFeatures({
+          ...normalizeMerchantFeatures(existingMerchant.features),
+          kds: validated.kdsEnabled === true,
+        }),
         updatedAt: new Date(),
       })
       .where(eq(merchants.id, validated.id));

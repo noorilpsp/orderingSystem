@@ -5,6 +5,7 @@ import { locationStations } from "@/lib/db/schema/location-stations";
 import { locationSubstations } from "@/lib/db/schema/location-substations";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
 import { verifyLocationAccess } from "@/lib/location-access";
+import { assertStationKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posSuccess, posFailure, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -34,6 +35,9 @@ export async function POST(
     if (!stationId?.trim()) {
       return posFailure("BAD_REQUEST", "Station id is required", { status: 400 });
     }
+
+    const kdsGate = await assertStationKdsEnabled(stationId);
+    if (kdsGate) return kdsGate;
 
     const body = await request.json().catch(() => ({}));
     const { name } = body;

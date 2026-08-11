@@ -81,6 +81,8 @@ export interface GuestProfile {
   }
   tags: string[]
   vipScore: number
+  /** Real loyalty points when linked to auth user; null if not enrolled. */
+  loyaltyPoints?: number | null
   churnRisk: ChurnRisk
   projectedAnnualValue?: number
   favoriteItems?: FavoriteItem[]

@@ -5,8 +5,19 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import type { CartItem, MenuItem } from "@/lib/menu-data";
-import { restaurant } from "@/lib/menu-data";
-import { customizationGroups } from "@/lib/menu-item-modal-data";
+import { restaurant as staticRestaurant } from "@/lib/menu-data";
+import {
+  customizationGroups as staticCustomizationGroups,
+} from "@/lib/menu-item-modal-data";
+import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
+import { isRewardCartLine } from "@/lib/public-menu/guest-reward-cart";
+import {
+  getGuestCartItemLineTotal,
+  getGuestCartItemUnitPrice,
+} from "@/lib/public-menu/guest-cart-pricing";
+import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
+import { resolveCatalogText } from "@/lib/catalog-i18n";
+import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
 
 interface CartBarProps {
   items: CartItem[];
@@ -17,20 +28,7 @@ interface CartBarProps {
   onItemClick: (item: CartItem, menuItem: MenuItem) => void;
   hideTrigger?: boolean;
   externalOpenSignal?: number;
-}
-
-function getCustomizationParts(
-  groupId: string,
-  optionIds: string[]
-): { groupName: string; optionNames: string } | null {
-  const group = customizationGroups.find((entry) => entry.id === groupId);
-  if (!group) return null;
-
-  const optionNames = optionIds
-    .map((optionId) => group.options.find((option) => option.id === optionId)?.name || optionId)
-    .join(", ");
-
-  return { groupName: group.name, optionNames };
+  checkoutPath?: string;
 }
 
 export function CartBar({
@@ -42,8 +40,16 @@ export function CartBar({
   onItemClick,
   hideTrigger = false,
   externalOpenSignal,
+  checkoutPath,
 }: CartBarProps) {
   const router = useRouter();
+  const t = useGuestT();
+  const { locale } = useGuestLocale();
+  const publicMenu = usePublicMenuOptional();
+  const restaurant = publicMenu?.restaurant ?? staticRestaurant;
+  const customizationGroups = publicMenu?.customizationGroups ?? staticCustomizationGroups;
+  const taxRatePercent = publicMenu?.taxRate ?? 21;
+  const resolvedCheckoutPath = checkoutPath ?? publicMenu?.checkoutPath ?? "/mobile/checkout";
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -52,7 +58,7 @@ export function CartBar({
     [items]
   );
   const subtotal = total;
-  const tax = Math.round(subtotal * 0.1 * 100) / 100;
+  const tax = Math.round(subtotal * (taxRatePercent / 100) * 100) / 100;
   const cartTotal = subtotal + tax;
 
   useEffect(() => {
@@ -78,11 +84,11 @@ export function CartBar({
           <button type="button" className={cartButtonClass} onClick={() => setIsOpen(true)}>
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5" />
-              <span className="font-semibold">View Cart</span>
+              <span className="font-semibold">{t("cart.viewCart")}</span>
               {itemCount > 0 ? <span className="font-semibold">({itemCount})</span> : null}
             </div>
             <span className="text-lg font-bold">
-              {itemCount > 0 ? `€${cartTotal.toFixed(2)}` : "Empty"}
+              {itemCount > 0 ? `€${cartTotal.toFixed(2)}` : t("cart.emptyShort")}
             </span>
           </button>
         </div>
@@ -96,25 +102,25 @@ export function CartBar({
               type="button"
               className="fixed inset-0 z-[54] bg-black/30"
               onClick={() => setIsOpen(false)}
-              aria-label="Close cart drawer"
+              aria-label={t("cart.closeDrawer")}
             />
 
             <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[55]">
-              <div className="pointer-events-auto mx-auto w-full max-w-md pb-[env(safe-area-inset-bottom)]">
+              <div className="pointer-events-auto mx-auto w-full max-w-none pb-[env(safe-area-inset-bottom)] px-1.5 md:max-w-2xl md:px-4">
                 <div className="liquid-glass animate-in slide-in-from-bottom-6 fade-in-0 rounded-t-2xl border-t border-border/90 bg-card/95 shadow-2xl shadow-black/45 backdrop-blur-xl duration-300">
                   <div className="flex h-8 items-center justify-center">
                     <div className="h-1 w-12 rounded-full bg-border" />
                   </div>
 
-                  <div className="max-h-[78vh] overflow-y-auto px-4 pb-4">
+                  <div className="max-h-[78vh] overflow-y-auto px-4 pb-4 md:px-5">
                     <div className="flex items-center justify-between pb-4">
                       <ShoppingCart className="h-6 w-6 text-foreground" />
-                      <p className="flex-1 text-center text-xl font-bold text-foreground">Your Cart</p>
+                      <p className="flex-1 text-center text-xl font-bold text-foreground">{t("cart.title")}</p>
                       <button
                         type="button"
                         onClick={() => setIsOpen(false)}
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-background/90 hover:text-foreground"
-                        aria-label="Close cart"
+                        aria-label={t("common.close")}
                       >
                         <X className="h-5 w-5" />
                       </button>
@@ -126,9 +132,9 @@ export function CartBar({
                       <div className="py-8">
                         <div className="flex flex-col items-center justify-center gap-4 py-8">
                           <div className="text-5xl">🍽️</div>
-                          <p className="text-lg font-semibold text-foreground">Your cart is empty</p>
+                          <p className="text-lg font-semibold text-foreground">{t("cart.empty")}</p>
                           <p className="text-sm text-muted-foreground">
-                            Browse the menu to add items
+                            {t("cart.browseMenuHint")}
                           </p>
                         </div>
                         <button
@@ -136,15 +142,76 @@ export function CartBar({
                           onClick={() => setIsOpen(false)}
                           className={`${cartButtonClass} justify-center`}
                         >
-                          Browse Menu
+                          {t("cart.browseMenu")}
                         </button>
                       </div>
                     ) : (
                       <>
                         <div className="mb-4 space-y-4 py-2">
                           {items.map((cartItem) => {
+                            if (isRewardCartLine(cartItem)) {
+                              const reward = publicMenu?.rewards.find(
+                                (entry) => entry.id === cartItem.rewardId,
+                              );
+                              const rewardMenuItem =
+                                reward?.menuItemId != null
+                                  ? menuItems.find((entry) => entry.id === reward.menuItemId)
+                                  : null;
+
+                              return (
+                                <div
+                                  key={cartItem.id}
+                                  className="border-b border-border/70 pb-6 last:border-b-0"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {rewardMenuItem?.image ? (
+                                      <img
+                                        src={rewardMenuItem.image}
+                                        alt={rewardMenuItem.name}
+                                        className="h-16 w-16 shrink-0 rounded object-cover"
+                                      />
+                                    ) : (
+                                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-orange-500/15 text-2xl">
+                                        🎁
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-base font-semibold text-foreground">
+                                        {cartItem.name}
+                                      </p>
+                                      <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-orange-600">
+                                        {t("cart.reward")}
+                                      </p>
+                                      <p className="mt-1 text-sm font-medium text-muted-foreground">
+                                        €0.00
+                                      </p>
+                                    </div>
+                                    <div
+                                      className={`menu-item-controls ${qtyWrapClass}`}
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => onRemoveFromCart(cartItem.id)}
+                                        className={qtyButtonClass}
+                                        aria-label={`${t("cart.remove")} ${cartItem.name}`}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-current" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
                             const menuItem = menuItems.find((entry) => entry.id === cartItem.id);
                             if (!menuItem) return null;
+                            const localizedName =
+                              resolveCatalogText(
+                                locale,
+                                { name: menuItem.name, description: menuItem.description },
+                                menuItem.i18n,
+                              ).name || cartItem.name;
 
                             return (
                               <div key={cartItem.id} className="border-b border-border/70 pb-6 last:border-b-0">
@@ -157,55 +224,42 @@ export function CartBar({
                                 >
                                   <img
                                     src={menuItem.image || "/placeholder.svg"}
-                                    alt={menuItem.name}
-                                    className="h-16 w-16 flex-shrink-0 rounded object-cover"
+                                    alt={localizedName}
+                                    className="h-16 w-16 shrink-0 rounded object-cover"
                                   />
 
                                   <div className="flex min-w-0 flex-1 flex-col">
                                     <p className="text-base font-semibold text-foreground">
-                                      {menuItem.name}
+                                      {localizedName}
                                     </p>
 
                                     {(cartItem.selectedOptions ||
                                       cartItem.sauceQuantities ||
                                       cartItem.specialInstructions) && (
                                       <div className="mt-1 space-y-1">
-                                        {cartItem.selectedOptions &&
-                                          Object.entries(cartItem.selectedOptions).map(
-                                            ([groupId, optionIds]) => {
-                                              const parts = getCustomizationParts(groupId, optionIds);
-                                              return parts ? (
-                                                <p key={groupId} className="text-sm">
-                                                  <span className="text-foreground/80">
-                                                    {parts.groupName}:
-                                                  </span>
-                                                  <span className="ml-1 text-muted-foreground">
-                                                    {parts.optionNames}
-                                                  </span>
-                                                </p>
-                                              ) : null;
-                                            }
-                                          )}
+                                        <GuestCustomizationDisplayLines
+                                          groups={customizationGroups}
+                                          selectedOptions={cartItem.selectedOptions}
+                                          textSizeClassName="text-sm"
+                                        />
                                         {cartItem.sauceQuantities &&
                                           Object.entries(cartItem.sauceQuantities).map(
                                             ([sauceId, qty]) =>
                                               qty > 0 ? (
-                                                <p key={sauceId} className="text-sm">
-                                                  <span className="text-foreground/80">
+                                                <p key={sauceId} className="text-sm text-teal-700">
+                                                  <span className="text-foreground/70">
                                                     Extra Sauce:
-                                                  </span>
-                                                  <span className="ml-1 text-muted-foreground">
-                                                    {sauceId} x{qty}
-                                                  </span>
+                                                  </span>{" "}
+                                                  {sauceId} x{qty}
                                                 </p>
                                               ) : null
                                           )}
                                         {cartItem.specialInstructions && (
                                           <p className="text-sm">
-                                            <span className="text-foreground/80">
-                                              Special Instructions:
+                                            <span className="text-foreground/70">
+                                              {t("common.instructions")}
                                             </span>
-                                            <span className="ml-1 text-muted-foreground">
+                                            <span className="ml-1 italic text-amber-700/90">
                                               {cartItem.specialInstructions}
                                             </span>
                                           </p>
@@ -214,7 +268,10 @@ export function CartBar({
                                     )}
 
                                     <p className="mt-1 text-sm font-medium text-muted-foreground">
-                                      €{menuItem.price.toFixed(2)}
+                                      €{getGuestCartItemUnitPrice(cartItem, customizationGroups).toFixed(2)}
+                                      {cartItem.quantity > 1
+                                        ? ` · €${getGuestCartItemLineTotal(cartItem, customizationGroups).toFixed(2)}`
+                                        : ""}
                                     </p>
                                   </div>
 
@@ -223,7 +280,7 @@ export function CartBar({
                                       type="button"
                                       onClick={() => onRemoveFromCart(cartItem.id)}
                                       className={qtyButtonClass}
-                                      aria-label={`Remove ${menuItem.name}`}
+                                      aria-label={`${t("cart.remove")} ${localizedName}`}
                                     >
                                       {cartItem.quantity === 1 ? (
                                         <Trash2 className="h-4 w-4 text-current" />
@@ -238,7 +295,7 @@ export function CartBar({
                                       type="button"
                                       onClick={() => onAddToCart(menuItem)}
                                       className={qtyButtonClass}
-                                      aria-label={`Add ${menuItem.name}`}
+                                      aria-label={`Add ${localizedName}`}
                                     >
                                       <Plus className="h-4 w-4 text-current" />
                                     </button>
@@ -250,20 +307,24 @@ export function CartBar({
                         </div>
 
                         <div className="mt-2 space-y-2">
+                          {taxRatePercent > 0 ? (
+                            <>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold text-foreground">{t("common.subtotal")}</span>
+                                <span className="text-base font-semibold text-foreground">
+                                  €{subtotal.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold text-foreground">{t("common.tax")}</span>
+                                <span className="text-base font-semibold text-foreground">
+                                  €{tax.toFixed(2)}
+                                </span>
+                              </div>
+                            </>
+                          ) : null}
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-foreground">Subtotal</span>
-                            <span className="text-base font-semibold text-foreground">
-                              €{subtotal.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-foreground">Tax</span>
-                            <span className="text-base font-semibold text-foreground">
-                              €{tax.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-bold text-foreground">Total</span>
+                            <span className="text-sm font-bold text-foreground">{t("common.total")}</span>
                             <span className="text-lg font-bold text-foreground">
                               €{cartTotal.toFixed(2)}
                             </span>
@@ -274,10 +335,10 @@ export function CartBar({
                             className={`${cartButtonClass} mt-3 justify-center`}
                             onClick={() => {
                               setIsOpen(false);
-                              router.push("/mobile/checkout");
+                              router.push(resolvedCheckoutPath);
                             }}
                           >
-                            Proceed to Checkout
+                            {t("cart.proceedToCheckout")}
                           </button>
                         </div>
                       </>
