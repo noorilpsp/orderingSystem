@@ -12,11 +12,14 @@ import { MenuImportModal } from "@/components/modals/menu-import-modal"
 import { useMenu } from "../menu-context"
 import type { MenuItem } from "@/types/menu-item"
 import { toast } from "sonner"
+import { downloadMenuItemsCsv } from "@/lib/menu/export-items"
+import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 
 const availableTags = ["Vegan", "Vegetarian", "Gluten-Free", "Spicy", "Popular", "New", "Chef's Pick"]
 
 export default function MenuItemsPage() {
   const { items, categories, menus, locationId, createItem, updateItem, deleteItem, bulkUpdateItems, bulkDeleteItems, importItems } = useMenu()
+  const { kdsEnabled } = useMerchantKdsEnabled()
   const searchParams = useSearchParams()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [view, setView] = useState<"grid" | "list">("grid")
@@ -289,6 +292,15 @@ export default function MenuItemsPage() {
     }
   }, [deleteConfirmation.item, deleteItem])
 
+  const handleExportCsv = useCallback(() => {
+    if (items.length === 0) {
+      toast.error("No items to export")
+      return
+    }
+    downloadMenuItemsCsv(items, categories, kdsEnabled)
+    toast.success(`Exported ${items.length} item${items.length === 1 ? "" : "s"}`)
+  }, [items, categories, kdsEnabled])
+
   const selectedItems = items.filter((item) => selectedIds.includes(item.id))
 
   return (
@@ -315,6 +327,7 @@ export default function MenuItemsPage() {
             onTagsChange={setSelectedTags}
             onAddItem={handleCreateItem}
             onImportCsv={() => setMenuImportOpen(true)}
+            onExportCsv={handleExportCsv}
             totalItems={filteredItems.length}
             categories={categories}
           />

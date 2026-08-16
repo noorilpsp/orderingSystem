@@ -32,6 +32,11 @@ export type PublicMenuReward = {
   menuItemName: string | null;
 };
 
+export type PublicMenuTable = {
+  id: string;
+  tableNumber: string;
+};
+
 export type PublicMenuView = {
   storeSlug: string;
   locationId: string;
@@ -43,6 +48,8 @@ export type PublicMenuView = {
   items: GuestMenuItem[];
   customizationGroups: GuestCustomizationGroup[];
   orderModes: GuestOrderModes;
+  /** Tables configured for delivery-to-table (empty when none). */
+  tables: PublicMenuTable[];
   activeMenuId: string | null;
   activeMenuName: string | null;
   loyaltySettings: PublicMenuLoyaltySettings;

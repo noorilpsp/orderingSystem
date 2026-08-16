@@ -1,11 +1,12 @@
 'use client';
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import { useEffect, useMemo, useState } from "react"
 import { Edit, Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { formatCurrency, getSeatItems, dietaryIcons } from "@/lib/take-order-data"
+import { getSeatItems, dietaryIcons } from "@/lib/take-order-data"
 import type { OrderItem, Seat } from "@/lib/take-order-data"
 
 interface OrderSummaryProps {
@@ -33,6 +34,7 @@ export function OrderSummary({
   onEditItem,
   onRemoveItem,
 }: OrderSummaryProps) {
+  const { formatMoney } = useMerchantLocalization()
   const [waveFilter, setWaveFilter] = useState<string>("all")
   const waveOptions = useMemo(() => {
     const labels = Array.from(
@@ -165,7 +167,7 @@ export function OrderSummary({
                         </span>
                       ))}
                     </div>
-                    <span className="text-sm font-semibold">{formatCurrency(seatTotal)}</span>
+                    <span className="text-sm font-semibold">{formatMoney(seatTotal)}</span>
 	                  </div>
 	
 	                  <div className="space-y-2">
@@ -196,7 +198,7 @@ export function OrderSummary({
             <div>
               <div className="flex justify-between">
                 <span className="text-sm font-semibold">Total</span>
-                <span className="text-sm font-semibold">{formatCurrency(total)}</span>
+                <span className="text-sm font-semibold">{formatMoney(total)}</span>
               </div>
             </div>
           </div>
@@ -265,7 +267,7 @@ function OrderItemCard({
           )}
         </div>
         <span className="shrink-0 text-sm font-bold">
-          {formatCurrency(item.price * item.quantity)}
+          {formatMoney(item.price * item.quantity)}
         </span>
       </div>
 

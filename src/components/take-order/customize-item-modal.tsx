@@ -1,5 +1,6 @@
 "use client"
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import { useEffect, useMemo, useState } from "react"
 import { Minus, Plus } from "lucide-react"
 import {
@@ -14,8 +15,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { formatCurrency, dietaryIcons } from "@/lib/take-order-data"
+import { dietaryIcons } from "@/lib/take-order-data"
 import type { MenuItem, Seat } from "@/lib/take-order-data"
+import { PromoPrice } from "@/components/shared/promo-price"
+import { lineTotalWithPromo } from "@/lib/promotions/pricing"
 
 interface CustomizeItemModalProps {
   item: MenuItem | null
@@ -57,6 +60,7 @@ export function CustomizeItemModal({
   onClose,
   onAddToOrder,
 }: CustomizeItemModalProps) {
+  const { formatMoney } = useMerchantLocalization()
   const [quantity, setQuantity] = useState(1)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
   const [selectedExtras, setSelectedExtras] = useState<string[]>([])
@@ -84,6 +88,7 @@ export function CustomizeItemModal({
     if (!item) return 0
 
     let price = item.price
+    let addOns = 0
 
     for (const option of item.options || []) {
       const selected = selectedOptions[option.name]
@@ -92,7 +97,7 @@ export function CustomizeItemModal({
           typeof c === "string" ? c === selected : c.name === selected
         )
         if (choice && typeof choice !== "string") {
-          price += choice.price
+          addOns += choice.price
         }
       }
     }
@@ -100,11 +105,16 @@ export function CustomizeItemModal({
     for (const extraName of selectedExtras) {
       const extra = item.extras?.find((e) => e.name === extraName)
       if (extra) {
-        price += extra.price
+        addOns += extra.price
       }
     }
 
-    return price * quantity
+    return lineTotalWithPromo({
+      kind: item.promoKind,
+      unitBasePrice: price,
+      addOnsTotalPerUnit: addOns,
+      quantity,
+    })
   }, [item, selectedOptions, selectedExtras, quantity])
 
   const validateAndAdd = () => {
@@ -165,7 +175,13 @@ export function CustomizeItemModal({
               <div>
                 <h2 className="text-lg font-semibold">{item.name}</h2>
                 <p className="text-sm font-normal text-muted-foreground">
-                  {formatCurrency(item.price)}
+                  <PromoPrice
+                    price={item.price}
+                    compareAtPrice={item.compareAtPrice}
+                    promoKind={item.promoKind}
+                    formatMoney={formatMoney}
+                    bogoLabel="BOGO"
+                  />
                 </p>
                 {item.description && (
                   <p className="mt-1 text-sm font-normal text-muted-foreground">
@@ -213,7 +229,7 @@ export function CustomizeItemModal({
                           )}
                         >
                           {choiceName}
-                          {choicePrice > 0 && ` (+${formatCurrency(choicePrice)})`}
+                          {choicePrice > 0 && ` (+${formatMoney(choicePrice)})`}
                         </button>
                       )
                     })}
@@ -251,7 +267,7 @@ export function CustomizeItemModal({
                     >
                       <span>{extra.name}</span>
                       <span className="text-muted-foreground">
-                        +{formatCurrency(extra.price)}
+                        +{formatMoney(extra.price)}
                       </span>
                     </Label>
                   </div>
@@ -362,7 +378,7 @@ export function CustomizeItemModal({
 
         <div className="sticky bottom-0 flex items-center justify-between gap-4 border-t border-border bg-card px-6 py-4">
           <div className="text-lg font-semibold">
-            Total: {formatCurrency(totalPrice)}
+            Total: {formatMoney(totalPrice)}
           </div>
           <div className="flex gap-2">
             <Button
@@ -375,7 +391,7 @@ export function CustomizeItemModal({
               Cancel
             </Button>
             <Button onClick={validateAndAdd} size="lg">
-              {submitLabel} — {formatCurrency(totalPrice)}
+              {submitLabel} — {formatMoney(totalPrice)}
             </Button>
           </div>
         </div>

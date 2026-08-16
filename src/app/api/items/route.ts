@@ -8,6 +8,7 @@ import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envel
 import { getLocationStations, getSubstationKeysForStation } from "@/lib/kds/getLocationStations";
 import { isLocationKdsEnabled } from "@/lib/merchant-features";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
 
 export const runtime = "nodejs";
 
@@ -116,7 +117,21 @@ export async function GET(request: NextRequest) {
       customizationGroups: item.itemCustomizations?.map((ic) => ic.group.id) || [],
     }));
 
-    const res = posSuccess(itemsList);
+    const promoByItem = await resolveItemPromos(
+      locationId,
+      new Map(
+        itemsList.map((item) => [
+          item.id,
+          typeof item.price === "string" ? parseFloat(item.price) : Number(item.price) || 0,
+        ]),
+      ),
+    );
+    const itemsWithPromo = itemsList.map((item) => ({
+      ...item,
+      activePromo: promoByItem.get(item.id) ?? null,
+    }));
+
+    const res = posSuccess(itemsWithPromo);
     res.headers.set("Cache-Control", "no-store, must-revalidate");
     return res;
   } catch (error) {

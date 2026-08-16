@@ -3,7 +3,6 @@
 import React from "react"
 import { MenuProvider } from "./menu-context"
 import { MenuTabs } from "@/components/menu-tabs"
-import { MenuLocationSelector } from "@/components/menu-location-selector"
 
 export default function MenuLayout({
   children,
@@ -12,15 +11,10 @@ export default function MenuLayout({
 }) {
   return (
     <MenuProvider>
-      <div className="flex flex-col h-full">
-        {/* Location Selector */}
-        <MenuLocationSelector />
-
-        {/* Menu Tabs */}
+      <div className="flex min-h-0 flex-1 flex-col">
         <MenuTabs />
 
-        {/* Page Content */}
-        <div className="flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           {children}
         </div>
       </div>

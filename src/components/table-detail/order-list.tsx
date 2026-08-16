@@ -1,5 +1,6 @@
 "use client"
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import React from "react"
 
 import { useEffect, useMemo, useState, useRef } from "react"
@@ -11,7 +12,6 @@ import type { Seat, OrderItem } from "@/lib/table-data"
 import {
   dietaryIcons,
   statusConfig,
-  formatCurrency,
   getSeatTotal,
 } from "@/lib/table-data"
 import type { ItemStatus } from "@/lib/table-data"
@@ -165,7 +165,7 @@ function ItemCard({
             </div>
           </div>
           <span className="shrink-0 font-semibold text-foreground">
-            {formatCurrency(item.price)}
+            {formatMoney(item.price)}
           </span>
         </div>
 
@@ -250,7 +250,7 @@ function BySeatView({
               </span>
             </div>
             <span className="text-sm font-semibold text-foreground">
-              {formatCurrency(tableItems.reduce((sum, item) => sum + item.price, 0))}
+              {formatMoney(tableItems.reduce((sum, item) => sum + item.price, 0))}
             </span>
           </div>
           <div className="space-y-2">
@@ -295,7 +295,7 @@ function BySeatView({
               ))}
             </div>
             <span className="text-sm font-semibold text-foreground">
-              {formatCurrency(getSeatTotal(seat))}
+              {formatMoney(getSeatTotal(seat))}
             </span>
           </div>
 
@@ -539,6 +539,7 @@ export function OrderList({
   onMarkServed,
   onVoidItem,
 }: OrderListProps) {
+  const { formatMoney } = useMerchantLocalization()
   const [targetFilter, setTargetFilter] = useState<TargetFilter>("all")
   const [waveFilter, setWaveFilter] = useState<WaveFilter>("all")
   useEffect(() => {

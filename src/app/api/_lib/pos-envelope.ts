@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { toUserFacingDbError } from "@/lib/db/withDbRetry";
 
 type SuccessOptions = {
   status?: number;
@@ -45,8 +46,9 @@ export function posFailure(
   );
 }
 
+/** Never return raw SQL/driver dumps to API clients. */
 export function toErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return toUserFacingDbError(error, fallback);
 }
 
 export function requireIdempotencyKey(req: Request):

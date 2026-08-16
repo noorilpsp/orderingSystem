@@ -1,29 +1,35 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowRight,
   Bell,
   ClipboardList,
   CreditCard,
-  Droplets,
-  FileText,
   GripHorizontal,
-  Minus,
-  Plus,
   ShoppingCart,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
-import { useGuestT } from "@/lib/guest-i18n";
+import { GuestBillSplitDialog, type GuestSplitMode, type SplitBillData } from "@/components/mobile-ordering/menu/guest-bill-split-dialog";
+import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
+import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
+import {
+  readDismissedProposalId,
+  writeDismissedProposalId,
+} from "@/lib/public-menu/guest-split-proposal-storage";
+import type { GuestSplitProposalRecord } from "@/lib/db/schema/guest-table-splits";
+import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
+import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 
 type OrderType = "dine-in" | "pickup";
 type ToastType = "success" | "warning";
+type ServiceActionResult = { ok: boolean; message: string };
 
 interface SmartBottomBarProps {
   orderType: OrderType;
@@ -31,16 +37,25 @@ interface SmartBottomBarProps {
   total: number;
   waiterCooldownSeconds: number;
   checkRequested: boolean;
-  onCallWaiter: () => void;
-  onRequestCheck: () => void | Promise<void>;
+  onCallWaiter: (options?: { tableNumber?: string }) => void | Promise<void | ServiceActionResult>;
+  onRequestCheck: (options?: { tableNumber?: string }) => void | Promise<void | ServiceActionResult>;
   onViewCart: () => void;
   onToast: (message: string, type?: ToastType) => void;
   activeOrderPath?: string | null;
   activeOrderNumber?: string | null;
 }
 
-function formatEuro(value: number) {
-  return `€${value.toFixed(2)}`;
+function normalizeServiceResult(
+  result: void | ServiceActionResult,
+  fallbackMessage: string,
+): ServiceActionResult {
+  if (result && typeof result === "object" && "ok" in result) {
+    return {
+      ok: Boolean(result.ok),
+      message: result.message?.trim() || fallbackMessage,
+    };
+  }
+  return { ok: true, message: fallbackMessage };
 }
 
 export function SmartBottomBar({
@@ -57,24 +72,119 @@ export function SmartBottomBar({
   activeOrderNumber = null,
 }: SmartBottomBarProps) {
   const t = useGuestT();
+  const { dir, locale } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
+  const publicMenu = usePublicMenuOptional();
+  const linkedTableNumber = publicMenu?.tableNumber?.trim() ?? "";
+  const storeSlug = publicMenu?.storeSlug ?? "";
+  const guestSeat = publicMenu?.guestSeat ?? null;
+  const guestDeviceId = publicMenu?.guestDeviceId ?? "";
+
   const [mounted, setMounted] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [callWaiterOpen, setCallWaiterOpen] = useState(false);
+  const [callWaiterPending, setCallWaiterPending] = useState(false);
+  const [callWaiterResult, setCallWaiterResult] = useState<ServiceActionResult | null>(null);
   const [requestCheckOpen, setRequestCheckOpen] = useState(false);
   const [requestCheckPending, setRequestCheckPending] = useState(false);
+  const [requestCheckResult, setRequestCheckResult] = useState<ServiceActionResult | null>(null);
   const [splitOpen, setSplitOpen] = useState(false);
-  const [splitCount, setSplitCount] = useState(2);
-  const [specialOpen, setSpecialOpen] = useState(false);
-  const [specialRequest, setSpecialRequest] = useState("");
-  const [waterOpen, setWaterOpen] = useState(false);
+  const [splitInitialMode, setSplitInitialMode] = useState<GuestSplitMode | null>(null);
+  const [splitLoading, setSplitLoading] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
+  const [splitData, setSplitData] = useState<SplitBillData | null>(null);
+  const [proposalBanner, setProposalBanner] = useState<GuestSplitProposalRecord | null>(null);
+
+  const showServiceTray =
+    orderType === "dine-in" &&
+    resolveGuestSessionMode(publicMenu?.orderModes) !== "self_service";
+  const effectiveTableNumber = linkedTableNumber.trim();
 
   const handleRef = useRef<HTMLButtonElement>(null);
   const firstActionRef = useRef<HTMLButtonElement>(null);
+  const splitFetchGenRef = useRef(0);
 
-  const perPerson = useMemo(() => {
-    if (splitCount <= 0) return 0;
-    return total / splitCount;
-  }, [splitCount, total]);
+  const loadSplitBill = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = Boolean(options?.silent);
+    const fetchGen = ++splitFetchGenRef.current;
+    const table = linkedTableNumber.trim();
+    if (!storeSlug || !table) {
+      if (fetchGen !== splitFetchGenRef.current) return;
+      setSplitData(null);
+      setSplitError(t("actions.splitNoTable"));
+      setProposalBanner(null);
+      return;
+    }
+    if (!guestDeviceId || !guestSeat?.seatId) {
+      if (fetchGen !== splitFetchGenRef.current) return;
+      setSplitData(null);
+      setSplitError(t("actions.payMyShareMissing"));
+      setProposalBanner(null);
+      return;
+    }
+    if (!silent) {
+      setSplitLoading(true);
+      setSplitError(null);
+    }
+    try {
+      const params = new URLSearchParams({
+        storeSlug,
+        tableNumber: table,
+        deviceId: guestDeviceId,
+        seatId: guestSeat.seatId,
+      });
+      const response = await fetch(`/api/public/table-bill?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: SplitBillData;
+        error?: { message?: string };
+      } | null;
+      if (fetchGen !== splitFetchGenRef.current) return;
+      if (!response.ok || payload?.ok === false || !payload?.data) {
+        if (!silent) {
+          setSplitData(null);
+          setProposalBanner(null);
+          setSplitError(
+            toUserFacingErrorMessage(
+              payload?.error?.message?.trim() ||
+                (response.status === 403
+                  ? t("actions.splitForbidden")
+                  : response.status === 404
+                    ? t("actions.splitEmpty")
+                    : t("actions.requestFailed")),
+              t("actions.requestFailed"),
+            ),
+          );
+        }
+        return;
+      }
+      setSplitData(payload.data);
+
+      const proposal = payload.data.proposal ?? null;
+      const sessionKey = payload.data.sessionId ?? `${storeSlug}:${table}`;
+      if (
+        proposal &&
+        proposal.fromSeatId !== guestSeat.seatId &&
+        readDismissedProposalId(sessionKey) !== proposal.id
+      ) {
+        setProposalBanner(proposal);
+      } else if (!proposal || proposal.fromSeatId === guestSeat.seatId) {
+        setProposalBanner(null);
+      }
+    } catch {
+      if (fetchGen !== splitFetchGenRef.current) return;
+      if (!silent) {
+        setSplitData(null);
+        setProposalBanner(null);
+        setSplitError(t("actions.requestFailed"));
+      }
+    } finally {
+      if (fetchGen === splitFetchGenRef.current && !silent) setSplitLoading(false);
+    }
+  }, [guestDeviceId, guestSeat?.seatId, linkedTableNumber, storeSlug, t]);
 
   useEffect(() => {
     setMounted(true);
@@ -85,28 +195,40 @@ export function SmartBottomBar({
       const timeout = setTimeout(() => firstActionRef.current?.focus(), 120);
       return () => clearTimeout(timeout);
     }
-    if (orderType === "dine-in") {
-      handleRef.current?.focus();
-    }
-  }, [trayOpen, orderType]);
-
-  useEffect(() => {
-    if (!trayOpen) {
-      setSpecialOpen(false);
-      setWaterOpen(false);
-    }
   }, [trayOpen]);
 
   useEffect(() => {
-    if (orderType !== "dine-in") {
-      setTrayOpen(false);
-      setSpecialOpen(false);
-      setWaterOpen(false);
-    }
+    setTrayOpen(false);
   }, [orderType]);
 
-  const handleTouchEnd = (touchY: number) => {
+  useEffect(() => {
+    if (!splitOpen) return;
+    void loadSplitBill();
+    // Only reload when the dialog opens — not when loadSplitBill identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [splitOpen]);
+
+  // Live-refresh claims / extra payers only while Split bill is open.
+  // Do not poll on the menu — a seated table with no open check 404s every tick.
+  useEffect(() => {
+    if (!splitOpen) return;
     if (orderType !== "dine-in") return;
+    if (!linkedTableNumber.trim() || !guestDeviceId || !guestSeat?.seatId) return;
+    const id = window.setInterval(() => {
+      void loadSplitBill({ silent: true });
+    }, 8000);
+    return () => window.clearInterval(id);
+  }, [
+    splitOpen,
+    orderType,
+    linkedTableNumber,
+    guestDeviceId,
+    guestSeat?.seatId,
+    loadSplitBill,
+  ]);
+
+  const handleTouchEnd = (touchY: number) => {
+    if (!showServiceTray) return;
     if (touchStartY === null) return;
     const diff = touchStartY - touchY;
     if (diff > 50) setTrayOpen(true);
@@ -136,15 +258,15 @@ export function SmartBottomBar({
     <button
       ref={buttonRef}
       type="button"
-      className={`w-full min-h-14 rounded-xl px-3 py-3 text-left transition-colors ${
+      className={`w-full min-h-14 rounded-xl px-3 py-3 text-start transition-colors ${
         className ?? (destructive ? "hover:bg-rose-500/10" : "hover:bg-emerald-500/10")
       }`}
       onClick={onClick}
       aria-label={ariaLabel ?? title}
     >
-      <div className="flex items-start gap-3">
-        <span className={`mt-0.5 ${destructive ? "text-rose-500" : "text-muted-foreground"}`}>{icon}</span>
-        <div>
+      <div className="flex w-full items-start gap-3">
+        <span className={`mt-0.5 shrink-0 ${destructive ? "text-rose-500" : "text-muted-foreground"}`}>{icon}</span>
+        <div className="min-w-0 flex-1 text-start">
           <p className={`text-sm font-semibold ${destructive ? "text-rose-500" : "text-foreground"}`}>{title}</p>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
@@ -152,15 +274,98 @@ export function SmartBottomBar({
     </button>
   );
 
+  const TablePicker = () => {
+    if (linkedTableNumber) {
+      return (
+        <p className="rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground">
+          {t("actions.tableForRequest", { number: linkedTableNumber })}
+        </p>
+      );
+    }
+
+    return (
+      <p className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+        {t("actions.scanTableQrToContinue")}
+      </p>
+    );
+  };
+
   if (!mounted) return null;
 
   const portalTarget = document.body;
-  const isDineIn = orderType === "dine-in";
-  const showTray = isDineIn && trayOpen;
-  const showBottomBar = cartCount > 0 || Boolean(activeOrderPath) || isDineIn;
+  const showTray = showServiceTray && trayOpen;
+  const showBottomBar = showServiceTray || cartCount > 0 || Boolean(activeOrderPath);
+  const serviceConfirmOverlayClass = "z-[var(--z-modal-backdrop)]";
+  const serviceConfirmContentClass =
+    "bottom-[calc(var(--guest-tab-bar-height,0rem)+8.5rem)] top-auto z-[var(--z-modal-content)] max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-0 rounded-2xl border-border bg-card p-5 text-foreground shadow-2xl data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-md";
+
+  const proposalYouOwe =
+    proposalBanner && guestSeat?.seatId
+      ? proposalBanner.amounts.find((row) => row.seatId === guestSeat.seatId)?.amount ?? null
+      : null;
+  const proposalSessionKey =
+    splitData?.sessionId ??
+    `${storeSlug}:${linkedTableNumber.trim()}`;
 
   return createPortal(
     <>
+      {proposalBanner && !splitOpen ? (
+        <div
+          className="pointer-events-none fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[var(--z-modal-content)] flex justify-center px-3"
+          dir={dir}
+          lang={locale}
+        >
+          <div className="pointer-events-auto w-full max-w-lg rounded-2xl border border-emerald-600/40 bg-card/95 p-3 text-start shadow-2xl backdrop-blur-xl md:max-w-xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+              {t("actions.splitProposalTitle", {
+                number: proposalBanner.fromSeatNumber ?? "?",
+              })}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {proposalYouOwe != null
+                ? t("actions.splitProposalYouOwe", {
+                    amount: formatMoney(proposalYouOwe),
+                  })
+                : t("actions.splitSendToTable")}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 bg-emerald-600 text-white hover:bg-emerald-500"
+                onClick={() => {
+                  const mode = proposalBanner.mode;
+                  setSplitInitialMode(
+                    mode === "one-bill" ||
+                      mode === "by-seat" ||
+                      mode === "equal" ||
+                      mode === "item"
+                      ? mode
+                      : "by-seat",
+                  );
+                  setSplitOpen(true);
+                  setTrayOpen(false);
+                }}
+              >
+                {t("actions.splitProposalOpen")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-border text-foreground"
+                onClick={() => {
+                  writeDismissedProposalId(proposalSessionKey, proposalBanner.id);
+                  setProposalBanner(null);
+                }}
+              >
+                {t("actions.splitProposalGotIt")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showTray ? (
         <button
           type="button"
@@ -173,6 +378,8 @@ export function SmartBottomBar({
       {showBottomBar ? (
       <div
         className="pointer-events-none fixed inset-x-0 z-[var(--z-bottom-bar)]"
+        dir={dir}
+        lang={locale}
         style={{
           position: "fixed",
           left: 0,
@@ -192,7 +399,10 @@ export function SmartBottomBar({
             }`}
           >
             {showTray ? (
-              <div className="animate-in slide-in-from-bottom-6 fade-in-0 max-h-[360px] overflow-y-auto px-2 pb-2 pt-2 duration-300">
+              <div
+                className="animate-in slide-in-from-bottom-6 fade-in-0 max-h-[360px] overflow-y-auto px-2 pb-2 pt-2 duration-300"
+                dir={dir}
+              >
                 <ActionRow
                   buttonRef={firstActionRef}
                   icon={<Bell className="h-4 w-4" />}
@@ -208,8 +418,13 @@ export function SmartBottomBar({
                       : "Call waiter"
                   }
                   onClick={() => {
-                    onCallWaiter();
+                    if (waiterCooldownSeconds > 0) {
+                      void onCallWaiter();
+                      return;
+                    }
+                    setCallWaiterResult(null);
                     setTrayOpen(false);
+                    setCallWaiterOpen(true);
                   }}
                 />
                 <Separator className="bg-border/70" />
@@ -226,6 +441,8 @@ export function SmartBottomBar({
                   className={checkRequested ? "border-amber-400/35 bg-amber-500/10 text-amber-100" : undefined}
                   onClick={() => {
                     if (checkRequested) return;
+                    setRequestCheckResult(null);
+                    setTrayOpen(false);
                     setRequestCheckOpen(true);
                   }}
                 />
@@ -237,82 +454,10 @@ export function SmartBottomBar({
                   subtitle={t("actions.splitSubtitle")}
                   onClick={() => setSplitOpen(true)}
                 />
-                <Separator className="bg-border/70" />
-
-                <div>
-                  <ActionRow
-                    icon={<Droplets className="h-4 w-4" />}
-                    title={t("actions.orderWater")}
-                    subtitle={t("actions.orderWaterSubtitle")}
-                    onClick={() => setWaterOpen((prev) => !prev)}
-                  />
-                  {waterOpen && (
-                    <div className="animate-in slide-in-from-bottom-2 fade-in-0 mb-2 flex gap-2 px-3">
-                      {[
-                        { id: "still", label: t("actions.still"), icon: "💧" },
-                        { id: "sparkling", label: t("actions.sparkling"), icon: "✨" },
-                        { id: "tap", label: t("actions.tap"), icon: "🚰" },
-                      ].map((option) => (
-                        <Button
-                          key={option.id}
-                          type="button"
-                          className="h-9 rounded-full border border-border bg-card text-foreground hover:bg-primary hover:text-primary-foreground"
-                          onClick={() => {
-                            onToast(t("actions.waterOnWay", { type: option.label }));
-                            setWaterOpen(false);
-                            setTrayOpen(false);
-                          }}
-                        >
-                          <span>{option.icon}</span>
-                          <span>{option.label}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <Separator className="bg-border/70" />
-
-                <div>
-                  <ActionRow
-                    icon={<FileText className="h-4 w-4" />}
-                    title={t("actions.specialRequest")}
-                    subtitle={t("actions.specialRequestSubtitle")}
-                    onClick={() => setSpecialOpen((prev) => !prev)}
-                  />
-                  {specialOpen && (
-                    <div className="animate-in slide-in-from-bottom-2 fade-in-0 space-y-2 px-3 pb-2">
-                      <Textarea
-                        value={specialRequest}
-                        onChange={(event) => setSpecialRequest(event.target.value)}
-                        maxLength={150}
-                        placeholder={t("actions.specialRequestPlaceholder")}
-                        className="min-h-20 border-input bg-background text-foreground"
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">{specialRequest.length}/150</span>
-                        <Button
-                          type="button"
-                          className="sheen-overlay relative h-9 border border-white/26 bg-black/78 text-white backdrop-blur-2xl shadow-[0_10px_24px_rgba(0,0,0,0.4)] ring-1 ring-white/10 hover:bg-black/84 dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
-                          onClick={() => {
-                            if (!specialRequest.trim()) return;
-                            onToast(t("actions.requestSent"));
-                            setSpecialRequest("");
-                            setSpecialOpen(false);
-                            setTrayOpen(false);
-                          }}
-                        >
-                          {t("actions.send")}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <Separator className="my-2 h-px bg-border/80" />
               </div>
             ) : null}
 
-            {isDineIn ? (
+            {showServiceTray ? (
               <button
                 ref={handleRef}
                 type="button"
@@ -332,7 +477,7 @@ export function SmartBottomBar({
                 <button
                   type="button"
                   role="button"
-                  aria-label={`View cart, ${cartCount} items, ${formatEuro(total)}`}
+                  aria-label={`View cart, ${cartCount} items, ${formatMoney(total)}`}
                   className="sheen-overlay relative flex min-h-[52px] w-full items-center justify-between rounded-xl border border-white/26 bg-black/78 px-4 py-3 text-white backdrop-blur-2xl shadow-[0_14px_30px_rgba(0,0,0,0.42)] ring-1 ring-white/10 transition-transform duration-200 hover:bg-black/84 active:scale-[0.99] dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
                   onClick={onViewCart}
                 >
@@ -341,7 +486,7 @@ export function SmartBottomBar({
                     <span className="text-sm font-semibold">{t("actions.viewCartCount", { count: cartCount })}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-semibold">{formatEuro(total)}</span>
+                    <span className="text-sm font-semibold">{formatMoney(total)}</span>
                     <ArrowRight className="h-4 w-4" />
                   </div>
                 </button>
@@ -360,15 +505,10 @@ export function SmartBottomBar({
                   </div>
                   <ArrowRight className="h-4 w-4 shrink-0" />
                 </Link>
-              ) : orderType === "dine-in" ? (
-                <button
-                  type="button"
-                  className="group flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border bg-card/60 px-4 py-3 text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
-                  onClick={onCallWaiter}
-                >
-                  <Bell className="bell-wobble h-4 w-4 text-muted-foreground group-hover:text-primary" />
-                  <span className="text-sm">{t("actions.needWaiter")}</span>
-                </button>
+              ) : showServiceTray ? (
+                <p className="pb-1 text-center text-[11px] text-muted-foreground">
+                  {t("actions.needWaiter")}
+                </p>
               ) : null}
             </div>
           </div>
@@ -376,10 +516,99 @@ export function SmartBottomBar({
       </div>
       ) : null}
 
-      <Dialog open={requestCheckOpen} onOpenChange={setRequestCheckOpen}>
+      <Dialog
+        open={callWaiterOpen}
+        onOpenChange={(open) => {
+          setCallWaiterOpen(open);
+          if (!open) setCallWaiterResult(null);
+        }}
+      >
         <DialogContent
           showCloseButton={false}
-          className="bottom-0 top-auto max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-0 rounded-t-2xl border-border bg-card text-foreground"
+          overlayClassName={serviceConfirmOverlayClass}
+          className={serviceConfirmContentClass}
+        >
+          <DialogHeader>
+            <DialogTitle>{t("actions.callWaiterTitle")}</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {t("actions.callWaiterDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <TablePicker />
+          {callWaiterResult ? (
+            <p
+              className={`rounded-xl border px-3 py-2 text-sm ${
+                callWaiterResult.ok
+                  ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
+                  : "border-amber-400/35 bg-amber-500/10 text-amber-100"
+              }`}
+            >
+              {callWaiterResult.message}
+            </p>
+          ) : null}
+          <DialogFooter className="flex-row justify-end gap-2 sm:justify-end">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => setCallWaiterOpen(false)}
+            >
+              {callWaiterResult?.ok ? t("common.close") : t("common.cancel")}
+            </Button>
+            {!callWaiterResult?.ok ? (
+              <Button
+                className="bg-emerald-600 text-white hover:bg-emerald-500"
+                disabled={callWaiterPending || !effectiveTableNumber}
+                onClick={async () => {
+                  if (!effectiveTableNumber) {
+                    setCallWaiterResult({
+                      ok: false,
+                      message: t("actions.scanTableQrToContinue"),
+                    });
+                    return;
+                  }
+                  setCallWaiterPending(true);
+                  try {
+                    const raw = await onCallWaiter({ tableNumber: effectiveTableNumber });
+                    const result = normalizeServiceResult(
+                      raw,
+                      t("actions.waiterCalled"),
+                    );
+                    setCallWaiterResult(result);
+                    if (result.ok) {
+                      window.setTimeout(() => {
+                        setCallWaiterOpen(false);
+                        setTrayOpen(false);
+                        setCallWaiterResult(null);
+                      }, 900);
+                    }
+                  } catch {
+                    setCallWaiterResult({
+                      ok: false,
+                      message: t("actions.requestFailed"),
+                    });
+                  } finally {
+                    setCallWaiterPending(false);
+                  }
+                }}
+              >
+                {callWaiterPending ? t("common.sending") : t("common.confirm")}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={requestCheckOpen}
+        onOpenChange={(open) => {
+          setRequestCheckOpen(open);
+          if (!open) setRequestCheckResult(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          overlayClassName={serviceConfirmOverlayClass}
+          className={serviceConfirmContentClass}
         >
           <DialogHeader>
             <DialogTitle>{t("actions.requestCheckTitle")}</DialogTitle>
@@ -387,105 +616,87 @@ export function SmartBottomBar({
               {t("actions.requestCheckDesc")}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex-row justify-end gap-2">
-            <Button variant="ghost" className="text-muted-foreground" onClick={() => setRequestCheckOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              className="bg-amber-500 text-black hover:bg-amber-400"
-              disabled={requestCheckPending}
-              onClick={async () => {
-                setRequestCheckPending(true);
-                try {
-                  await onRequestCheck();
-                  setRequestCheckOpen(false);
-                  setTrayOpen(false);
-                } finally {
-                  setRequestCheckPending(false);
-                }
-              }}
+          <TablePicker />
+          {requestCheckResult ? (
+            <p
+              className={`rounded-xl border px-3 py-2 text-sm ${
+                requestCheckResult.ok
+                  ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100"
+                  : "border-amber-400/35 bg-amber-500/10 text-amber-100"
+              }`}
             >
-              {requestCheckPending ? t("common.sending") : t("common.confirm")}
+              {requestCheckResult.message}
+            </p>
+          ) : null}
+          <DialogFooter className="flex-row justify-end gap-2 sm:justify-end">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => setRequestCheckOpen(false)}
+            >
+              {requestCheckResult?.ok ? t("common.close") : t("common.cancel")}
             </Button>
+            {!requestCheckResult?.ok ? (
+              <Button
+                className="bg-amber-500 text-black hover:bg-amber-400"
+                disabled={requestCheckPending || !effectiveTableNumber}
+                onClick={async () => {
+                  if (!effectiveTableNumber) {
+                    setRequestCheckResult({
+                      ok: false,
+                      message: t("actions.scanTableQrToContinue"),
+                    });
+                    return;
+                  }
+                  setRequestCheckPending(true);
+                  try {
+                    const raw = await onRequestCheck({ tableNumber: effectiveTableNumber });
+                    const result = normalizeServiceResult(
+                      raw,
+                      t("actions.checkRequested"),
+                    );
+                    setRequestCheckResult(result);
+                    if (result.ok) {
+                      window.setTimeout(() => {
+                        setRequestCheckOpen(false);
+                        setTrayOpen(false);
+                        setRequestCheckResult(null);
+                      }, 900);
+                    }
+                  } catch {
+                    setRequestCheckResult({
+                      ok: false,
+                      message: t("actions.requestFailed"),
+                    });
+                  } finally {
+                    setRequestCheckPending(false);
+                  }
+                }}
+              >
+                {requestCheckPending ? t("common.sending") : t("common.confirm")}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={splitOpen} onOpenChange={setSplitOpen}>
-        <DialogContent
-          showCloseButton={false}
-          className="bottom-0 top-auto max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-0 rounded-t-2xl border-border bg-card text-foreground"
-        >
-          <DialogHeader>
-            <DialogTitle>{t("actions.splitBillTitle")}</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {t("actions.splitBillDesc")}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-xl border border-border bg-background/60 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold text-foreground">{t("actions.splitEqually")}</p>
-              <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white">{t("common.available")}</span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border p-2">
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setSplitCount((prev) => Math.max(2, prev - 1))}
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-semibold">{t("actions.peopleCount", { count: splitCount })}</span>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setSplitCount((prev) => Math.min(8, prev + 1))}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">{t("actions.perPerson", { amount: formatEuro(perPerson) })}</p>
-          </div>
-
-          <div className="space-y-2">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl border border-border bg-background/50 px-3 py-2 text-left"
-              onClick={() => onToast(t("actions.splitByItems"), "warning")}
-            >
-              <span className="text-sm text-muted-foreground">{t("actions.splitByItems")}</span>
-              <span className="text-xs text-muted-foreground">{t("common.comingSoon")}</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl border border-border bg-background/50 px-3 py-2 text-left"
-              onClick={() => onToast(t("actions.payMyShare"), "warning")}
-            >
-              <span className="text-sm text-muted-foreground">{t("actions.payMyShare")}</span>
-              <span className="text-xs text-muted-foreground">{t("common.comingSoon")}</span>
-            </button>
-          </div>
-
-          <DialogFooter className="flex-row justify-end gap-2">
-            <Button variant="ghost" className="text-muted-foreground" onClick={() => setSplitOpen(false)}>
-              {t("common.close")}
-            </Button>
-            <Button
-              className="bg-emerald-600 text-white hover:bg-emerald-500"
-              onClick={() => {
-                onToast(t("actions.splitEquallyApplied", { count: splitCount }));
-                setSplitOpen(false);
-                setTrayOpen(false);
-              }}
-            >
-              {t("common.apply")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <GuestBillSplitDialog
+        open={splitOpen}
+        onOpenChange={(nextOpen) => {
+          setSplitOpen(nextOpen);
+          if (!nextOpen) setSplitInitialMode(null);
+        }}
+        overlayClassName={serviceConfirmOverlayClass}
+        tableNumber={linkedTableNumber}
+        storeSlug={storeSlug}
+        deviceId={guestDeviceId}
+        splitLoading={splitLoading}
+        splitError={splitError}
+        splitData={splitData}
+        initialMode={splitInitialMode}
+        onRefresh={(options) => void loadSplitBill({ silent: options?.silent ?? false })}
+        onToast={onToast}
+      />
     </>,
     portalTarget
   );

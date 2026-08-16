@@ -9,7 +9,6 @@ import { ItemDetailModal } from "@/components/mobile-ordering/menu/item-detail-m
 import { FeaturedSection } from "@/components/mobile-ordering/menu/featured-section";
 import { CartBar } from "@/components/mobile-ordering/menu/cart-bar";
 import { ContextPill } from "@/components/mobile-ordering/menu/context-pill";
-import { GuestSeatBanner } from "@/components/mobile-ordering/guest-seat-banner";
 import { GuestWelcomeSheet } from "@/components/mobile-ordering/guest-welcome-sheet";
 import type { ThemePreview } from "@/components/mobile-ordering/menu/context-pill";
 import { SmartBottomBar } from "@/components/mobile-ordering/menu/smart-bottom-bar";
@@ -19,11 +18,15 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import type { GuestCartItem, GuestMenuItem } from "@/lib/guest-menu/types";
 import { sumGuestCartItems } from "@/lib/public-menu/guest-cart-pricing";
 import { itemNeedsCustomizationBeforeQuickAdd } from "@/lib/public-menu/item-needs-customization";
+import { uniqueById } from "@/lib/promotions/promotions-category";
+import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
+import { cartQuantityForCatalogItem } from "@/lib/public-menu/guest-cart-lines";
+import { isRewardCartLine } from "@/lib/public-menu/guest-reward-cart";
 import {
   buildGuestActiveOrderConfirmationPath,
   clearGuestActiveOrder,
-  readGuestActiveOrder,
-  recoverGuestActiveOrderFromSession,
+  readGuestActiveOrders,
+  recoverGuestActiveOrdersFromSession,
   type GuestActiveOrder,
 } from "@/lib/public-menu/guest-active-order-storage";
 import {
@@ -57,6 +60,7 @@ export function GuestMenuPage() {
     setOrderType,
     setTableNumber,
     addToCart,
+    updateCartItem,
     removeFromCart,
     checkoutPath,
     orderModes,
@@ -83,7 +87,7 @@ export function GuestMenuPage() {
   const [menuTheme, setMenuTheme] = useState<ThemePreview>("classic");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [tick, setTick] = useState(0);
-  const [activeOrder, setActiveOrder] = useState<GuestActiveOrder | null>(null);
+  const [activeOrders, setActiveOrders] = useState<GuestActiveOrder[]>([]);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const isTabletUp = useMediaQuery("(min-width: 768px)");
   const cardVariant = isTabletUp ? "tile" : "row";
@@ -97,9 +101,8 @@ export function GuestMenuPage() {
   const programmaticScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setActiveOrder(
-      readGuestActiveOrder(storeSlug) ?? recoverGuestActiveOrderFromSession(storeSlug),
-    );
+    recoverGuestActiveOrdersFromSession(storeSlug);
+    setActiveOrders(readGuestActiveOrders(storeSlug));
   }, [storeSlug]);
 
   useEffect(() => {
@@ -116,30 +119,35 @@ export function GuestMenuPage() {
     setWelcomeOpen(false);
   }, [storeSlug]);
 
+  const activeOrderIds = activeOrders.map((order) => order.orderId).join(",");
+
   useEffect(() => {
-    if (!activeOrder?.orderId || !storeSlug) return;
+    if (!activeOrderIds || !storeSlug) return;
 
     let cancelled = false;
     const refresh = async () => {
-      try {
-        const params = new URLSearchParams({
-          storeSlug,
-          eta: String(activeOrder.etaMinutes),
-        });
-        const response = await fetch(
-          `/api/public/orders/${encodeURIComponent(activeOrder.orderId)}/status?${params.toString()}`,
-          { cache: "no-store" },
-        );
-        const payload = await response.json().catch(() => ({}));
-        if (cancelled || !response.ok || payload?.ok !== true) return;
-        const trackStatus = payload?.data?.trackStatus as GuestOrderTrackStatus | undefined;
-        if (trackStatus === "served" || trackStatus === "cancelled" || trackStatus === "refunded") {
-          clearGuestActiveOrder(storeSlug, activeOrder.orderId);
-          setActiveOrder(null);
+      const snapshot = readGuestActiveOrders(storeSlug);
+      for (const order of snapshot) {
+        try {
+          const params = new URLSearchParams({
+            storeSlug,
+            eta: String(order.etaMinutes),
+          });
+          const response = await fetch(
+            `/api/public/orders/${encodeURIComponent(order.orderId)}/status?${params.toString()}`,
+            { cache: "no-store" },
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (cancelled || !response.ok || payload?.ok !== true) continue;
+          const trackStatus = payload?.data?.trackStatus as GuestOrderTrackStatus | undefined;
+          if (trackStatus === "served" || trackStatus === "cancelled" || trackStatus === "refunded") {
+            clearGuestActiveOrder(storeSlug, order.orderId);
+          }
+        } catch {
+          // keep banner if status check fails
         }
-      } catch {
-        // keep banner if status check fails
       }
+      if (!cancelled) setActiveOrders(readGuestActiveOrders(storeSlug));
     };
 
     void refresh();
@@ -150,7 +158,9 @@ export function GuestMenuPage() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [activeOrder?.etaMinutes, activeOrder?.orderId, storeSlug]);
+  }, [activeOrderIds, storeSlug]);
+
+  const activeOrder = activeOrders[0] ?? null;
 
   const activeOrderPath = activeOrder
     ? buildGuestActiveOrderConfirmationPath(storeSlug, activeOrder)
@@ -201,10 +211,12 @@ export function GuestMenuPage() {
   /** + on cards: open configurator when required options exist; otherwise quick-add. */
   const handleQuickAddToCart = useCallback(
     (item: GuestMenuItem | GuestCartItem) => {
-      const existing = cart.find((entry) => entry.id === item.id);
-      // Already in cart — bump quantity with the previous configuration.
-      if (existing) {
-        addToCart(item);
+      const existingLines = cart.filter(
+        (entry) => entry.id === item.id && !isRewardCartLine(entry),
+      );
+      // Already in cart — bump quantity on the most recent configuration.
+      if (existingLines.length > 0) {
+        addToCart({ ...existingLines[existingLines.length - 1], quantity: 1 });
         return;
       }
       const groups = getCustomizationGroupsForItem(item.id);
@@ -217,6 +229,17 @@ export function GuestMenuPage() {
     [addToCart, cart, getCustomizationGroupsForItem],
   );
 
+  const handleModalAddToCart = useCallback(
+    (payload: GuestMenuItem | GuestCartItem) => {
+      if ("lineId" in payload && typeof payload.lineId === "string" && payload.lineId.length > 0) {
+        updateCartItem(payload as GuestCartItem);
+        return;
+      }
+      addToCart(payload);
+    },
+    [addToCart, updateCartItem],
+  );
+
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -227,51 +250,80 @@ export function GuestMenuPage() {
     ? Math.max(0, 60 - Math.floor((Date.now() - waiterLastCalled) / 1000))
     : 0;
 
-  const handleCallWaiter = useCallback(async () => {
-    if (orderType !== "dine-in") {
-      showToast("Waiter call is only available for dine-in", "warning");
-      return;
-    }
-    if (!tableNumber.trim()) {
-      showToast("Set your table number first", "warning");
-      return;
-    }
-    if (waiterCooldownSeconds > 0) {
-      showToast("Already notified — your waiter is on the way", "warning");
-      return;
-    }
+  const handleCallWaiter = useCallback(
+    async (options?: { tableNumber?: string }): Promise<{ ok: boolean; message: string }> => {
+      if (orderType !== "dine-in") {
+        const message = "Waiter call is only available for dine-in";
+        showToast(message, "warning");
+        return { ok: false, message };
+      }
+      const table = (options?.tableNumber ?? tableNumber).trim();
+      if (!table) {
+        const message = "Choose your table first";
+        showToast(message, "warning");
+        return { ok: false, message };
+      }
+      if (options?.tableNumber && options.tableNumber.trim() !== tableNumber.trim()) {
+        setTableNumber(options.tableNumber.trim());
+      }
+      if (waiterCooldownSeconds > 0) {
+        const message = "Already notified — your waiter is on the way";
+        showToast(message, "warning");
+        return { ok: false, message };
+      }
 
-    const result = await callTableService("waiter");
-    if (result.ok) {
-      setWaiterLastCalled(Date.now());
-      showToast(result.message || "Waiter notified ✓", "success");
-      return;
-    }
-    showToast(result.message || "Could not reach your server", "warning");
-  }, [callTableService, orderType, showToast, tableNumber, waiterCooldownSeconds]);
+      const result = await callTableService("waiter", { tableNumber: table });
+      if (result.ok) {
+        setWaiterLastCalled(Date.now());
+        showToast(result.message || "Waiter notified ✓", "success");
+        return { ok: true, message: result.message || "Waiter notified ✓" };
+      }
+      showToast(result.message || "Could not reach your server", "warning");
+      return { ok: false, message: result.message || "Could not reach your server" };
+    },
+    [
+      callTableService,
+      orderType,
+      setTableNumber,
+      showToast,
+      tableNumber,
+      waiterCooldownSeconds,
+    ],
+  );
 
-  const handleRequestCheck = useCallback(async () => {
-    if (orderType !== "dine-in") {
-      showToast("Bill request is only available for dine-in", "warning");
-      return;
-    }
-    if (!tableNumber.trim()) {
-      showToast("Set your table number first", "warning");
-      return;
-    }
-    if (checkRequested) {
-      showToast("Check already requested — your server is on the way", "warning");
-      return;
-    }
+  const handleRequestCheck = useCallback(
+    async (options?: { tableNumber?: string }): Promise<{ ok: boolean; message: string }> => {
+      if (orderType !== "dine-in") {
+        const message = "Bill request is only available for dine-in";
+        showToast(message, "warning");
+        return { ok: false, message };
+      }
+      const table = (options?.tableNumber ?? tableNumber).trim();
+      if (!table) {
+        const message = "Choose your table first";
+        showToast(message, "warning");
+        return { ok: false, message };
+      }
+      if (options?.tableNumber && options.tableNumber.trim() !== tableNumber.trim()) {
+        setTableNumber(options.tableNumber.trim());
+      }
+      if (checkRequested) {
+        const message = "Check already requested — your server is on the way";
+        showToast(message, "warning");
+        return { ok: false, message };
+      }
 
-    const result = await callTableService("bill");
-    if (result.ok) {
-      setCheckRequested(true);
-      showToast(result.message || "Bill request sent", "success");
-      return;
-    }
-    showToast(result.message || "Could not request the bill", "warning");
-  }, [callTableService, checkRequested, orderType, showToast, tableNumber]);
+      const result = await callTableService("bill", { tableNumber: table });
+      if (result.ok) {
+        setCheckRequested(true);
+        showToast(result.message || "Bill request sent", "success");
+        return { ok: true, message: result.message || "Bill request sent" };
+      }
+      showToast(result.message || "Could not request the bill", "warning");
+      return { ok: false, message: result.message || "Could not request the bill" };
+    },
+    [callTableService, checkRequested, orderType, setTableNumber, showToast, tableNumber],
+  );
 
   useEffect(() => {
     if (isSearchOpen) return;
@@ -461,19 +513,30 @@ export function GuestMenuPage() {
 
   const dineInEnabled = orderModes.dine_in?.enabled !== false;
   const pickupEnabled = orderModes.pickup?.enabled !== false;
+  const isSelfPickupMode =
+    resolveGuestSessionMode(orderModes) === "self_service";
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  // Match SmartBottomBar visibility so we don't reserve space for a bar that isn't there.
+  // Match SmartBottomBar: waiter/split tray only for delivery-to-table dine-in.
+  // Self-pickup dine-in looks like pickup (cart bar only when needed).
+  const showTableServiceUi = orderType === "dine-in" && !isSelfPickupMode;
   const showSmartBottomBar =
-    cartCount > 0 || Boolean(activeOrderPath) || orderType === "dine-in";
+    !welcomeOpen &&
+    (showTableServiceUi || cartCount > 0 || Boolean(activeOrderPath));
+  const showCartCta = cartCount > 0 || Boolean(activeOrderPath);
+  const smartBarPad = showTableServiceUi
+    ? showCartCta
+      ? "6.5rem"
+      : "5.5rem"
+    : showCartCta
+      ? "4.75rem"
+      : "1rem";
 
   return (
     <div
       className="min-h-screen"
       style={{
         paddingTop: "var(--guest-tab-bar-pad-top, 0px)",
-        paddingBottom: showSmartBottomBar
-          ? "calc(5.5rem + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))"
-          : "calc(1rem + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))",
+        paddingBottom: `calc(${smartBarPad} + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))`,
       }}
     >
       <HeroSection
@@ -504,12 +567,6 @@ export function GuestMenuPage() {
         }
       />
 
-      {orderType === "dine-in" && tableNumber.trim() ? (
-        <div className="mx-auto w-full max-w-none px-4 pt-3 lg:px-8">
-          <GuestSeatBanner />
-        </div>
-      ) : null}
-
       <div ref={tabsSentinelRef} className="h-px" aria-hidden />
 
       <div ref={stickyTabsRef} className="sticky top-0 z-(--z-sticky) isolate">
@@ -531,7 +588,7 @@ export function GuestMenuPage() {
       <div className="px-0 pt-2 lg:px-8 lg:pt-2">
         {!isSearchOpen && items.some((entry) => entry.featured) ? (
           <FeaturedSection
-            items={items.filter((entry) => entry.featured)}
+            items={uniqueById(items.filter((entry) => entry.featured))}
             cartItems={cart}
             onAddToCart={handleQuickAddToCart}
             onRemoveFromCart={removeFromCart}
@@ -593,7 +650,7 @@ export function GuestMenuPage() {
                     }
                   >
                     {categoryItems.map((item, index) => {
-                      const cartItem = cart.find((c) => c.id === item.id);
+                      const quantity = cartQuantityForCatalogItem(cart, item.id);
                       return (
                         <div key={item.id}>
                           <MenuItemCard
@@ -602,7 +659,7 @@ export function GuestMenuPage() {
                             onAddToCart={handleQuickAddToCart}
                             onRemoveFromCart={removeFromCart}
                             onItemClick={setSelectedItem}
-                            quantity={cartItem?.quantity || 0}
+                            quantity={quantity}
                           />
                           {!isTabletUp && index < categoryItems.length - 1 ? (
                             <div className="my-3 h-px bg-border" />
@@ -645,23 +702,25 @@ export function GuestMenuPage() {
           onOpenChange={(open) => {
             if (!open) setSelectedItem(null);
           }}
-          onAddToCart={addToCart}
+          onAddToCart={handleModalAddToCart}
         />
       )}
 
-      <SmartBottomBar
-        orderType={orderType}
-        cartCount={cartCount}
-        total={cartTotal}
-        waiterCooldownSeconds={waiterCooldownSeconds}
-        checkRequested={checkRequested}
-        onCallWaiter={handleCallWaiter}
-        onRequestCheck={handleRequestCheck}
-        onViewCart={() => setCartOpenSignal((prev) => prev + 1)}
-        onToast={showToast}
-        activeOrderPath={activeOrderPath}
-        activeOrderNumber={activeOrder?.orderNumber ?? null}
-      />
+      {showSmartBottomBar ? (
+        <SmartBottomBar
+          orderType={orderType}
+          cartCount={cartCount}
+          total={cartTotal}
+          waiterCooldownSeconds={waiterCooldownSeconds}
+          checkRequested={checkRequested}
+          onCallWaiter={handleCallWaiter}
+          onRequestCheck={handleRequestCheck}
+          onViewCart={() => setCartOpenSignal((prev) => prev + 1)}
+          onToast={showToast}
+          activeOrderPath={activeOrderPath}
+          activeOrderNumber={activeOrder?.orderNumber ?? null}
+        />
+      ) : null}
 
       <CartBar
         items={cart}
@@ -679,8 +738,9 @@ export function GuestMenuPage() {
         <div
           className="pointer-events-none fixed left-1/2 z-(--z-toast) w-full max-w-[320px] -translate-x-1/2 px-3"
           style={{
-            bottom:
-              "calc(4.5rem + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))",
+            bottom: showSmartBottomBar
+              ? `calc(${smartBarPad} + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))`
+              : "calc(3.25rem + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))",
           }}
         >
           <div

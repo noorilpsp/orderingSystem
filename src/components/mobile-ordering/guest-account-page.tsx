@@ -8,6 +8,7 @@ import {
   LogIn,
   LogOut,
   Receipt,
+  Settings,
   User,
 } from "lucide-react";
 import { GuestTabPage } from "@/components/mobile-ordering/guest-tab-page";
@@ -30,7 +31,18 @@ export function GuestAccountPage() {
     logoutCustomer,
   } = usePublicMenu();
 
+  const settingsHref = `/menu/${encodeURIComponent(storeSlug)}/account/settings`;
+
   const links = [
+    ...(customer
+      ? [
+          {
+            href: settingsHref,
+            labelKey: "account.settingsTitle" as const,
+            icon: Settings,
+          },
+        ]
+      : []),
     { href: rewardsPath, labelKey: "nav.rewards" as const, icon: Gift },
     { href: ordersPath, labelKey: "account.orderHistory" as const, icon: Receipt },
     {
@@ -104,7 +116,7 @@ export function GuestAccountPage() {
                 >
                   <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="flex-1">{t(link.labelKey)}</span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" />
                 </Link>
               </li>
             );

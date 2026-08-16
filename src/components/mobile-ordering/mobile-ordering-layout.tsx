@@ -27,7 +27,10 @@ export function MobileOrderingLayout({
   // Fonts come from the root layout (GeistSans / GeistMono CSS variables on <body>).
   // Do not load next/font here — Client Components get undefined `.variable` and hydrate poorly.
   return (
-    <div className="mobile-ordering-root font-sans antialiased min-h-full">
+    <div
+      className="mobile-ordering-root font-sans antialiased min-h-full"
+      suppressHydrationWarning
+    >
       {children}
     </div>
   );

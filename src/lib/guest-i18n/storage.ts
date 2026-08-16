@@ -9,8 +9,25 @@ export function isGuestLocale(value: unknown): value is GuestLocale {
   return value === "en" || value === "ar";
 }
 
-export function readStoredGuestLocale(): GuestLocale | null {
+function scopedLocaleKey(storeSlug: string): string {
+  return `${GUEST_LOCALE_STORAGE_KEY}:${storeSlug.trim()}`;
+}
+
+/**
+ * Read guest language preference.
+ * When `storeSlug` is set, only a per-store choice counts (so the merchant
+ * default language can apply for first visits to that menu).
+ */
+export function readStoredGuestLocale(storeSlug?: string | null): GuestLocale | null {
   if (typeof window === "undefined") return null;
+
+  const slug = storeSlug?.trim();
+  if (slug) {
+    const scoped = localStorage.getItem(scopedLocaleKey(slug));
+    if (isGuestLocale(scoped)) return scoped;
+    return null;
+  }
+
   const next = localStorage.getItem(GUEST_LOCALE_STORAGE_KEY);
   if (isGuestLocale(next)) return next;
 
@@ -21,8 +38,15 @@ export function readStoredGuestLocale(): GuestLocale | null {
   return null;
 }
 
-export function writeStoredGuestLocale(locale: GuestLocale): void {
+export function writeStoredGuestLocale(
+  locale: GuestLocale,
+  storeSlug?: string | null,
+): void {
   if (typeof window === "undefined") return;
+  const slug = storeSlug?.trim();
+  if (slug) {
+    localStorage.setItem(scopedLocaleKey(slug), locale);
+  }
   localStorage.setItem(GUEST_LOCALE_STORAGE_KEY, locale);
   localStorage.setItem(LEGACY_LOCALE_STORAGE_KEY, locale);
 }

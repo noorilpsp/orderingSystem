@@ -15,6 +15,9 @@ import {
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { resolveCustomizationOptionPrice } from "@/lib/public-menu/resolve-customization-option-price";
 import { useGuestT, useGuestLocale, useLocalizedCatalogText } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
+import { PromoPrice } from "@/components/shared/promo-price";
+import { lineTotalWithPromo } from "@/lib/promotions/pricing";
 import {
   resolveCatalogInstructions,
   resolveCatalogText,
@@ -74,6 +77,7 @@ export function ItemDetailModal({
 }: ItemDetailModalProps) {
   const t = useGuestT();
   const { locale, dir } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
   const { name: localizedName, description: localizedDescription } =
     useLocalizedCatalogText(
       { name: item?.name ?? "", description: item?.description },
@@ -92,11 +96,17 @@ export function ItemDetailModal({
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [dragY, setDragY] = useState(0);
+  const [isSheetDragging, setIsSheetDragging] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [attentionGroupIds, setAttentionGroupIds] = useState<string[]>([]);
   const touchStartY = useRef(0);
+  const dragYRef = useRef(0);
+  const draggingFromHandleRef = useRef(false);
+  const pullingSheetRef = useRef(false);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<HTMLDivElement>(null);
   const groupSectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const glassControlBase =
@@ -133,32 +143,99 @@ export function ItemDetailModal({
 
   const sizeSelection = selectedOptions["size"]?.[0];
 
-  // Drag handlers
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const setSheetOffset = (next: number) => {
+    dragYRef.current = next;
+    setDragY(next);
+  };
+
+  const finishSheetDrag = () => {
+    const wasPulling =
+      draggingFromHandleRef.current ||
+      pullingSheetRef.current ||
+      dragYRef.current > 0;
+    draggingFromHandleRef.current = false;
+    pullingSheetRef.current = false;
+    if (!wasPulling) return;
+    const y = dragYRef.current;
+    setIsSheetDragging(false);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (y > 100) {
+          const offscreen = Math.max(
+            typeof window !== "undefined" ? window.innerHeight : 800,
+            y + 160,
+          );
+          setSheetOffset(offscreen);
+          if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+          dismissTimerRef.current = setTimeout(() => {
+            dismissTimerRef.current = null;
+            setSheetOffset(0);
+            onOpenChange(false);
+          }, 280);
+          return;
+        }
+        setSheetOffset(0);
+      });
+    });
+  };
+
+  const handleHandleTouchStart = (e: React.TouchEvent) => {
+    if (dismissTimerRef.current) return;
+    draggingFromHandleRef.current = true;
+    pullingSheetRef.current = true;
+    setIsSheetDragging(true);
     touchStartY.current = e.touches[0].clientY;
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartY.current;
-    
-    // Only allow drag-to-close if content is at or near the top (within 5px)
-    const isScrolledToTop = scrollRef.current ? scrollRef.current.scrollTop <= 5 : true;
-    
-    if (diff > 0 && isScrolledToTop) {
-      e.preventDefault();
-      setDragY(diff);
-    }
+  const handleContentTouchStart = (e: React.TouchEvent) => {
+    if (dismissTimerRef.current) return;
+    draggingFromHandleRef.current = false;
+    pullingSheetRef.current = false;
+    touchStartY.current = e.touches[0].clientY;
   };
 
-  const handleTouchEnd = () => {
-    if (dragY > 100) {
-      setDragY(0);
-      onOpenChange(false);
-    } else {
-      setDragY(0);
-    }
-  };
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleEl = handleRef.current;
+    const scrollEl = scrollRef.current;
+
+    const onHandleMove = (event: TouchEvent) => {
+      if (!draggingFromHandleRef.current) return;
+      const diff = event.touches[0].clientY - touchStartY.current;
+      if (diff > 0) {
+        event.preventDefault();
+        setSheetOffset(diff);
+      }
+    };
+
+    const onScrollMove = (event: TouchEvent) => {
+      if (draggingFromHandleRef.current) return;
+      const diff = event.touches[0].clientY - touchStartY.current;
+      const atTop = !scrollEl || scrollEl.scrollTop <= 5;
+      if (!pullingSheetRef.current) {
+        if (!(atTop && diff > 6)) return;
+        pullingSheetRef.current = true;
+        setIsSheetDragging(true);
+      }
+      if (diff > 0) {
+        event.preventDefault();
+        setSheetOffset(diff);
+      }
+    };
+
+    handleEl?.addEventListener("touchmove", onHandleMove, { passive: false });
+    scrollEl?.addEventListener("touchmove", onScrollMove, { passive: false });
+    return () => {
+      handleEl?.removeEventListener("touchmove", onHandleMove);
+      scrollEl?.removeEventListener("touchmove", onScrollMove);
+    };
+  }, [open, mounted]);
 
   // Calculate conditional max selections for toppings
   const effectiveGroups = useMemo(() => {
@@ -228,8 +305,13 @@ export function ItemDetailModal({
       }
     });
 
-    return (basePrice + addOnsPrice) * quantity;
-  }, [selectedOptions, sauceQuantities, sizeSelection, quantity, item?.price, customizationGroups]);
+    return lineTotalWithPromo({
+      kind: item?.promoKind,
+      unitBasePrice: basePrice,
+      addOnsTotalPerUnit: addOnsPrice,
+      quantity,
+    });
+  }, [selectedOptions, sauceQuantities, sizeSelection, quantity, item?.price, item?.promoKind, customizationGroups]);
 
   const incompleteRequiredGroupIds = useMemo(() => {
     return effectiveGroups
@@ -329,7 +411,14 @@ export function ItemDetailModal({
   const modal = (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-[1000] bg-black/50" aria-hidden />
+      <div
+        className="fixed inset-0 z-[1000] bg-black/50"
+        aria-hidden
+        style={{
+          opacity: Math.max(0, 1 - dragY / 420),
+          transition: isSheetDragging ? "none" : "opacity 0.28s ease-out",
+        }}
+      />
 
       {/* Bottom Sheet / centered dialog on tablet+ */}
       <div
@@ -346,7 +435,7 @@ export function ItemDetailModal({
           className="item-modal-surface liquid-glass relative flex h-[98vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-border/70 bg-card/90 shadow-2xl shadow-black/35 backdrop-blur-xl will-change-transform md:h-auto md:max-h-[min(90vh,52rem)] md:rounded-3xl"
           style={{ 
             transform: `translateY(${dragY}px)`,
-            transition: dragY > 0 ? "none" : "all 0.3s ease-out",
+            transition: isSheetDragging ? "none" : "transform 0.28s ease-out",
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -354,10 +443,11 @@ export function ItemDetailModal({
           <div className="relative z-20 flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-3" dir="ltr">
             <div className="h-10 w-10 shrink-0" aria-hidden />
             <div
+              ref={handleRef}
               className="flex flex-1 touch-none items-center justify-center py-2 md:pointer-events-none"
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
+              onTouchStart={handleHandleTouchStart}
+              onTouchEnd={finishSheetDrag}
+              onTouchCancel={finishSheetDrag}
             >
               <div className="flex h-1 w-12 rounded-full bg-border md:hidden" />
             </div>
@@ -374,9 +464,9 @@ export function ItemDetailModal({
           {/* Scrollable Content */}
           <div 
             ref={scrollRef}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            onTouchStart={handleContentTouchStart}
+            onTouchEnd={finishSheetDrag}
+            onTouchCancel={finishSheetDrag}
             className="menu-item-controls flex-1 overflow-y-auto px-4 pb-24"
           >
             {/* Image */}
@@ -398,10 +488,15 @@ export function ItemDetailModal({
               {/* Price and Tags Row */}
               <div className="mt-2 flex items-center gap-2">
                 {/* Base Price */}
-                {item?.price && (
-                  <p className="text-sm font-semibold text-foreground">
-                    €{item.price.toFixed(2)}
-                  </p>
+                {item?.price != null && (
+                  <PromoPrice
+                    price={item.price}
+                    compareAtPrice={item.compareAtPrice}
+                    promoKind={item.promoKind}
+                    formatMoney={formatMoney}
+                    bogoLabel={t("menu.bogo")}
+                    className="text-sm text-foreground"
+                  />
                 )}
 
                 {/* Tags */}
@@ -514,7 +609,7 @@ export function ItemDetailModal({
                                     {resolveCatalogText(locale, { name: option.name }, option.i18n).name}
                                   </p>
                                   <p className="mt-0.5 text-xs text-muted-foreground">
-                                    +€{option.price.toFixed(2)}
+                                    +{formatMoney(option.price)}
                                   </p>
                                 </div>
                                 <div
@@ -659,7 +754,7 @@ export function ItemDetailModal({
                         const displayPrice =
                           optionPrice === 0
                             ? t("item.included")
-                            : `+€${optionPrice.toFixed(2)}`;
+                            : `+${formatMoney(optionPrice)}`;
 
                         return (
                           <div key={option.id}>
@@ -782,7 +877,7 @@ export function ItemDetailModal({
               onClick={handleAddToCart}
               className="sheen-overlay relative flex min-h-12 w-full items-center justify-center rounded-xl border border-white/26 bg-black/78 px-4 py-3 text-white backdrop-blur-2xl shadow-[0_14px_30px_rgba(0,0,0,0.42)] ring-1 ring-white/10 transition-transform duration-200 hover:bg-black/84 active:scale-[0.99] dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
             >
-              {t("item.addToCartPrice", { price: `€${totalPrice.toFixed(2)}` })}
+              {t("item.addToCartPrice", { price: formatMoney(totalPrice) })}
             </Button>
           </div>
         </div>

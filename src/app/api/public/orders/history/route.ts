@@ -16,7 +16,12 @@ export async function GET(request: NextRequest) {
       return posFailure("BAD_REQUEST", "storeSlug is required", { status: 400 });
     }
 
-    const result = await getGuestOrderHistory(storeSlug);
+    const limitParam = request.nextUrl.searchParams.get("limit");
+    const offsetParam = request.nextUrl.searchParams.get("offset");
+    const result = await getGuestOrderHistory(storeSlug, {
+      limit: limitParam != null ? Number(limitParam) : undefined,
+      offset: offsetParam != null ? Number(offsetParam) : undefined,
+    });
     if (!result.ok) {
       const status = result.code === "NOT_FOUND" ? 404 : 400;
       return posFailure(result.code, result.message, { status });
@@ -25,6 +30,7 @@ export async function GET(request: NextRequest) {
     const response = posSuccess({
       signedIn: result.signedIn,
       orders: result.orders,
+      total: result.total,
     });
     response.headers.set("Cache-Control", "no-store, must-revalidate");
     return response;

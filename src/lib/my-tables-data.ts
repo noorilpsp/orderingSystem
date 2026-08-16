@@ -1,5 +1,7 @@
 // ── Types ────────────────────────────────────────────────────────────────────
 
+import { formatMerchantMoney } from "@/lib/merchant-localization"
+
 export type MyTableStatus = "urgent" | "warning" | "active" | "good" | "new"
 export type WaveType = "drinks" | "food" | "dessert"
 export type WaveProgressStatus = "served" | "ready" | "preparing" | "held"
@@ -235,8 +237,12 @@ export function minutesAgo(iso: string): number {
   return Math.round((Date.now() - new Date(iso).getTime()) / 60000)
 }
 
-export function formatCurrency(amount: number): string {
-  return `\u20AC${amount.toFixed(2)}`
+export function formatCurrency(
+  amount: number,
+  currency: string = "EUR",
+  numberFormat?: string | null,
+): string {
+  return formatMerchantMoney(amount, { currency, numberFormat })
 }
 
 export function sortTablesByAttention(tables: MyTable[]): MyTable[] {

@@ -1,5 +1,6 @@
 "use client"
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AlertTriangle, ArrowLeft, CheckCircle2, Minus, Plus, Users } from "lucide-react"
@@ -16,7 +17,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { formatCurrency } from "@/lib/table-data"
 import type { OrderItem, Seat } from "@/lib/table-data"
 
 interface PaymentModalProps {
@@ -167,6 +167,7 @@ export function PaymentModal({
   outstandingItems = null,
   onComplete,
 }: PaymentModalProps) {
+  const { formatMoney } = useMerchantLocalization()
   const contextLabel = contextName ?? `Table ${tableNumber}`
   const contextSharedLabel = `${contextLabel} Shared`
   const contextChipLabel = contextChip ?? `T${tableNumber}`
@@ -710,7 +711,7 @@ export function PaymentModal({
                 </span>
               )}
               {outstandingItems.reason === "unpaid_balance" && outstandingItems.remaining != null && (
-                <span>Unpaid balance: {formatCurrency(outstandingItems.remaining)}</span>
+                <span>Unpaid balance: {formatMoney(outstandingItems.remaining)}</span>
               )}
               {outstandingItems.reason === "session_not_open" && (
                 <span>Session is not open</span>
@@ -768,7 +769,7 @@ export function PaymentModal({
                   <div className="text-sm text-emerald-100/85">Charge the entire table in one payment</div>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-xs uppercase tracking-wide text-emerald-200/80">One Bill Total</span>
-                    <span className="text-2xl font-semibold text-emerald-100">{formatCurrency(subtotal)}</span>
+                    <span className="text-2xl font-semibold text-emerald-100">{formatMoney(subtotal)}</span>
                   </div>
                 </div>
               </TabsContent>
@@ -779,7 +780,7 @@ export function PaymentModal({
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-semibold text-emerald-100">Payment confirmed</div>
                       <div className="text-sm font-semibold text-emerald-100">
-                        {formatCurrency(bySeatRoundConfirmation.amount)}
+                        {formatMoney(bySeatRoundConfirmation.amount)}
                       </div>
                     </div>
                     <div className="mt-1 text-xs text-emerald-100/80">
@@ -840,7 +841,7 @@ export function PaymentModal({
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Selected to charge now</span>
                     <span className="font-semibold text-cyan-200">
-                      {formatCurrency(includedBySeatCharges.reduce((sum, row) => sum + row.amount, 0))}
+                      {formatMoney(includedBySeatCharges.reduce((sum, row) => sum + row.amount, 0))}
                     </span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
@@ -882,7 +883,7 @@ export function PaymentModal({
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-cyan-100/80">Per person</span>
                     <span className="text-lg font-semibold text-cyan-100">
-                      {formatCurrency(equalPayers > 0 ? subtotal / equalPayers : subtotal)}
+                      {formatMoney(equalPayers > 0 ? subtotal / equalPayers : subtotal)}
                     </span>
                   </div>
                 </div>
@@ -900,7 +901,7 @@ export function PaymentModal({
                         className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1 text-xs"
                       >
                         <span className="font-semibold text-cyan-100">{payer.label}</span>
-                        <span className="text-cyan-100/70">{formatCurrency(payerTotals[payer.id] ?? 0)}</span>
+                        <span className="text-cyan-100/70">{formatMoney(payerTotals[payer.id] ?? 0)}</span>
                         {payers.length > 1 && (
                           <button
                             type="button"
@@ -970,7 +971,7 @@ export function PaymentModal({
                               {line.seatNumber === 0 ? contextChipLabel : `S${line.seatNumber}`}
                             </span>
                           </div>
-                          <div className="text-xs text-muted-foreground">{formatCurrency(line.price)}</div>
+                          <div className="text-xs text-muted-foreground">{formatMoney(line.price)}</div>
                         </div>
                         <div className={cn("text-xs font-semibold", unassigned ? "text-red-300" : "text-emerald-300")}>
                           {unassigned ? "Unassigned" : "Assigned"}
@@ -1047,7 +1048,7 @@ export function PaymentModal({
                                         <Minus className="h-3 w-3" />
                                       </Button>
                                       <span className="w-20 text-center text-[11px] text-muted-foreground">
-                                        {pct}% · {formatCurrency((line.price * shares) / totalShares)}
+                                        {pct}% · {formatMoney((line.price * shares) / totalShares)}
                                       </span>
                                       <Button
                                         variant="ghost"
@@ -1092,7 +1093,7 @@ export function PaymentModal({
             <DialogFooter className="mt-4">
               <div className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <span className="text-sm text-muted-foreground">Planned Total</span>
-                <span className="text-lg font-semibold">{formatCurrency(checkoutSubtotal)}</span>
+                <span className="text-lg font-semibold">{formatMoney(checkoutSubtotal)}</span>
               </div>
               <div className="flex w-full gap-2">
                 <Button
@@ -1107,7 +1108,7 @@ export function PaymentModal({
                   disabled={!canReviewCheckout || cannotCloseSession}
                 >
                   {mode === "one-bill"
-                    ? `Charge Now ${formatCurrency(subtotal)}`
+                    ? `Charge Now ${formatMoney(subtotal)}`
                     : mode === "by-seat"
                       ? `Review & Charge ${includedBySeatCharges.length} Seat${includedBySeatCharges.length === 1 ? "" : "s"}`
                       : "Review & Charge"}
@@ -1138,7 +1139,7 @@ export function PaymentModal({
                     </div>
                     <div className="mt-1 flex items-center justify-between">
                       <span className="text-muted-foreground">Remaining</span>
-                      <span className="font-semibold text-cyan-100">{formatCurrency(equalRemainingTotal)}</span>
+                      <span className="font-semibold text-cyan-100">{formatMoney(equalRemainingTotal)}</span>
                     </div>
                   </div>
                   {equalPersonPayments.map((payment) => {
@@ -1277,7 +1278,7 @@ export function PaymentModal({
                                             : "border-cyan-300/35 bg-transparent text-cyan-100/85 hover:bg-cyan-500/15"
                                         )}
                                       >
-                                        {formatCurrency(amount)}
+                                        {formatMoney(amount)}
                                       </button>
                                     )
                                   })}
@@ -1304,7 +1305,7 @@ export function PaymentModal({
                                 <div className="mt-2 rounded-md border border-white/10 bg-black/25 px-2.5 py-2 text-xs">
                                   <div className="flex items-center justify-between text-muted-foreground">
                                     <span>Cash Received</span>
-                                    <span className="font-semibold text-foreground">{formatCurrency(cashReceivedAmount)}</span>
+                                    <span className="font-semibold text-foreground">{formatMoney(cashReceivedAmount)}</span>
                                   </div>
                                   <div
                                     className={cn(
@@ -1314,7 +1315,7 @@ export function PaymentModal({
                                   >
                                     <span>{cashRemainingAmount > 0 ? "Still Needed" : "Give Back"}</span>
                                     <span>
-                                      {formatCurrency(
+                                      {formatMoney(
                                         cashRemainingAmount > 0 ? cashRemainingAmount : cashChangeAmount
                                       )}
                                     </span>
@@ -1325,15 +1326,15 @@ export function PaymentModal({
                             <div className="mt-2 space-y-1 rounded-md border border-white/10 bg-black/25 px-2.5 py-2 text-sm">
                               <div className="flex items-center justify-between text-muted-foreground">
                                 <span>Subtotal</span>
-                                <span>{formatCurrency(payment.subtotal)}</span>
+                                <span>{formatMoney(payment.subtotal)}</span>
                               </div>
                               <div className="flex items-center justify-between text-muted-foreground">
                                 <span>Tip</span>
-                                <span>{formatCurrency(tip)}</span>
+                                <span>{formatMoney(tip)}</span>
                               </div>
                               <div className="flex items-center justify-between font-semibold">
                                 <span>Total</span>
-                                <span>{formatCurrency(total)}</span>
+                                <span>{formatMoney(total)}</span>
                               </div>
                             </div>
                             <div className="mt-2">
@@ -1343,8 +1344,8 @@ export function PaymentModal({
                                 disabled={!canCharge || cannotCloseSession}
                               >
                                 {payment.method === "cash"
-                                  ? `Collect ${formatCurrency(currentTotal)}`
-                                  : `Charge ${payment.label} ${formatCurrency(currentTotal)}`}
+                                  ? `Collect ${formatMoney(currentTotal)}`
+                                  : `Charge ${payment.label} ${formatMoney(currentTotal)}`}
                               </Button>
                             </div>
                           </>
@@ -1446,7 +1447,7 @@ export function PaymentModal({
                               : "border-cyan-300/35 bg-transparent text-cyan-100/85 hover:bg-cyan-500/15"
                           )}
                         >
-                          {formatCurrency(amount)}
+                          {formatMoney(amount)}
                         </button>
                       )
                     })}
@@ -1470,28 +1471,28 @@ export function PaymentModal({
                   {settlementCharges.map((charge) => (
                     <div key={charge.label} className="flex items-center justify-between text-muted-foreground">
                       <span>{charge.label}</span>
-                      <span>{formatCurrency(charge.amount)}</span>
+                      <span>{formatMoney(charge.amount)}</span>
                     </div>
                   ))}
                 </div>
                 <div className="mt-3 border-t border-white/10 pt-2">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>{formatCurrency(checkoutSubtotal)}</span>
+                    <span>{formatMoney(checkoutSubtotal)}</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between">
                     <span className="text-muted-foreground">Tip</span>
-                    <span>{formatCurrency(tipAmount)}</span>
+                    <span>{formatMoney(tipAmount)}</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-base font-semibold">
                     <span>Total to Charge</span>
-                    <span>{formatCurrency(checkoutTotal)}</span>
+                    <span>{formatMoney(checkoutTotal)}</span>
                   </div>
                   {method === "cash" && (
                     <div className="mt-2 rounded-md border border-white/10 bg-black/25 px-3 py-2.5">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Cash Received</span>
-                        <span className="font-semibold text-foreground">{formatCurrency(cashReceivedAmount)}</span>
+                        <span className="font-semibold text-foreground">{formatMoney(cashReceivedAmount)}</span>
                       </div>
                       <div
                         className={cn(
@@ -1501,7 +1502,7 @@ export function PaymentModal({
                       >
                         <span>{cashRemainingAmount > 0 ? "Still Needed" : "Give Back"}</span>
                         <span>
-                          {formatCurrency(
+                          {formatMoney(
                             cashRemainingAmount > 0 ? cashRemainingAmount : cashChangeAmount
                           )}
                         </span>
@@ -1534,7 +1535,7 @@ export function PaymentModal({
                   onClick={handleCharge}
                   disabled={!canChargeCheckout || cannotCloseSession}
                 >
-                  {method === "cash" ? `Collect ${formatCurrency(checkoutTotal)}` : `Charge ${formatCurrency(checkoutTotal)}`}
+                  {method === "cash" ? `Collect ${formatMoney(checkoutTotal)}` : `Charge ${formatMoney(checkoutTotal)}`}
                 </Button>
               )}
             </DialogFooter>
@@ -1557,7 +1558,7 @@ export function PaymentModal({
                 <div key={`${charge.label}-${index}`} className="rounded-lg border border-white/10 bg-black/20 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold text-foreground">{charge.label}</span>
-                    <span className="text-sm font-semibold text-cyan-100">{formatCurrency(charge.amount)}</span>
+                    <span className="text-sm font-semibold text-cyan-100">{formatMoney(charge.amount)}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="ghost" className="border border-white/10 bg-transparent hover:bg-black/20">
@@ -1635,7 +1636,7 @@ export function PaymentModal({
             <div className="absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 bg-[linear-gradient(90deg,transparent_0%,rgba(34,211,238,0.2)_40%,rgba(16,185,129,0.26)_52%,rgba(34,211,238,0.2)_64%,transparent_100%)] animate-charge-scan" />
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-emerald-300/35 bg-black/45 px-5 py-2 text-center backdrop-blur-md animate-charge-core">
               <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/80">Payment Synced</div>
-              <div className="text-lg font-semibold text-emerald-100">{formatCurrency(chargeBlast.amount)}</div>
+              <div className="text-lg font-semibold text-emerald-100">{formatMoney(chargeBlast.amount)}</div>
             </div>
           </div>
         ) : null}
@@ -1676,7 +1677,7 @@ function SettlementRow({
               </span>
             ) : null}
           </div>
-          <div className="text-sm text-muted-foreground">{formatCurrency(amount)}</div>
+          <div className="text-sm text-muted-foreground">{formatMoney(amount)}</div>
         </div>
         <div className="flex items-center gap-2">
           <Button

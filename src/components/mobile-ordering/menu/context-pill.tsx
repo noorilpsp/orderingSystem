@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ChevronDown, Edit3, MoonStar, Package, Sparkles, Sun, X } from "lucide-react";
+import { ChevronDown, MoonStar, Package, Sparkles, Sun, UtensilsCrossed, X } from "lucide-react";
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { useGuestLocale, translateGuestMessage, type GuestLocale } from "@/lib/guest-i18n";
+import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 
 type OrderType = "dine-in" | "pickup";
 export type ThemePreview = "classic" | "night" | "vivid";
@@ -31,18 +31,22 @@ export function ContextPill({
   theme,
   onThemeChange,
   onOrderTypeChange,
-  onTableNumberChange,
+  onTableNumberChange: _onTableNumberChange,
   onToast,
   compact = false,
   className,
 }: ContextPillProps) {
   const publicMenu = usePublicMenuOptional();
-  const { locale, setLocale, t } = useGuestLocale();
+  const { locale, setLocale, availableLocales, t } = useGuestLocale();
   const pickupInstructions =
     publicMenu?.orderModes?.pickup?.instructions?.trim() ?? "";
+  const guestSeat = publicMenu?.guestSeat ?? null;
+  const guestSeatLoading = publicMenu?.guestSeatLoading ?? false;
+  const tableLocked = publicMenu?.tableLocked ?? false;
+  const isSelfService =
+    resolveGuestSessionMode(publicMenu?.orderModes) === "self_service";
+  const showLanguageSwitcher = availableLocales.length > 1;
   const [expanded, setExpanded] = useState(false);
-  const [editingTable, setEditingTable] = useState(false);
-  const [draftTable, setDraftTable] = useState(tableNumber);
   const [activeTheme, setActiveTheme] = useState<ThemePreview>(theme ?? "classic");
 
   // Keep local state aligned when parent controls the theme.
@@ -80,19 +84,6 @@ export function ContextPill({
     onToast(label);
   };
 
-  useEffect(() => {
-    setDraftTable(tableNumber);
-  }, [tableNumber]);
-
-  const saveTable = () => {
-    const cleaned = draftTable.trim().replace(/\D+/g, "");
-    if (!cleaned) return;
-    onTableNumberChange(cleaned);
-    onToast(t("context.tableUpdated", { number: cleaned }));
-    setEditingTable(false);
-    setExpanded(false);
-  };
-
   const handleLocaleChange = (next: GuestLocale) => {
     setLocale(next);
     onToast(
@@ -103,6 +94,13 @@ export function ContextPill({
   };
 
   const isDineIn = orderType === "dine-in";
+  const hasTableSelected = tableNumber.trim().length > 0;
+  const dineInEnabled = publicMenu?.orderModes?.dine_in?.enabled !== false;
+  const pickupEnabled = publicMenu?.orderModes?.pickup?.enabled !== false;
+  const canSwitchToPickup = isDineIn && pickupEnabled;
+  // Delivery-to-table: table comes from QR — don't offer "switch to dine-in".
+  // Self-pickup: guests may switch between counter dine-in and pickup.
+  const canSwitchToDineIn = !isDineIn && dineInEnabled && isSelfService;
   const secondaryLabelClass = "font-normal text-white/75 dark:text-blue-200/80 vivid:text-white/80";
 
   return (
@@ -121,7 +119,6 @@ export function ContextPill({
           className="context-pill-backdrop fixed inset-0 z-[calc(var(--z-popover)-1)] bg-black/20"
           onClick={() => {
             setExpanded(false);
-            setEditingTable(false);
           }}
         />
       )}
@@ -174,6 +171,17 @@ export function ContextPill({
                     <span className="font-semibold text-white dark:text-blue-100 vivid:text-white">
                       {t("context.tableNumber", { number: tableNumber })}
                     </span>
+                    {guestSeat?.seatNumber != null && guestSeat.seatNumber > 0 ? (
+                      <span className="font-semibold text-white dark:text-blue-100 vivid:text-white">
+                        {" · "}
+                        S{guestSeat.seatNumber}
+                      </span>
+                    ) : guestSeatLoading ? (
+                      <span className={secondaryLabelClass}>
+                        {" · "}
+                        …
+                      </span>
+                    ) : null}
                     {checkRequested ? (
                       <span className={secondaryLabelClass}>
                         {" · "}
@@ -216,7 +224,6 @@ export function ContextPill({
             onClick={(event) => {
               event.stopPropagation();
               setExpanded((prev) => !prev);
-              if (expanded) setEditingTable(false);
             }}
           >
             {expanded ? (
@@ -299,11 +306,10 @@ export function ContextPill({
               </div>
             </div>
 
-            {isDineIn ? (
+            {canSwitchToPickup ? (
               <Button
                 type="button"
-                variant="ghost"
-                className="mt-1 h-12 w-full justify-start gap-3 rounded-lg px-2 text-white hover:bg-white/10 dark:text-blue-100 dark:hover:bg-blue-800/35 vivid:text-white vivid:hover:bg-white/10"
+                className="mt-2 h-11 w-full justify-center gap-2 rounded-xl border border-amber-300/45 bg-amber-500/25 text-sm font-semibold text-amber-50 shadow-[0_8px_20px_rgba(245,158,11,0.18)] hover:bg-amber-500/35 dark:border-amber-300/40 dark:bg-amber-500/20 dark:text-amber-50 dark:hover:bg-amber-500/30 vivid:border-amber-200/55 vivid:bg-amber-400/30 vivid:text-white"
                 onClick={() => {
                   onOrderTypeChange("pickup");
                   onToast(t("context.switchedToPickup"));
@@ -315,55 +321,41 @@ export function ContextPill({
               </Button>
             ) : null}
 
-            {isDineIn ? (
-              !editingTable ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-12 w-full justify-start gap-3 rounded-lg px-2 text-white hover:bg-white/10 dark:text-blue-100 dark:hover:bg-blue-800/35 vivid:text-white vivid:hover:bg-white/10"
-                  onClick={() => setEditingTable(true)}
-                >
-                  <Edit3 className="h-4 w-4" />
-                  <span>{t("context.editTable")}</span>
-                </Button>
-              ) : (
-                <div className="rounded-lg border border-white/22 bg-black/34 p-2 dark:border-blue-300/22 dark:bg-blue-950/35 vivid:border-white/45 vivid:bg-black/35">
-                  <div className="mb-2 flex items-center gap-2 text-sm text-white dark:text-blue-100 vivid:text-white">
-                    <Edit3 className="h-4 w-4" />
-                    <span>{t("context.table")}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      aria-label={t("context.table")}
-                      inputMode="numeric"
-                      autoFocus
-                      value={draftTable}
-                      onChange={(event) => setDraftTable(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          saveTable();
-                        }
-                      }}
-                      className="h-10 border-white/25 bg-black/45 text-white placeholder:text-white/50 dark:border-blue-300/25 dark:bg-blue-950/45 dark:text-blue-100 vivid:border-white/35 vivid:bg-black/55 vivid:text-white vivid:placeholder:text-white/55"
-                    />
-                    <Button
-                      type="button"
-                      className="h-10 bg-emerald-600 text-white hover:bg-emerald-500"
-                      onClick={saveTable}
-                    >
-                      {t("common.save")}
-                    </Button>
-                  </div>
-                </div>
-              )
+            {canSwitchToDineIn ? (
+              <Button
+                type="button"
+                className="mt-2 h-11 w-full justify-center gap-2 rounded-xl border border-emerald-300/45 bg-emerald-500/25 text-sm font-semibold text-emerald-50 shadow-[0_8px_20px_rgba(16,185,129,0.18)] hover:bg-emerald-500/35 dark:border-emerald-300/40 dark:bg-emerald-500/20 dark:text-emerald-50 dark:hover:bg-emerald-500/30 vivid:border-emerald-200/55 vivid:bg-emerald-400/30 vivid:text-white"
+                onClick={() => {
+                  onOrderTypeChange("dine-in");
+                  onToast(t("context.switchedToDineIn"));
+                  setExpanded(false);
+                }}
+              >
+                <UtensilsCrossed className="h-4 w-4" />
+                <span>{t("context.switchToDineIn")}</span>
+              </Button>
             ) : null}
 
+            {isDineIn && tableLocked && hasTableSelected ? (
+              <p className="mt-2 rounded-xl border border-white/22 bg-black/34 px-3 py-2.5 text-xs text-white/75 dark:border-blue-300/22 dark:bg-blue-950/35 dark:text-blue-200/80 vivid:border-white/45 vivid:bg-black/35 vivid:text-white/80">
+                {guestSeat?.seatNumber != null && guestSeat.seatNumber > 0
+                  ? t("context.tableLockedHint", {
+                      number: tableNumber.trim(),
+                      seat: guestSeat.seatNumber,
+                    })
+                  : t("context.tableLockedHintNoSeat", {
+                      number: tableNumber.trim(),
+                    })}
+              </p>
+            ) : null}
+
+            {showLanguageSwitcher ? (
             <div className="mt-1 rounded-lg border border-white/22 bg-black/34 p-2 dark:border-blue-300/22 dark:bg-blue-950/35 vivid:border-white/45 vivid:bg-black/35">
               <div className="mb-2 text-xs font-medium text-white/75 dark:text-blue-200/80 vivid:text-white/80">
                 {t("locale.label")}
               </div>
               <div className="flex gap-2">
+                {availableLocales.includes("en") ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -382,6 +374,8 @@ export function ContextPill({
                 >
                   {t("locale.english")}
                 </Button>
+                ) : null}
+                {availableLocales.includes("ar") ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -400,8 +394,10 @@ export function ContextPill({
                 >
                   {t("locale.arabic")}
                 </Button>
+                ) : null}
               </div>
             </div>
+            ) : null}
 
             {!isDineIn && pickupInstructions ? (
               <div className="mt-1 rounded-lg px-2 py-2 text-sm text-white/75 dark:text-blue-200/80 vivid:text-white/80">

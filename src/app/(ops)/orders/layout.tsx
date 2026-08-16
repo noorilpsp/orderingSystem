@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import type { ReactNode } from "react"
 
 import { OpsTablesAttr } from "@/components/navigation/ops-tables-attr"
+import { StaffLocaleProvider } from "@/lib/ops-i18n"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter-ops" })
 
@@ -29,9 +30,11 @@ export const metadata: Metadata = {
 
 export default function OrdersLayout({ children }: { children: ReactNode }) {
   return (
-    <div className={`ops-tables-root dark h-dvh bg-zinc-950 text-zinc-100 font-sans antialiased ${inter.variable}`}>
-      <OpsTablesAttr fontVariableClass={inter.variable} />
-      <div className="h-full min-h-0 overflow-hidden">{children}</div>
-    </div>
+    <StaffLocaleProvider>
+      <div className={`ops-tables-root dark h-dvh bg-zinc-950 text-zinc-100 font-sans antialiased ${inter.variable}`}>
+        <OpsTablesAttr fontVariableClass={inter.variable} />
+        <div className="h-full min-h-0 overflow-hidden">{children}</div>
+      </div>
+    </StaffLocaleProvider>
   )
 }

@@ -11,6 +11,7 @@ import {
   type LoyaltySettings,
 } from "@/lib/db/schema/merchants";
 import type { PublicMenuReward } from "@/lib/public-menu/types";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 
 export type LoyaltyRedeemSelection = {
   rewardId: string | null;
@@ -32,11 +33,12 @@ type LoyaltyRedeemSectionProps = {
 function previewRewardDiscount(
   reward: PublicMenuReward,
   subtotal: number,
+  formatMoney: (amount: number) => string,
 ): { label: string; amount: number } {
   switch (reward.kind) {
     case "fixed_off": {
       const amount = Math.min(Number(reward.discountAmount ?? 0), subtotal);
-      return { label: `−€${amount.toFixed(2)} off`, amount };
+      return { label: `−${formatMoney(amount)} off`, amount };
     }
     case "percent_off": {
       const raw = (subtotal * (reward.percentOff ?? 0)) / 100;
@@ -45,7 +47,7 @@ function previewRewardDiscount(
         Number(reward.maxDiscountAmount ?? 0),
         subtotal,
       );
-      return { label: `−€${amount.toFixed(2)} off`, amount };
+      return { label: `−${formatMoney(amount)} off`, amount };
     }
     case "free_item":
       return {
@@ -69,6 +71,7 @@ export function LoyaltyRedeemSection({
   selection,
   onSelectionChange,
 }: LoyaltyRedeemSectionProps) {
+  const { formatMoney } = useGuestLocalization();
   const allowWallet = loyaltySettings.allowOpenWalletRedeem !== false;
   const affordableRewards = useMemo(
     () => rewards.filter((reward) => reward.pointsCost <= balance),
@@ -78,7 +81,7 @@ export function LoyaltyRedeemSection({
   const normalizedSettings = useMemo(
     () => ({
       enabled: loyaltySettings.enabled !== false,
-      pointsScope: "merchant" as const,
+      pointsScope: "location" as const,
       pointsPerDollar: 10,
       redeemPointsPerDollarOff:
         typeof loyaltySettings.redeemPointsPerDollarOff === "number" &&
@@ -98,7 +101,7 @@ export function LoyaltyRedeemSection({
   const selectedReward =
     affordableRewards.find((reward) => reward.id === selection.rewardId) ?? null;
   const rewardPreview = selectedReward
-    ? previewRewardDiscount(selectedReward, subtotal)
+    ? previewRewardDiscount(selectedReward, subtotal, formatMoney)
     : null;
 
   const [useWallet, setUseWallet] = useState(
@@ -247,7 +250,7 @@ export function LoyaltyRedeemSection({
               />
               {selection.pointsToRedeem > 0 ? (
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                  −€{walletDiscount.toFixed(2)} off this order
+                  −{formatMoney(walletDiscount)} off this order
                 </p>
               ) : null}
             </div>

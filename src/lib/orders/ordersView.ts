@@ -3,6 +3,8 @@
  * Unified read model for the Orders ops page (table + pickup + delivery).
  */
 
+import type { CatalogI18n } from "@/lib/catalog-i18n";
+
 export type OrdersOrderSource = "table" | "pickup" | "dine_in_no_table";
 
 export type OrdersUnifiedStatus =
@@ -42,14 +44,27 @@ export interface OrdersUnifiedOrder {
   itemCount: number;
   items: Array<{
     id: string;
+    /** English snapshot name from the order line. */
     name: string;
+    /** Catalog item id when the snapshot still points at a live menu item. */
+    itemId?: string | null;
+    /** Catalog locale overrides (Arabic). Names are resolved at render. */
+    i18n?: CatalogI18n | null;
     qty: number;
     status: string;
     price: number;
     notes?: string | null;
+    /** Seat number for delivery-to-table (split bill). */
+    seatNumber?: number | null;
+    /** Optional guest name on that seat. */
+    seatGuestName?: string | null;
     customizations?: Array<{
       groupName: string;
       optionName: string;
+      groupId?: string | null;
+      optionId?: string | null;
+      groupI18n?: CatalogI18n | null;
+      optionI18n?: CatalogI18n | null;
       optionPrice: number;
       quantity: number;
     }>;
@@ -61,6 +76,10 @@ export interface OrdersUnifiedOrder {
   sessionId?: string;
   /** For pickup/delivery: order id for mutations */
   orderId?: string;
+  /** Session wave number for delivery-to-table tickets (kitchen fire). */
+  waveNumber?: number;
+  /** When this row is a rolled-up table check, underlying order ids. */
+  memberOrderIds?: string[];
   note?: string;
   /** Epoch ms guest requested pickup time, if scheduled. */
   scheduledPickupAt?: number | null;
@@ -73,6 +92,21 @@ export interface OrdersUnifiedOrder {
    * Falls back to location default when not yet set.
    */
   targetEtaMinutes?: number;
+  /**
+   * True when a table session has an unfired guest wave waiting for staff accept
+   * (incoming overlay + alert on /orders).
+   */
+  needsAccept?: boolean;
+}
+
+export type OrdersServiceRequestType = "waiter" | "bill";
+
+/** Open guest service request for the /orders ops board. */
+export interface OrdersServiceRequest {
+  id: string;
+  tableId: string;
+  tableNumber: string;
+  requestType: OrdersServiceRequestType;
 }
 
 export interface OrdersView {
@@ -88,6 +122,8 @@ export interface OrdersView {
     selfPickup: boolean;
     dineInMode: "staff_seated" | "self_service" | null;
   };
+  /** Guest call-waiter / request-check alerts for floor tables. */
+  serviceRequests?: OrdersServiceRequest[];
 }
 
 export function isOrdersView(x: unknown): x is OrdersView {

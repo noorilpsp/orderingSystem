@@ -5,6 +5,7 @@ export {
   addPayment,
   advanceWaveStatus,
   cancelOrder,
+  refundOrder,
   closeSessionService,
   createNextWaveForSession,
   removeWaveForSession,

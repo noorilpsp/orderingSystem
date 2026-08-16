@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { useLocation } from "@/lib/contexts/LocationContext";
 import type { MenuItem, Category } from "@/lib/take-order-data";
+import { attachPosPromotionsCategory } from "@/lib/promotions/promotions-category";
 
 interface ApiItem {
   id: string;
@@ -21,6 +22,11 @@ interface ApiItem {
   categories?: string[];
   tags?: string[];
   customizationGroups?: string[];
+  activePromo?: {
+    kind: "sale_price" | "bogo";
+    price: number;
+    compareAtPrice: number | null;
+  } | null;
   [key: string]: unknown;
 }
 
@@ -76,8 +82,10 @@ function mapItem(
   api: ApiItem,
   groupMap: Map<string, ApiCustomizationGroup>
 ): MenuItem {
-  const price =
+  const catalogPrice =
     typeof api.price === "string" ? parseFloat(api.price) : Number(api.price);
+  const promo = api.activePromo ?? null;
+  const price = promo?.price ?? catalogPrice;
   const categoryId = api.categories?.[0] ?? "uncategorized";
   const available =
     api.status !== "hidden" &&
@@ -115,6 +123,8 @@ function mapItem(
     name: api.name || "Item",
     description: api.description ?? "",
     price: Number.isFinite(price) ? price : 0,
+    compareAtPrice: promo?.compareAtPrice ?? null,
+    promoKind: promo?.kind ?? null,
     category: categoryId,
     image: api.photoUrl ?? "",
     dietary,
@@ -261,15 +271,17 @@ export function LocationMenuProvider({ children }: { children: ReactNode }) {
         const mappedItems = (itemsList ?? []).map((item) =>
           mapItem(item, groupMap)
         );
+        const { categories: menuCategories, items: menuItems } =
+          attachPosPromotionsCategory(mappedCategories, mappedItems);
         setMenuCache(
           currentLocationId,
-          mappedItems,
-          mappedCategories,
+          menuItems,
+          menuCategories,
           customizationsList ?? []
         );
 
-        setCategories(mappedCategories);
-        setMenuItems(mappedItems);
+        setCategories(menuCategories);
+        setMenuItems(menuItems);
         setCustomizations(customizationsList ?? []);
       } catch (err) {
         if (!silent) {

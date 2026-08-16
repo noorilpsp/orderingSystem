@@ -8,11 +8,15 @@ import {
 } from "@/lib/db/schema/menus";
 import {
   orders as ordersTable,
+  seats as seatsTable,
 } from "@/lib/db/schema/orders";
 import { createOrderWithItemsForPickupDelivery } from "@/app/actions/orders";
 import type { PickupDeliveryLineItemInput } from "@/app/actions/orders";
 import { addGuestItemsToSession } from "@/lib/public-menu/addGuestItemsToSession";
-import { validateGuestSeatForOrder } from "@/lib/public-menu/claimGuestTableSeat";
+import {
+  claimGuestTableSeat,
+  validateGuestSeatForOrder,
+} from "@/lib/public-menu/claimGuestTableSeat";
 import { ensureGuestTableSession } from "@/lib/public-menu/ensureGuestTableSession";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 import {
@@ -23,6 +27,9 @@ import {
   resolvePublicLocationBySlug,
 } from "@/lib/public-menu/buildPublicMenuView";
 import { resolveOptionPriceFromSelectedOptionIds } from "@/lib/public-menu/resolve-customization-option-price";
+import { applyPromosToBuiltLines } from "@/lib/promotions/pricing";
+import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
+import { toUserFacingDbError } from "@/lib/db/withDbRetry";
 import {
   formatScheduledPickupNote,
   parseScheduledPickupAt,
@@ -69,14 +76,22 @@ async function validateAndBuildLineItems(
   | { ok: true; lineItems: PickupDeliveryLineItemInput[]; subtotal: number }
   | { ok: false; message: string }
 > {
-  const itemIds = orderItems.map((item) => item.itemId);
+  const itemIds = [...new Set(orderItems.map((item) => item.itemId).filter(Boolean))];
+  if (itemIds.length === 0) {
+    return { ok: false, message: "At least one menu item is required" };
+  }
+
   const menuItems = await db.query.items.findMany({
     where: and(eq(itemsTable.locationId, locationId), inArray(itemsTable.id, itemIds)),
     columns: { id: true, name: true, price: true, status: true, defaultStation: true },
   });
   const itemMap = new Map(menuItems.map((item) => [item.id, item]));
+  const promoByItem = await resolveItemPromos(
+    locationId,
+    new Map(menuItems.map((item) => [item.id, Number(item.price) || 0])),
+  );
 
-  if (menuItems.length !== new Set(itemIds).size) {
+  if (menuItems.length !== itemIds.length) {
     return { ok: false, message: "One or more items are invalid for this store" };
   }
 
@@ -88,7 +103,6 @@ async function validateAndBuildLineItems(
 
   const stationCtx = await getStationRoutingContext(locationId);
   const lineItems: PickupDeliveryLineItemInput[] = [];
-  let subtotal = 0;
 
   for (const orderItem of orderItems) {
     const menuItem = itemMap.get(orderItem.itemId);
@@ -96,7 +110,7 @@ async function validateAndBuildLineItems(
       return { ok: false, message: "Invalid menu item" };
     }
 
-    const itemPrice = Number(menuItem.price);
+    const itemPrice = promoByItem.get(menuItem.id)?.price ?? Number(menuItem.price);
     const qty = Math.max(1, Math.floor(orderItem.quantity ?? 1));
     let customizationsTotal = 0;
     const custRows: PickupDeliveryLineItemInput["customizations"] = [];
@@ -160,7 +174,6 @@ async function validateAndBuildLineItems(
     }
 
     const lineTotal = itemPrice * qty + customizationsTotal;
-    subtotal += lineTotal;
 
     const resolvedStation = resolveStationOverride(
       stationCtx,
@@ -180,7 +193,12 @@ async function validateAndBuildLineItems(
     });
   }
 
-  return { ok: true, lineItems, subtotal };
+  const pricedLines = applyPromosToBuiltLines(lineItems, promoByItem);
+  const pricedSubtotal = pricedLines.reduce(
+    (sum, line) => sum + (Number(line.lineTotal) || 0),
+    0,
+  );
+  return { ok: true, lineItems: pricedLines, subtotal: pricedSubtotal };
 }
 
 async function createPickupOrDeliveryOrder(
@@ -344,10 +362,11 @@ async function createPickupOrDeliveryOrder(
       return created;
     });
   } catch (error) {
+    console.error("[createPickupOrDeliveryOrder]", error);
     return {
       ok: false,
-      code: "BAD_REQUEST",
-      message: error instanceof Error ? error.message : "Failed to create order",
+      code: "INTERNAL_ERROR",
+      message: toUserFacingDbError(error, "Failed to create order. Please try again."),
     };
   }
 
@@ -394,6 +413,7 @@ async function createDineInGuestOrder(
   input: CreatePublicOrderInput,
   location: NonNullable<Awaited<ReturnType<typeof resolvePublicLocationBySlug>>>,
   customerId?: string | null,
+  customerName?: string | null,
 ): Promise<CreatePublicOrderResult> {
   const tableNumber = input.tableNumber?.trim();
   if (!tableNumber) {
@@ -418,52 +438,107 @@ async function createDineInGuestOrder(
     };
   }
 
-  const seatId = input.seatId?.trim();
-  if (!seatId) {
+  const seatIdInput = input.seatId?.trim() || undefined;
+  let seatId = seatIdInput;
+  let seatNumber: number | undefined;
+
+  // Delivery-to-table: assign a seat to this phone if the client didn't send one yet.
+  if (
+    !seatId &&
+    input.deviceId &&
+    resolveGuestSessionMode(location.orderModes) === "staff_seated"
+  ) {
+    const claimed = await claimGuestTableSeat({
+      storeSlug: input.storeSlug,
+      tableNumber,
+      deviceId: input.deviceId,
+    });
+    if (claimed.ok) {
+      seatId = claimed.data.seatId;
+      seatNumber = claimed.data.seatNumber;
+    }
+  }
+
+  if (seatId) {
+    const seatValidation = await validateGuestSeatForOrder({
+      locationId: location.id,
+      sessionId: tableSession.sessionId,
+      seatId,
+      deviceId: input.deviceId ?? undefined,
+    });
+    if (!seatValidation.ok) {
+      return {
+        ok: false,
+        code: seatValidation.code,
+        message: seatValidation.message,
+      };
+    }
+    seatNumber = seatValidation.seatNumber;
+  }
+
+  try {
+    const result = await addGuestItemsToSession(
+      tableSession.sessionId,
+      location.id,
+      input.items,
+      // Hold for staff accept on /orders (incoming beep + overlay), same as pickup.
+      { autoFire: false, seatId, seatNumber },
+    );
+
+    if (!result.ok) {
+      return { ok: false, code: "BAD_REQUEST", message: result.message };
+    }
+
+    if (customerId) {
+      await db
+        .update(ordersTable)
+        .set({ customerId, updatedAt: new Date() })
+        .where(eq(ordersTable.id, result.orderId));
+    }
+
+    const trimmedCustomerName = customerName?.trim() || null;
+    if (seatId && trimmedCustomerName) {
+      const seat = await db.query.seats.findFirst({
+        where: eq(seatsTable.id, seatId),
+        columns: { id: true, guestName: true },
+      });
+      if (seat && !seat.guestName?.trim()) {
+        await db
+          .update(seatsTable)
+          .set({ guestName: trimmedCustomerName.slice(0, 255), updatedAt: new Date() })
+          .where(eq(seatsTable.id, seatId));
+      }
+    }
+
+    try {
+      const { sendIncomingOrderPush } = await import("@/lib/orders/sendIncomingOrderPush");
+      await sendIncomingOrderPush({
+        locationId: location.id,
+        orderId: result.orderId,
+        orderNumber: result.orderNumber,
+        orderType: "dine_in",
+        itemCount: input.items.reduce(
+          (sum, item) => sum + Math.max(1, item.quantity ?? 1),
+          0,
+        ),
+      });
+    } catch (error) {
+      console.error("[createDineInGuestOrder] push notify failed", error);
+    }
+
+    return {
+      ok: true,
+      orderId: result.orderId,
+      orderNumber: result.orderNumber,
+    };
+  } catch (error) {
+    console.error("[createDineInGuestOrder]", error);
     return {
       ok: false,
-      code: "BAD_REQUEST",
-      message: "seatId is required for dine-in orders",
+      code: "INTERNAL_ERROR",
+      message: toUserFacingDbError(error, "Failed to create order. Please try again."),
     };
   }
-
-  const seatValidation = await validateGuestSeatForOrder({
-    locationId: location.id,
-    sessionId: tableSession.sessionId,
-    seatId,
-    deviceId: input.deviceId ?? undefined,
-  });
-  if (!seatValidation.ok) {
-    return {
-      ok: false,
-      code: seatValidation.code,
-      message: seatValidation.message,
-    };
-  }
-
-  const result = await addGuestItemsToSession(
-    tableSession.sessionId,
-    location.id,
-    input.items,
-    { autoFire: true, seatId, seatNumber: seatValidation.seatNumber },
-  );
-
-  if (!result.ok) {
-    return { ok: false, code: "BAD_REQUEST", message: result.message };
-  }
-
-  if (customerId) {
-    await db
-      .update(ordersTable)
-      .set({ customerId, updatedAt: new Date() })
-      .where(eq(ordersTable.id, result.orderId));
-  }
-
-  return {
-    ok: true,
-    orderId: result.orderId,
-    orderNumber: result.orderNumber,
-  };
 }
 
 export async function createPublicOrder(
@@ -491,10 +566,12 @@ export async function createPublicOrder(
   }
 
   let customerId: string | null = null;
+  let customerName: string | null = null;
   let userId: string | null = null;
   try {
     const loggedIn = await getLoggedInCustomer(normalizedSlug);
     customerId = loggedIn?.customerId ?? null;
+    customerName = loggedIn?.name?.trim() || null;
     userId = loggedIn?.userId ?? null;
   } catch (error) {
     console.error("[createPublicOrder] Failed to resolve logged-in customer:", error);
@@ -516,7 +593,7 @@ export async function createPublicOrder(
         message: "Loyalty redemption is not available for table orders yet",
       };
     }
-    return createDineInGuestOrder(input, location, customerId);
+    return createDineInGuestOrder(input, location, customerId, customerName);
   }
 
   return createPickupOrDeliveryOrder(input, location, customerId, userId);

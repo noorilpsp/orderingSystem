@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { getReadyItems } from "@/lib/table-data"
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import type {
   TableDetail,
   ItemStatus,
@@ -82,6 +83,7 @@ import {
   deriveCanonicalWaveStatusFromItems,
   mapCanonicalWaveStatusToTablePageStatus,
 } from "@/lib/wave-status"
+import { uniqueById } from "@/lib/promotions/promotions-category"
 
 function getAutoSelectedOptions(item: MenuItem): Record<string, string> {
   const options: Record<string, string> = {}
@@ -468,6 +470,7 @@ type TableDetailClientProps = {
 export function TableDetailClient({ initialTableView, tableId }: TableDetailClientProps) {
   const id = tableId;
   const router = useRouter()
+  const { formatMoney } = useMerchantLocalization()
   const { currentLocationId } = useLocation()
   const { menuItems: locationMenuItems, categories: locationCategories, loading: menuLoading } = useLocationMenu()
   const storeTables = useRestaurantStore((s) => s.tables)
@@ -1088,10 +1091,12 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      items = items.filter(
-        (item) =>
-          item.name.toLowerCase().includes(query) ||
-          (item.description ?? "").toLowerCase().includes(query)
+      items = uniqueById(
+        items.filter(
+          (item) =>
+            item.name.toLowerCase().includes(query) ||
+            (item.description ?? "").toLowerCase().includes(query)
+        )
       )
     }
 
@@ -2563,7 +2568,7 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
             : "Cannot close: items are still pending, preparing, or ready. Finish or void them first."
         }
         if (reason === "unpaid_balance") {
-          return `Cannot close: $${(closeResult.remaining ?? 0).toFixed(2)} unpaid. Session total: $${(closeResult.sessionTotal ?? 0).toFixed(2)}, payments: $${(closeResult.paymentsTotal ?? 0).toFixed(2)}.`
+          return `Cannot close: ${formatMoney(closeResult.remaining ?? 0)} unpaid. Session total: ${formatMoney(closeResult.sessionTotal ?? 0)}, payments: ${formatMoney(closeResult.paymentsTotal ?? 0)}.`
         }
         if (reason === "invalid_tip") return "Tip amount must be >= 0."
         if (reason === "payment_in_progress") return "Cannot close: a payment is in progress."
@@ -2696,6 +2701,7 @@ export function TableDetailClient({ initialTableView, tableId }: TableDetailClie
       applyTableView,
       closeOrder,
       currentLocationId,
+      formatMoney,
       id,
       resolveOpenSessionIdForClose,
       router,

@@ -87,19 +87,41 @@ export function dbScheduleToBlocks(schedule: unknown): MenuScheduleBlock[] {
   return result;
 }
 
-function isWithinSchedule(blocks: MenuScheduleBlock[], now: Date): boolean {
+export function isWithinSchedule(blocks: MenuScheduleBlock[], now = new Date()): boolean {
   if (blocks.length === 0) return true;
   const day = now.getDay();
   const minutes = now.getHours() * 60 + now.getMinutes();
 
   return blocks.some((block) => {
-    if (!block.days.includes(day)) return false;
     const [startH, startM] = to24HourFormat(block.startTime).split(":").map(Number);
     const [endH, endM] = to24HourFormat(block.endTime).split(":").map(Number);
-    const startMinutes = startH * 60 + startM;
-    const endMinutes = endH * 60 + endM;
+    if (!Number.isFinite(startH) || !Number.isFinite(endH)) return false;
+
+    const startMinutes = startH * 60 + (startM || 0);
+    const endMinutes = endH * 60 + (endM || 0);
+    const overnight = endMinutes < startMinutes;
+
+    if (overnight) {
+      const onStartDay = block.days.includes(day) && minutes >= startMinutes;
+      const previousDay = (day + 6) % 7;
+      const onEndDay = block.days.includes(previousDay) && minutes <= endMinutes;
+      return onStartDay || onEndDay;
+    }
+
+    if (!block.days.includes(day)) return false;
     return minutes >= startMinutes && minutes <= endMinutes;
   });
+}
+
+export function isItemAvailableNow(
+  useCustomHours: boolean | null | undefined,
+  customSchedule: unknown,
+  now = new Date(),
+): boolean {
+  if (!useCustomHours) return true;
+  const blocks = dbScheduleToBlocks(customSchedule);
+  if (blocks.length === 0) return false;
+  return isWithinSchedule(blocks, now);
 }
 
 export function resolveActiveMenu<

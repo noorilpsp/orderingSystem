@@ -121,5 +121,18 @@ export function useCurrentMerchant() {
     membership,
     loading,
     error,
+    refetch: async () => {
+      const validMerchantId = currentMerchantId?.trim()
+      if (!validMerchantId) return null
+      const response = await fetch(`/api/merchants/${encodeURIComponent(validMerchantId)}`, {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      })
+      if (!response.ok) return null
+      const merchantData: Merchant = await response.json()
+      setMerchant(merchantData)
+      return merchantData
+    },
   }
 }

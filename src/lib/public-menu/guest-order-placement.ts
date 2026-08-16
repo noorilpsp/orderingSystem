@@ -1,4 +1,5 @@
 import { writeGuestActiveOrder } from "@/lib/public-menu/guest-active-order-storage";
+import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
 
 export type GuestOrderPlacementItem = {
   itemId: string;
@@ -79,14 +80,14 @@ function parseOrderError(payload: unknown): string {
     error?: { message?: string } | string;
     message?: string;
   } | null;
-  return (
+  const raw =
     (record?.error &&
       typeof record.error === "object" &&
       record.error.message) ||
     (typeof record?.error === "string" ? record.error : null) ||
     record?.message ||
-    "Failed to place order"
-  );
+    "Failed to place order";
+  return toUserFacingErrorMessage(raw, "Could not place order. Please try again.");
 }
 
 export async function submitGuestOrderPlacement(

@@ -6,6 +6,7 @@ import { customizationGroups } from "@/lib/menu-item-modal-data";
 import { getGuestCartItemLineTotal } from "@/lib/public-menu/guest-cart-pricing";
 import type { GuestCustomizationGroup } from "@/lib/guest-menu/types";
 import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 
 interface OrderItem {
   quantity: number;
@@ -34,6 +35,7 @@ export function OrderSummarySection({
   expanded,
   onToggle,
 }: OrderSummarySectionProps) {
+  const { formatMoney } = useGuestLocalization();
   return (
     <div className="mb-5 -mt-1.5">
       <h2 className="text-lg font-bold text-foreground mb-0">Order Summary</h2>
@@ -110,7 +112,7 @@ export function OrderSummarySection({
                 )}
               </div>
               <span className="text-foreground font-medium ml-4 flex-shrink-0">
-                €{getGuestCartItemLineTotal(item, pricingGroups).toFixed(2)}
+                {formatMoney(getGuestCartItemLineTotal(item, pricingGroups))}
               </span>
             </div>
           ))}

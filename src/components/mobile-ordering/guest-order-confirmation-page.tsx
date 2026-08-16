@@ -24,12 +24,17 @@ import { previewCatalogDiscount } from "@/lib/public-menu/guest-reward-cart";
 import type { PublicMenuReward } from "@/lib/public-menu/types";
 import { GuestOrderPushEnableCard } from "@/components/mobile-ordering/guest-order-push-enable-card";
 import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
-import { resolveCatalogText } from "@/lib/catalog-i18n";
 import type { EnMessageKey } from "@/lib/guest-i18n/messages/en";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
+import { resolveCatalogText } from "@/lib/catalog-i18n";
+import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/guest-deal-badge";
 import { formatCounterOrderLabel } from "@/lib/orders/formatCounterOrderLabel";
 import { GuestCustomizationDisplayLines, OpsCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
 import { resolveCustomizationOptionPrice } from "@/lib/public-menu/resolve-customization-option-price";
 import type { PublicOrderStatusItem } from "@/lib/public-menu/getPublicOrderStatus";
+import { groupGuestConfirmationItems } from "@/lib/public-menu/groupGuestConfirmationItems";
+import { guestLineCompareAtTotal, lineTotalWithPromo } from "@/lib/promotions/pricing";
+import { PromoPrice } from "@/components/shared/promo-price";
 
 type OrderType = "on_site" | "pickup";
 
@@ -69,18 +74,11 @@ type PublicOrderStatusPayload = {
   total?: number;
 };
 
-function euro(value: number) {
-  return `€${value.toFixed(2)}`;
-}
-
-function lineUnitPrice(
-  line: GuestOrderPlacementItem,
-  menuItems: GuestMenuItem[],
+function lineAddOnsPerUnit(
+  customizations: GuestOrderPlacementItem["customizations"],
   groups: GuestCustomizationGroup[],
 ): number {
-  const menuItem = menuItems.find((entry) => entry.id === line.itemId);
-  const base = menuItem?.price ?? 0;
-  const selectedOptions = line.customizations.reduce<Record<string, string[]>>(
+  const selectedOptions = customizations.reduce<Record<string, string[]>>(
     (acc, customization) => {
       acc[customization.groupId] ??= [];
       acc[customization.groupId]!.push(customization.optionId);
@@ -88,14 +86,22 @@ function lineUnitPrice(
     },
     {},
   );
-  const customizationsTotal = line.customizations.reduce((sum, customization) => {
+  return customizations.reduce((sum, customization) => {
     const group = groups.find((entry) => entry.id === customization.groupId);
     const option = group?.options.find((entry) => entry.id === customization.optionId);
     if (!option) return sum;
     const unit = resolveCustomizationOptionPrice(option, selectedOptions, groups);
     return sum + unit * Math.max(1, customization.quantity);
   }, 0);
-  return base + customizationsTotal;
+}
+
+function storedLineAddOnsPerUnit(
+  customizations: PublicOrderStatusItem["customizations"],
+): number {
+  return customizations.reduce(
+    (sum, entry) => sum + (Number(entry.optionPrice) || 0) * Math.max(1, entry.quantity),
+    0,
+  );
 }
 
 function buildOrderedLinesPricing(
@@ -106,17 +112,37 @@ function buildOrderedLinesPricing(
 ) {
   let freeItemApplied = false;
   return lines.map((line) => {
-    const unitPrice = lineUnitPrice(line, menuItems, groups);
+    const menuItem = menuItems.find((entry) => entry.id === line.itemId);
+    const quantity = Math.max(1, line.quantity);
+    const addOnsPerUnit = lineAddOnsPerUnit(line.customizations, groups);
     const isFreeRewardLine =
       reward?.kind === "free_item" &&
       reward.menuItemId === line.itemId &&
       !freeItemApplied;
     if (isFreeRewardLine) freeItemApplied = true;
-    const lineTotal = isFreeRewardLine ? 0 : unitPrice * Math.max(1, line.quantity);
+    const lineTotal = isFreeRewardLine
+      ? 0
+      : lineTotalWithPromo({
+          kind: menuItem?.promoKind,
+          unitBasePrice: menuItem?.price ?? 0,
+          addOnsTotalPerUnit: addOnsPerUnit,
+          quantity,
+        });
+    const compareAtTotal = isFreeRewardLine
+      ? null
+      : guestLineCompareAtTotal({
+          promoKind: menuItem?.promoKind,
+          chargedTotal: lineTotal,
+          quantity,
+          unitBasePrice: menuItem?.price ?? 0,
+          compareAtPrice: menuItem?.compareAtPrice,
+          addOnsTotalPerUnit: addOnsPerUnit,
+        });
     return {
       line,
-      menuItem: menuItems.find((entry) => entry.id === line.itemId),
+      menuItem,
       lineTotal,
+      compareAtTotal,
       isReward: isFreeRewardLine,
     };
   });
@@ -220,6 +246,7 @@ export function GuestOrderConfirmationPage() {
   const searchParams = useSearchParams();
   const t = useGuestT();
   const { locale } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
   const {
     restaurant,
     menuPath,
@@ -638,13 +665,37 @@ export function GuestOrderConfirmationPage() {
     selectedRewardId != null
       ? rewards.find((reward) => reward.id === selectedRewardId) ?? null
       : null;
-  const pricedLines = buildOrderedLinesPricing(
-    placementItems,
-    items,
-    customizationGroups,
-    selectedReward,
+  const groupedLiveItems = useMemo(
+    () =>
+      groupGuestConfirmationItems(liveItems ?? [], (line) => {
+        const catalogItem = line.itemId
+          ? items.find((entry) => entry.id === line.itemId)
+          : undefined;
+        if (catalogItem?.promoKind === "bogo") return false;
+        return (
+          selectedReward?.kind === "free_item" &&
+          selectedReward.menuItemId === line.itemId &&
+          line.lineTotal === 0
+        );
+      }),
+    [items, liveItems, selectedReward],
   );
-  const useLiveItems = (liveItems?.length ?? 0) > 0;
+  const pricedLines = groupGuestConfirmationItems(
+    buildOrderedLinesPricing(
+      placementItems,
+      items,
+      customizationGroups,
+      selectedReward,
+    ).map((entry) => ({
+      ...entry,
+      itemId: entry.line.itemId,
+      itemName: entry.menuItem?.name,
+      quantity: entry.line.quantity,
+      notes: entry.line.notes,
+      customizations: entry.line.customizations,
+    })),
+  );
+  const useLiveItems = groupedLiveItems.length > 0;
   const showItemsSection = useLiveItems || pricedLines.length > 0;
   const placementSubtotal = pricedLines.reduce((sum, entry) => sum + entry.lineTotal, 0);
   const placementLoyaltyDiscount =
@@ -672,7 +723,7 @@ export function GuestOrderConfirmationPage() {
   }
 
   return (
-    <div className="min-h-screen pb-10">
+    <div className="min-h-screen">
       <header className="checkout-header sticky top-0 z-30 border-b border-border/70 bg-card/80 px-2 backdrop-blur-xl lg:px-4">
         <div
           className="mx-auto flex w-full max-w-none items-center justify-start gap-2 px-1 py-1 lg:px-4"
@@ -689,7 +740,7 @@ export function GuestOrderConfirmationPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 lg:px-8">
+      <main className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-4 lg:px-8">
         <section className="rounded-2xl border border-border/70 bg-card/70 p-5 text-center shadow-sm backdrop-blur-md">
           <p className="text-sm text-muted-foreground">{t("confirm.orderNumber")}</p>
           <p className="mt-1 text-2xl font-bold text-foreground">
@@ -904,7 +955,7 @@ export function GuestOrderConfirmationPage() {
             <p className="mb-3 text-base font-semibold text-foreground">{t("confirm.items")}</p>
             <div className="space-y-3">
               {useLiveItems
-                ? liveItems!.map((line) => {
+                ? groupedLiveItems.map((line) => {
                     const catalogItem = line.itemId
                       ? items.find((entry) => entry.id === line.itemId)
                       : undefined;
@@ -918,6 +969,22 @@ export function GuestOrderConfirmationPage() {
                           catalogItem.i18n,
                         ).name
                       : line.itemName;
+                    const isLoyaltyFree =
+                      selectedReward?.kind === "free_item" &&
+                      selectedReward.menuItemId === line.itemId &&
+                      line.lineTotal === 0;
+                    const compareAtTotal = isLoyaltyFree
+                      ? null
+                      : guestLineCompareAtTotal({
+                          promoKind: catalogItem?.promoKind,
+                          chargedTotal: line.lineTotal,
+                          quantity: line.quantity,
+                          unitBasePrice: catalogItem?.price ?? 0,
+                          compareAtPrice: catalogItem?.compareAtPrice,
+                          addOnsTotalPerUnit: storedLineAddOnsPerUnit(
+                            line.customizations,
+                          ),
+                        });
                     return (
                     <div
                       key={line.id}
@@ -926,11 +993,12 @@ export function GuestOrderConfirmationPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">
                           {line.quantity}× {displayName}
-                          {line.lineTotal === 0 ? (
-                            <span className="ml-2 text-xs font-semibold text-orange-600">
-                              {t("cart.reward")}
-                            </span>
-                          ) : null}
+                          <GuestDealBadge
+                            kind={guestDealKind({
+                              promoKind: catalogItem?.promoKind,
+                              isLoyaltyReward: isLoyaltyFree,
+                            })}
+                          />
                         </p>
                         {line.customizations.length > 0 ? (
                           <div className="mt-0.5">
@@ -949,12 +1017,20 @@ export function GuestOrderConfirmationPage() {
                         ) : null}
                       </div>
                       <p className="shrink-0 text-sm font-semibold text-foreground">
-                        {euro(line.lineTotal)}
+                        {compareAtTotal != null ? (
+                          <PromoPrice
+                            price={line.lineTotal}
+                            compareAtPrice={compareAtTotal}
+                            formatMoney={formatMoney}
+                          />
+                        ) : (
+                          formatMoney(line.lineTotal)
+                        )}
                       </p>
                     </div>
                     );
                   })
-                : pricedLines.map(({ line, menuItem, lineTotal, isReward }, index) => {
+                : pricedLines.map(({ line, menuItem, lineTotal, compareAtTotal, isReward, quantity }, index) => {
                     const groupedOptions = line.customizations.reduce<Record<string, string[]>>(
                       (acc, entry) => {
                         acc[entry.groupId] ??= [];
@@ -971,7 +1047,7 @@ export function GuestOrderConfirmationPage() {
                       >
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground">
-                            {line.quantity}×{" "}
+                          {quantity}×{" "}
                             {menuItem
                               ? resolveCatalogText(
                                   locale,
@@ -982,11 +1058,12 @@ export function GuestOrderConfirmationPage() {
                                   menuItem.i18n,
                                 ).name
                               : line.itemId}
-                            {isReward ? (
-                              <span className="ml-2 text-xs font-semibold text-orange-600">
-                                {t("cart.reward")}
-                              </span>
-                            ) : null}
+                            <GuestDealBadge
+                              kind={guestDealKind({
+                                promoKind: menuItem?.promoKind,
+                                isLoyaltyReward: isReward,
+                              })}
+                            />
                           </p>
                           {Object.keys(groupedOptions).length > 0 ? (
                             <div className="mt-0.5 space-y-0.5">
@@ -1004,7 +1081,15 @@ export function GuestOrderConfirmationPage() {
                           ) : null}
                         </div>
                         <p className="shrink-0 text-sm font-semibold text-foreground">
-                          {euro(lineTotal)}
+                          {compareAtTotal != null ? (
+                            <PromoPrice
+                              price={lineTotal}
+                              compareAtPrice={compareAtTotal}
+                              formatMoney={formatMoney}
+                            />
+                          ) : (
+                            formatMoney(lineTotal)
+                          )}
                         </p>
                       </div>
                     );
@@ -1020,7 +1105,7 @@ export function GuestOrderConfirmationPage() {
               {tax > 0 || loyaltyDiscount > 0 ? (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t("common.subtotal")}</span>
-                  <span className="font-medium text-foreground">{euro(subtotal)}</span>
+                  <span className="font-medium text-foreground">{formatMoney(subtotal)}</span>
                 </div>
               ) : null}
               {tax > 0 ? (
@@ -1028,20 +1113,20 @@ export function GuestOrderConfirmationPage() {
                   <span className="text-muted-foreground">
                     {liveMoney ? t("common.tax") : t("checkout.taxPercent", { percent: taxRatePercent })}
                   </span>
-                  <span className="font-medium text-foreground">{euro(tax)}</span>
+                  <span className="font-medium text-foreground">{formatMoney(tax)}</span>
                 </div>
               ) : null}
               {loyaltyDiscount > 0 ? (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t("checkout.rewardDiscount")}</span>
                   <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                    −{euro(loyaltyDiscount)}
+                    −{formatMoney(loyaltyDiscount)}
                   </span>
                 </div>
               ) : null}
               <div className="flex items-center justify-between">
                 <span className="text-base font-bold text-foreground">{t("common.total")}</span>
-                <span className="text-lg font-bold text-foreground">{euro(total)}</span>
+                <span className="text-lg font-bold text-foreground">{formatMoney(total)}</span>
               </div>
             </div>
           </section>

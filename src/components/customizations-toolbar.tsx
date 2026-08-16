@@ -10,10 +10,18 @@ import { useState } from "react"
 interface CustomizationsToolbarProps {
   onCreateGroup: () => void
   onSearch?: (query: string) => void
+  onImportCsv?: () => void
+  onExportCsv?: () => void
   totalGroups?: number
 }
 
-export function CustomizationsToolbar({ onCreateGroup, onSearch, totalGroups = 0 }: CustomizationsToolbarProps) {
+export function CustomizationsToolbar({
+  onCreateGroup,
+  onSearch,
+  onImportCsv,
+  onExportCsv,
+  totalGroups = 0,
+}: CustomizationsToolbarProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,11 +45,23 @@ export function CustomizationsToolbar({ onCreateGroup, onSearch, totalGroups = 0
 
       {/* Action Buttons */}
       <div className="flex gap-2 flex-shrink-0">
-        <Button variant="outline" size="sm" className="gap-2 bg-transparent" title="Import customization groups">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 bg-transparent"
+          title="Import customization groups"
+          onClick={onImportCsv}
+        >
           <Upload className="w-4 h-4" />
           <span className="hidden sm:inline">Import</span>
         </Button>
-        <Button variant="outline" size="sm" className="gap-2 bg-transparent" title="Export customization groups">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 bg-transparent"
+          title="Export customization groups"
+          onClick={onExportCsv}
+        >
           <Download className="w-4 h-4" />
           <span className="hidden sm:inline">Export</span>
         </Button>

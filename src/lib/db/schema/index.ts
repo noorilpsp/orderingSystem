@@ -27,6 +27,12 @@ export * from "./menus";
 export * from "./orders";
 export * from "./floor-plans";
 export * from "./pos-idempotency";
+export * from "./guest-seat-claims";
+export * from "./guest-table-splits";
+export * from "./loyalty";
+export * from "./promotions";
+export * from "./staff-push-subscriptions";
+export * from "./guest-push-subscriptions";
 
 // Import tables for relations
 import { merchants } from "./merchants";
@@ -56,6 +62,8 @@ import {
   waitlist,
 } from "./orders";
 import { floorPlans } from "./floor-plans";
+import { loyaltyAccounts } from "./loyalty";
+import { promotions } from "./promotions";
 
 // ============================================================================
 // Relations
@@ -71,6 +79,7 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   locations: many(merchantLocations),
   merchantUsers: many(merchantUsers),
   invitations: many(invitations),
+  loyaltyAccounts: many(loyaltyAccounts),
 }));
 
 /**
@@ -113,6 +122,7 @@ export const merchantLocationsRelations = relations(
     orders: many(orders),
     waitlist: many(waitlist),
     floorPlans: many(floorPlans),
+    promotions: many(promotions),
   }),
 );
 
@@ -198,6 +208,11 @@ export {
 } from "./orders";
 
 export { floorPlansRelations } from "./floor-plans";
+
+export {
+  promotionsRelations,
+  promotionItemsRelations,
+} from "./promotions";
 
 export const locationStationsRelations = relations(locationStations, ({ one, many }) => ({
   location: one(merchantLocations, {

@@ -44,11 +44,21 @@ export async function PUT(
     }
 
     const body = await request.json().catch(() => ({}));
-    const { status, note, changedByStaffId } = body;
+    const { status, note, changedByStaffId, etaMinutes } = body;
 
     if (!status) {
       return posFailure("BAD_REQUEST", "Status is required", { status: 400, correlationId: idempotencyKey });
     }
+
+    const parsedEtaMinutes =
+      typeof etaMinutes === "number" && Number.isFinite(etaMinutes) && etaMinutes > 0
+        ? Math.min(180, Math.max(1, Math.round(etaMinutes)))
+        : typeof etaMinutes === "string" && etaMinutes.trim()
+          ? (() => {
+              const n = Number.parseInt(etaMinutes, 10);
+              return Number.isFinite(n) && n > 0 ? Math.min(180, Math.max(1, n)) : undefined;
+            })()
+          : undefined;
 
     const requestHash = computeRequestHash({ ...body, id });
     const cached = await getIdempotentResponse({
@@ -99,6 +109,7 @@ export async function PUT(
       note: note ?? undefined,
       changedByStaffId: changedByStaffId ?? undefined,
       changedByUserId: user.id,
+      etaMinutes: parsedEtaMinutes,
     });
 
     if (!result.ok) {

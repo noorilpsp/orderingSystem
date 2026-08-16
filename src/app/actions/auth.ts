@@ -18,6 +18,8 @@ const loginSchema = z.object({
 const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(1, "Password is required"),
+  fullName: z.string().trim().min(1, "Name is required"),
+  phone: z.string().trim().min(1, "Phone is required"),
 });
 
 export async function login(data: {
@@ -145,7 +147,13 @@ async function setAdminStatusCookieForServerAction(
   });
 }
 
-export async function signup(data: { email: string; password: string; returnTo?: string }) {
+export async function signup(data: {
+  email: string;
+  password: string;
+  fullName: string;
+  phone: string;
+  returnTo?: string;
+}) {
   // Validate input
   const validation = signupSchema.safeParse(data);
   if (!validation.success) {
@@ -154,7 +162,12 @@ export async function signup(data: { email: string; password: string; returnTo?:
     };
   }
 
-  const { email: validatedEmail, password: validatedPassword } = validation.data;
+  const {
+    email: validatedEmail,
+    password: validatedPassword,
+    fullName: validatedFullName,
+    phone: validatedPhone,
+  } = validation.data;
 
   try {
     // Guard: prevent duplicate emails in our Neon DB
@@ -199,7 +212,11 @@ export async function signup(data: { email: string; password: string; returnTo?:
         const { data: adminData, error: adminError } = await adminClient.auth.admin.createUser({
           email: validatedEmail,
           password: validatedPassword,
-          email_confirm: true, // Email already verified via invitation
+          email_confirm: true,
+          user_metadata: {
+            full_name: validatedFullName,
+            phone: validatedPhone,
+          },
         });
 
         if (adminError) {
@@ -254,6 +271,10 @@ export async function signup(data: { email: string; password: string; returnTo?:
         email: validatedEmail,
         password: validatedPassword,
         options: {
+          data: {
+            full_name: validatedFullName,
+            phone: validatedPhone,
+          },
           emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/staff/login`,
         },
       });
@@ -289,9 +310,13 @@ export async function signup(data: { email: string; password: string; returnTo?:
     }
     if (supabaseData?.user) {
       const userMeta = supabaseData.user.user_metadata || {};
-      // Use email username as fallback for fullName since it's required in schema
-      const fullName = userMeta.full_name || userMeta.name || validatedEmail.split("@")[0] || "User";
-      const phone = userMeta.phone || null;
+      const fullName =
+        validatedFullName ||
+        userMeta.full_name ||
+        userMeta.name ||
+        validatedEmail.split("@")[0] ||
+        "User";
+      const phone = validatedPhone || userMeta.phone || null;
       const avatarUrl = userMeta.avatar_url || null;
       const locale = userMeta.locale || "nl-BE";
 

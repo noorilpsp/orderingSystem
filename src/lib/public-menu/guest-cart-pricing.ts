@@ -4,10 +4,17 @@ import type {
 } from "@/lib/guest-menu/types";
 import { isRewardCartLine } from "@/lib/public-menu/guest-reward-cart";
 import { resolveCustomizationOptionPrice } from "@/lib/public-menu/resolve-customization-option-price";
+import { guestLineCompareAtTotal, lineTotalWithPromo } from "@/lib/promotions/pricing";
 
 type PricedCartItem = Pick<
   GuestCartItem,
-  "price" | "quantity" | "selectedOptions" | "sauceQuantities" | "rewardId"
+  | "price"
+  | "quantity"
+  | "selectedOptions"
+  | "sauceQuantities"
+  | "rewardId"
+  | "promoKind"
+  | "compareAtPrice"
 >;
 
 /**
@@ -70,7 +77,34 @@ export function getGuestCartItemLineTotal(
   groups: GuestCustomizationGroup[],
 ): number {
   const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
-  return getGuestCartItemUnitPrice(item, groups) * quantity;
+  const unit = getGuestCartItemUnitPrice(item, groups);
+  const base = Number(item.price) || 0;
+  const addOns = Math.max(0, unit - base);
+  return lineTotalWithPromo({
+    kind: item.promoKind,
+    unitBasePrice: base,
+    addOnsTotalPerUnit: addOns,
+    quantity,
+  });
+}
+
+export function getGuestCartItemCompareAtLineTotal(
+  item: PricedCartItem,
+  groups: GuestCustomizationGroup[],
+): number | null {
+  if (isRewardCartLine(item)) return null;
+  const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+  const unit = getGuestCartItemUnitPrice(item, groups);
+  const base = Number(item.price) || 0;
+  const addOns = Math.max(0, unit - base);
+  return guestLineCompareAtTotal({
+    promoKind: item.promoKind,
+    chargedTotal: getGuestCartItemLineTotal(item, groups),
+    quantity,
+    unitBasePrice: base,
+    compareAtPrice: item.compareAtPrice,
+    addOnsTotalPerUnit: addOns,
+  });
 }
 
 export function sumGuestCartItems(

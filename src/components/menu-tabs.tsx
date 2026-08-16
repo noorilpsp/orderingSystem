@@ -80,7 +80,7 @@ export function MenuTabs({ currentPath }: MenuTabsProps) {
   }, [activeIndex, activePath]) // Added activePath as dependency
 
   return (
-    <div className="sticky top-14 z-20 border-b bg-background">
+    <div className="sticky top-0 z-20 shrink-0 border-b bg-background">
       <TooltipProvider>
         <nav
           ref={navRef}

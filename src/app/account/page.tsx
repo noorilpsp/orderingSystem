@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq, inArray } from "drizzle-orm";
+import { ChevronRight, Settings } from "lucide-react";
 import { customerLogout } from "@/app/actions/customer-auth";
 import { db } from "@/db";
 import {
@@ -39,8 +41,7 @@ export default async function AccountIndexPage({
       {
         merchantName: merchant?.publicBrandName || merchant?.name || "This restaurant",
         points: customer.loyaltyPoints,
-        scopeLabel:
-          settings.pointsScope === "location" ? "This location" : "All locations",
+        scopeLabel: "This location",
       },
     ];
     if (settings.enabled && customer.locationId) {
@@ -65,14 +66,10 @@ export default async function AccountIndexPage({
       pointsRows = accounts
         .map((account) => {
           const merchant = merchantById.get(account.merchantId);
-          const settings = normalizeLoyaltySettings(merchant?.loyaltySettings);
           return {
             merchantName: merchant?.publicBrandName || merchant?.name || "Restaurant",
             points: account.balance,
-            scopeLabel:
-              settings.pointsScope === "location" || account.locationId
-                ? "Location balance"
-                : "All locations",
+            scopeLabel: "This location",
           };
         })
         .sort((a, b) => b.points - a.points);
@@ -99,6 +96,19 @@ export default async function AccountIndexPage({
         <p className="text-base font-semibold text-foreground">{customer.name}</p>
         <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>
       </div>
+
+      <Link
+        href={
+          storeSlug
+            ? `/account/settings?store=${encodeURIComponent(storeSlug)}`
+            : "/account/settings"
+        }
+        className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3.5 text-sm font-medium text-foreground shadow-sm hover:bg-foreground/5"
+      >
+        <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1">Settings</span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
 
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-foreground">Loyalty points</h2>

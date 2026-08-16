@@ -16,6 +16,8 @@ import {
   itemCustomizations,
 } from "@/db/schema";
 import { merchantLocations } from "@/lib/db/schema";
+import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
+import { attachPosPromotionsCategory } from "@/lib/promotions/promotions-category";
 import type {
   CounterView,
   CounterViewCustomizationGroup,
@@ -209,14 +211,32 @@ export async function buildCounterView(
     )
   );
 
+  const promoByItem = await resolveItemPromos(
+    locationId,
+    new Map(mappedItems.map((item) => [item.id, item.price])),
+  );
+  const itemsWithPromo = mappedItems.map((item) => {
+    const promo = promoByItem.get(item.id);
+    if (!promo) return item;
+    return {
+      ...item,
+      price: promo.price,
+      compareAtPrice: promo.compareAtPrice,
+      promoKind: promo.kind,
+    };
+  });
+
+  const { categories: menuCategories, items: menuItems } =
+    attachPosPromotionsCategory(mappedCategories, itemsWithPromo);
+
   return {
     location: {
       id: locationRow.id,
       name: locationRow.name ?? undefined,
     },
     menu: {
-      items: mappedItems,
-      categories: mappedCategories,
+      items: menuItems,
+      categories: menuCategories,
       customizations,
     },
   };

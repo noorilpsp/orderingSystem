@@ -30,6 +30,12 @@ import { addSeatToSession, syncSeatsWithGuestCount } from "@/app/actions/seat-ma
 import { normalizeFurnitureStatus } from "@/lib/pos/tableStatus";
 import { canFireWave, canAddItems } from "@/domain/serviceFlow";
 import { recalculateSessionTotals, recalculateStandaloneOrderTotals } from "@/domain/orderTotals";
+import { awardLoyaltyPointsForCompletedOrder } from "@/lib/loyalty/awardLoyaltyPointsForCompletedOrder";
+import {
+  notifyGuestOrderAccepted,
+  notifyGuestOrderCompleted,
+  notifyGuestOrderReady,
+} from "@/lib/public-menu/sendGuestOrderPush";
 
 /**
  * Sync seats with guest count. Uses syncSeatsWithGuestCount to create/mark seats.
@@ -716,7 +722,7 @@ export type CloseOrderForTableOptions = {
 };
 
 export type CloseOrderForTableResult =
-  | { ok: true }
+  | { ok: true; completedOrderIds?: string[] }
   | {
       ok: false;
       error: string;
@@ -822,12 +828,26 @@ export async function closeSession(
     .set({ status: "closed", closedAt: now, updatedAt: now })
     .where(eq(sessionsTable.id, sessionId));
 
+  // Closing the visit settles the check: kitchen-complete + paid.
   await dbOrTx
     .update(ordersTable)
-    .set({ status: "completed", completedAt: now, updatedAt: now })
+    .set({
+      status: "completed",
+      paymentStatus: "paid",
+      completedAt: now,
+      updatedAt: now,
+    })
     .where(eq(ordersTable.sessionId, sessionId));
 
-  return { ok: true };
+  const completedSessionOrders = await dbOrTx.query.orders.findMany({
+    where: eq(ordersTable.sessionId, sessionId),
+    columns: { id: true },
+  });
+
+  return {
+    ok: true,
+    completedOrderIds: completedSessionOrders.map((order) => order.id),
+  };
 }
 
 /** Line item input for pickup/delivery order creation. Used by createOrderWithItemsForPickupDelivery. */
@@ -852,8 +872,8 @@ export type PickupDeliveryLineItemInput = {
 };
 
 /**
- * Create a pickup or delivery order with items. No session. Used by service layer.
- * Caller must have verified location access and validated items.
+ * Create a pickup, delivery, or counter dine-in order with items. No session.
+ * Used by service layer. Caller must have verified location access and validated items.
  */
 export async function createOrderWithItemsForPickupDelivery(
   order: {
@@ -863,19 +883,22 @@ export async function createOrderWithItemsForPickupDelivery(
     reservationId?: string | null;
     assignedStaffId?: string | null;
     orderNumber: string;
-    orderType: "pickup" | "delivery";
+    orderType: "pickup" | "delivery" | "dine_in";
     paymentTiming: "pay_first" | "pay_later";
     subtotal: string;
     taxAmount: string;
     serviceCharge: string;
+    discountAmount?: string;
     total: string;
     notes?: string | null;
+    scheduledPickupAt?: Date | null;
   },
   lineItems: PickupDeliveryLineItemInput[],
-  options: { changedByUserId?: string | null; changedByStaffId?: string | null }
+  options: { changedByUserId?: string | null; changedByStaffId?: string | null },
+  dbOrTx: DbOrTx = db,
 ): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
   const now = new Date();
-  const [inserted] = await db
+  const [inserted] = await dbOrTx
     .insert(ordersTable)
     .values({
       locationId: order.locationId,
@@ -893,8 +916,10 @@ export async function createOrderWithItemsForPickupDelivery(
       subtotal: order.subtotal,
       taxAmount: order.taxAmount,
       serviceCharge: order.serviceCharge,
+      discountAmount: order.discountAmount ?? "0.00",
       total: order.total,
       notes: order.notes ?? null,
+      scheduledPickupAt: order.scheduledPickupAt ?? null,
       updatedAt: now,
     })
     .returning({ id: ordersTable.id });
@@ -903,7 +928,7 @@ export async function createOrderWithItemsForPickupDelivery(
 
   for (const item of lineItems) {
     const { customizations, ...itemValues } = item;
-    const [orderItem] = await db
+    const [orderItem] = await dbOrTx
       .insert(orderItemsTable)
       .values({
         orderId: inserted.id,
@@ -914,7 +939,7 @@ export async function createOrderWithItemsForPickupDelivery(
       .returning({ id: orderItemsTable.id });
 
     if (orderItem?.id && customizations.length > 0) {
-      await db.insert(orderItemCustomizationsTable).values(
+      await dbOrTx.insert(orderItemCustomizationsTable).values(
         customizations.map((c) => ({
           orderItemId: orderItem.id,
           ...c,
@@ -923,7 +948,7 @@ export async function createOrderWithItemsForPickupDelivery(
     }
   }
 
-  await db.insert(orderTimelineTable).values({
+  await dbOrTx.insert(orderTimelineTable).values({
     orderId: inserted.id,
     status: "pending",
     changedByUserId: options.changedByUserId ?? null,
@@ -973,12 +998,22 @@ export async function cancelOrderByOrderId(
   const order = await db.query.orders.findFirst({
     where: eq(ordersTable.id, orderId),
     with: { location: { columns: { id: true, merchantId: true } } },
-    columns: { id: true, locationId: true, tableId: true },
+    columns: { id: true, locationId: true, tableId: true, status: true, paymentStatus: true },
   });
   if (!order) return { ok: false, error: "Order not found" };
 
   const location = await verifyLocationAccess(order.locationId);
   if (!location) return { ok: false, error: "Unauthorized or location not found" };
+
+  if (order.paymentStatus === "paid" || order.paymentStatus === "partial") {
+    return { ok: false, error: "Paid orders must be refunded, not voided" };
+  }
+  if (order.paymentStatus === "refunded") {
+    return { ok: false, error: "Order is already refunded" };
+  }
+  if (order.status === "cancelled") {
+    return { ok: true, orderId };
+  }
 
   const now = new Date();
   await db
@@ -999,6 +1034,64 @@ export async function cancelOrderByOrderId(
       .set({ status: "available", updatedAt: now })
       .where(eq(tablesTable.id, order.tableId));
   }
+
+  return { ok: true, orderId };
+}
+
+export async function refundOrderByOrderId(
+  orderId: string,
+  userId: string
+): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
+  const order = await db.query.orders.findFirst({
+    where: eq(ordersTable.id, orderId),
+    with: { location: { columns: { id: true, merchantId: true } } },
+    columns: {
+      id: true,
+      locationId: true,
+      status: true,
+      paymentStatus: true,
+    },
+  });
+  if (!order) return { ok: false, error: "Order not found" };
+
+  const location = await verifyLocationAccess(order.locationId);
+  if (!location) return { ok: false, error: "Unauthorized or location not found" };
+
+  if (order.paymentStatus === "refunded") {
+    return { ok: true, orderId };
+  }
+  if (
+    order.paymentStatus !== "paid" &&
+    order.paymentStatus !== "partial" &&
+    order.status !== "completed"
+  ) {
+    return { ok: false, error: "Only paid orders can be refunded" };
+  }
+
+  const now = new Date();
+  await db
+    .update(paymentsTable)
+    .set({ status: "refunded", refundedAt: now })
+    .where(and(eq(paymentsTable.orderId, orderId), eq(paymentsTable.status, "completed")));
+
+  const orderUpdate: Record<string, unknown> = {
+    paymentStatus: "refunded",
+    updatedAt: now,
+  };
+  // Pull unfinished kitchen work off Live when money is refunded.
+  if (order.status !== "completed" && order.status !== "cancelled") {
+    orderUpdate.status = "cancelled";
+    orderUpdate.cancelledAt = now;
+  }
+
+  await db.update(ordersTable).set(orderUpdate as any).where(eq(ordersTable.id, orderId));
+
+  await db.insert(orderTimelineTable).values({
+    orderId,
+    status: (orderUpdate.status as "cancelled" | typeof order.status) ?? order.status,
+    changedByUserId: userId,
+    note: "Order refunded",
+  });
 
   return { ok: true, orderId };
 }
@@ -1061,31 +1154,232 @@ export type UpdateOrderStatusOptions = {
   note?: string | null;
   changedByStaffId?: string | null;
   changedByUserId?: string | null;
+  /** When accepting/preparing, set guest-facing ready estimate. */
+  estimatedReadyAt?: Date | null;
 };
+
+const ITEM_STATUS_RANK: Record<"pending" | "preparing" | "ready" | "served", number> = {
+  pending: 0,
+  preparing: 1,
+  ready: 2,
+  served: 3,
+};
+
+function orderStatusToItemStatus(
+  orderStatus: string
+): "preparing" | "ready" | "served" | null {
+  if (orderStatus === "preparing") return "preparing";
+  if (orderStatus === "ready") return "ready";
+  if (orderStatus === "completed") return "served";
+  return null;
+}
+
+/**
+ * When counter/order-level status advances (Accept / Ready / Served), move non-voided
+ * items forward to match. Never moves items backwards. Fills kitchen timestamps so the
+ * ordering check constraint stays valid when skipping intermediate statuses.
+ */
+async function syncOrderItemsToOrderStatus(
+  orderId: string,
+  orderStatus: string
+): Promise<void> {
+  const targetStatus = orderStatusToItemStatus(orderStatus);
+  if (!targetStatus) return;
+
+  const targetRank = ITEM_STATUS_RANK[targetStatus];
+  const items = await db.query.orderItems.findMany({
+    where: and(eq(orderItemsTable.orderId, orderId), isNull(orderItemsTable.voidedAt)),
+    columns: {
+      id: true,
+      status: true,
+      sentToKitchenAt: true,
+      startedAt: true,
+      readyAt: true,
+      servedAt: true,
+    },
+  });
+
+  const now = new Date();
+  for (const item of items) {
+    const current = item.status as keyof typeof ITEM_STATUS_RANK;
+    const currentRank = ITEM_STATUS_RANK[current] ?? 0;
+    if (currentRank >= targetRank) continue;
+
+    const updateData: {
+      status: "preparing" | "ready" | "served";
+      sentToKitchenAt?: Date;
+      startedAt?: Date;
+      readyAt?: Date;
+      servedAt?: Date;
+    } = { status: targetStatus };
+
+    if (targetRank >= 1) {
+      updateData.sentToKitchenAt = item.sentToKitchenAt ?? now;
+      updateData.startedAt = item.startedAt ?? now;
+    }
+    if (targetRank >= 2) {
+      updateData.readyAt = item.readyAt ?? now;
+    }
+    if (targetRank >= 3) {
+      updateData.servedAt = item.servedAt ?? now;
+    }
+
+    await db
+      .update(orderItemsTable)
+      .set(updateData)
+      .where(eq(orderItemsTable.id, item.id));
+  }
+}
 
 export async function updateOrderStatusByOrderId(
   orderId: string,
   status: string,
   options: UpdateOrderStatusOptions
 ): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
-  const order = await db.query.orders.findFirst({ where: eq(ordersTable.id, orderId), columns: { locationId: true } });
+  const order = await db.query.orders.findFirst({
+    where: eq(ordersTable.id, orderId),
+    columns: {
+      locationId: true,
+      orderNumber: true,
+      orderType: true,
+      total: true,
+      paymentStatus: true,
+      assignedStaffId: true,
+      sessionId: true,
+    },
+  });
   if (!order) return { ok: false, error: "Order not found" };
   const location = await verifyLocationAccess(order.locationId);
   if (!location) return { ok: false, error: "Unauthorized" };
 
+  let changedByStaffId = options.changedByStaffId ?? null;
+  if (!changedByStaffId && options.changedByUserId) {
+    changedByStaffId = await getStaffIdForUser(order.locationId, options.changedByUserId);
+  }
+
   const updateData: Record<string, unknown> = { status, updatedAt: new Date() };
   if (status === "completed") updateData.completedAt = new Date();
   if (status === "cancelled") updateData.cancelledAt = new Date();
+  if (options.estimatedReadyAt !== undefined) {
+    updateData.estimatedReadyAt = options.estimatedReadyAt;
+  }
+  // Accept / start preparing: pin assignee to the accepting staff when unset.
+  if (
+    status === "preparing" &&
+    !order.assignedStaffId &&
+    changedByStaffId
+  ) {
+    updateData.assignedStaffId = changedByStaffId;
+  }
 
   await db.update(ordersTable).set(updateData as any).where(eq(ordersTable.id, orderId));
   await db.insert(orderTimelineTable).values({
     orderId,
     status: status as any,
-    changedByStaffId: options.changedByStaffId ?? null,
+    changedByStaffId,
     changedByUserId: options.changedByUserId ?? null,
     note: options.note ?? null,
   });
+  await syncOrderItemsToOrderStatus(orderId, status);
+
+  // Open-check (delivery-to-table): kitchen "served" must not settle payment.
+  // Standalone/counter: completing settles the check.
+  const isOpenTableCheck = Boolean(order.sessionId);
+  if (status === "completed" && !isOpenTableCheck) {
+    await markStandaloneOrderPaidIfNeeded(orderId, {
+      total: order.total,
+      paymentStatus: order.paymentStatus,
+    });
+  }
+
+  let pointsAwarded: number | null = null;
+  // Loyalty for table sessions is awarded on session close, not kitchen complete.
+  if (status === "completed" && !isOpenTableCheck) {
+    try {
+      const loyalty = await awardLoyaltyPointsForCompletedOrder(orderId);
+      if (loyalty.ok && loyalty.awarded > 0) {
+        pointsAwarded = loyalty.awarded;
+      }
+    } catch (error) {
+      console.error("[updateOrderStatusByOrderId] loyalty award failed", orderId, error);
+    }
+  }
+
+  // Guest closed-tab pushes (idempotent per event). Fire-and-forget.
+  void (async () => {
+    try {
+      if (status === "preparing") {
+        const etaMinutes =
+          options.estimatedReadyAt instanceof Date
+            ? Math.max(
+                1,
+                Math.round((options.estimatedReadyAt.getTime() - Date.now()) / 60_000),
+              )
+            : null;
+        await notifyGuestOrderAccepted({
+          orderId,
+          orderNumber: order.orderNumber,
+          orderType: order.orderType,
+          etaMinutes,
+        });
+      } else if (status === "ready") {
+        await notifyGuestOrderReady({
+          orderId,
+          orderNumber: order.orderNumber,
+          orderType: order.orderType,
+        });
+      } else if (status === "completed" && !isOpenTableCheck) {
+        await notifyGuestOrderCompleted({
+          orderId,
+          orderNumber: order.orderNumber,
+          orderType: order.orderType,
+          pointsAwarded,
+        });
+      }
+    } catch (error) {
+      console.error("[updateOrderStatusByOrderId] guest push failed", orderId, error);
+    }
+  })();
+
   return { ok: true, orderId };
+}
+
+/**
+ * When a standalone/counter order is completed, treat the check as settled (cash)
+ * unless it was already paid or refunded.
+ */
+async function markStandaloneOrderPaidIfNeeded(
+  orderId: string,
+  snapshot: { total: string | number | null; paymentStatus: string | null },
+): Promise<void> {
+  if (snapshot.paymentStatus === "paid" || snapshot.paymentStatus === "refunded") {
+    return;
+  }
+
+  const existingPayments = await db.query.payments.findMany({
+    where: and(eq(paymentsTable.orderId, orderId), eq(paymentsTable.status, "completed")),
+    columns: { amount: true },
+  });
+  const totalPaid = existingPayments.reduce((sum, p) => sum + parseFloat(String(p.amount)), 0);
+  const orderTotal = parseFloat(String(snapshot.total ?? 0)) || 0;
+  const remaining = Math.max(0, Math.round((orderTotal - totalPaid) * 100) / 100);
+  const now = new Date();
+
+  if (remaining > 0) {
+    await db.insert(paymentsTable).values({
+      orderId,
+      amount: remaining.toFixed(2),
+      tipAmount: "0.00",
+      method: "cash",
+      status: "completed",
+      paidAt: now,
+    });
+  }
+
+  await db
+    .update(ordersTable)
+    .set({ paymentStatus: "paid", updatedAt: now })
+    .where(eq(ordersTable.id, orderId));
 }
 
 export type AddPaymentToOrderInput = {

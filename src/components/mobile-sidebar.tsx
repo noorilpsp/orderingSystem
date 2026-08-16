@@ -6,12 +6,9 @@ import { usePathname } from "next/navigation"
 import {
   Home,
   Store,
-  Grid3x3,
   ShoppingCart,
   Menu,
-  CreditCard,
   UserCircle,
-  Calendar,
   BarChart3,
   Settings,
   ChevronDown,
@@ -19,7 +16,6 @@ import {
   MenuIcon,
   Search,
   X,
-  Package,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -48,13 +44,10 @@ const operationsItems = [
     badge: "5",
     badgeColor: "bg-red-500/10 text-red-700 border-red-500/20",
   },
-  { title: "Tables", href: "/tables", icon: Grid3x3 },
-  { title: "Reservations", href: "/reservations", icon: Calendar },
 ]
 
 const businessItems = [
   { title: "Menu", href: "/menu", icon: Menu },
-  { title: "Inventory", href: "/inventory", icon: Package },
 ]
 
 const businessCollapsible = [
@@ -79,45 +72,21 @@ const businessCollapsible = [
   },
 ]
 
-const systemCollapsible = [
-  {
-    title: "Stores",
-    icon: Store,
-    items: [
-      { title: "Store Info", href: "/stores" },
-      { title: "Floorplan & Tables", href: "/stores/floorplan" },
-      { title: "Cross-location Comparison", href: "/stores/comparison" },
-    ],
-  },
-  {
-    title: "Payments",
-    icon: CreditCard,
-    items: [
-      { title: "History", href: "/payments/history" },
-      { title: "Refunds", href: "/payments/refunds" },
-      { title: "Payouts", href: "/payments/payouts" },
-      { title: "Invoices", href: "/payments/invoices" },
-      { title: "Invoice Settings", href: "/payments/invoice-settings" },
-      { title: "Banking", href: "/payments/banking" },
-    ],
-  },
+const systemCollapsible: Array<{
+  title: string
+  icon: typeof Store
+  items: Array<{ title: string; href: string }>
+}> = []
+
+const systemItems = [
+  { title: "Store", href: "/dashboard/stores", icon: Store },
 ]
 
-const systemItems = [{ title: "Users / Staff", href: "/staff", icon: UserCircle }]
-
-const systemSettingsCollapsible = [
-  {
-    title: "Settings",
-    icon: Settings,
-    items: [
-      { title: "Restaurant Info", href: "/settings/restaurant" },
-      { title: "Notification Settings", href: "/settings/notifications" },
-      { title: "Integrations", href: "/settings/integrations" },
-      { title: "Subscription / Billing", href: "/settings/subscription" },
-      { title: "Legal & Compliance", href: "/settings/legal" },
-    ],
-  },
-]
+const systemSettingsCollapsible: Array<{
+  title: string
+  icon: typeof Settings
+  items: Array<{ title: string; href: string }>
+}> = []
 
 const locations = [
   { name: "Downtown Location", orders: 3, tables: "8/15", status: "online", address: "123 Main St, Downtown" },

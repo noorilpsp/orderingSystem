@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { Pool, neonConfig } from "@neondatabase/serverless";
@@ -20,6 +20,7 @@ import {
   platformPersonnel,
 } from "@/db/schema";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
+import { ADMIN_MERCHANTS_CACHE_TAG } from "@/lib/queries";
 
 export const runtime = "nodejs";
 
@@ -31,11 +32,11 @@ if (typeof globalThis.WebSocket === "undefined") {
 }
 
 const merchantSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().optional().default(""),
   publicBrandName: z.string().optional().nullable(),
-  contactEmail: z.string().email(),
-  contactPhone: z.string().min(1),
-  legalName: z.string().min(1),
+  contactEmail: z.union([z.string().email(), z.literal("")]).optional().default(""),
+  contactPhone: z.string().optional().default(""),
+  legalName: z.string().optional().default(""),
   vatNumber: z.string().optional().nullable(),
   registeredAddressLine1: z.string().optional().nullable(),
   registeredAddressLine2: z.string().optional().nullable(),
@@ -43,12 +44,12 @@ const merchantSchema = z.object({
   registeredCity: z.string().optional().nullable(),
   registeredCountry: z.string().optional().nullable(),
   kboNumber: z.string().optional().nullable(),
-  businessType: z.enum(businessTypeEnum.enumValues),
+  businessType: z.enum(businessTypeEnum.enumValues).optional().default("restaurant"),
   status: z.enum(merchantStatusEnum.enumValues).optional().default("onboarding"),
   subscriptionTier: z.enum(subscriptionTierEnum.enumValues).optional().default("trial"),
   subscriptionExpiresAt: z.string().datetime().optional().nullable(),
-  billingEmail: z.string().email().optional().nullable(),
-  criticalAlertsEmail: z.string().email().optional().nullable(),
+  billingEmail: z.union([z.string().email(), z.literal(""), z.null()]).optional(),
+  criticalAlertsEmail: z.union([z.string().email(), z.literal(""), z.null()]).optional(),
   defaultCurrency: z.string().length(3).optional(),
   defaultTimezone: z.string().optional(),
   defaultLanguage: z.string().optional(),
@@ -64,17 +65,17 @@ const merchantSchema = z.object({
 });
 
 const locationSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().optional().default(""),
   storeType: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   storeSlug: z.string().optional().nullable(),
-  address: z.string().min(1),
+  address: z.string().optional().default(""),
   addressLine2: z.string().optional().nullable(),
-  postalCode: z.string().min(1),
-  city: z.string().min(1),
-  country: z.string().min(2).default("Belgium"),
-  phone: z.string().min(1),
-  email: z.string().email().optional().nullable(),
+  postalCode: z.string().optional().default(""),
+  city: z.string().optional().default(""),
+  country: z.string().optional().default("Belgium"),
+  phone: z.string().optional().default(""),
+  email: z.union([z.string().email(), z.literal(""), z.null()]).optional(),
   websiteUrl: z.string().url().optional().nullable(),
   instagramHandle: z.string().optional().nullable(),
   facebookUrl: z.string().url().optional().nullable(),
@@ -104,7 +105,7 @@ const locationSchema = z.object({
 });
 
 const invitationSchema = z.object({
-  email: z.string().email(),
+  email: z.union([z.string().email(), z.literal("")]).optional().default(""),
   role: z.enum(merchantUserRoleEnum.enumValues).default("admin"),
   locationAccess: z.array(z.string()).optional().nullable(),
 });
@@ -209,6 +210,8 @@ export async function POST(request: NextRequest) {
     const merchant = merchantResult.data;
     const location = locationResult.data;
     const invitation = invitationResult.data;
+    const inviteEmail = invitation.email?.trim() ?? "";
+    const shouldInvite = z.string().email().safeParse(inviteEmail).success;
 
     // File uploads
     const logoFile = formData.get("logo") as File | null;
@@ -226,11 +229,11 @@ export async function POST(request: NextRequest) {
     const result = await txDb.transaction(async (tx) => {
       // Merchant - insert and get the generated ID
       const insertedMerchants = await tx.insert(merchants).values({
-        name: merchant.name,
+        name: merchant.name.trim() || "Untitled store",
         publicBrandName: merchant.publicBrandName ?? null,
-        contactEmail: merchant.contactEmail,
-        contactPhone: merchant.contactPhone,
-        legalName: merchant.legalName,
+        contactEmail: merchant.contactEmail.trim() || inviteEmail || "",
+        contactPhone: merchant.contactPhone.trim() || "",
+        legalName: merchant.legalName.trim() || merchant.name.trim() || "Untitled store",
         vatNumber: merchant.vatNumber ?? null,
         registeredAddressLine1: merchant.registeredAddressLine1 ?? null,
         registeredAddressLine2: merchant.registeredAddressLine2 ?? null,
@@ -253,8 +256,8 @@ export async function POST(request: NextRequest) {
         defaultLanguage: merchant.defaultLanguage ?? "nl-BE",
         dateFormat: null,
         numberFormat: null,
-        billingEmail: merchant.billingEmail ?? null,
-        criticalAlertsEmail: merchant.criticalAlertsEmail ?? null,
+        billingEmail: merchant.billingEmail?.trim() || null,
+        criticalAlertsEmail: merchant.criticalAlertsEmail?.trim() || null,
         notificationPreferences: merchant.notificationPreferences ?? null,
       }).returning({ id: merchants.id });
 
@@ -267,19 +270,19 @@ export async function POST(request: NextRequest) {
       // Location - use type assertion to work around Drizzle type inference issue
       const locationValues = {
         merchantId,
-        name: location.name,
+        name: location.name.trim() || merchant.name.trim() || "Untitled store",
         storeType: location.storeType ?? null,
         description: location.description ?? null,
         storeSlug: location.storeSlug ?? null,
-        address: location.address,
+        address: location.address.trim() || "",
         addressLine2: location.addressLine2 ?? null,
-        postalCode: location.postalCode,
-        city: location.city,
-        country: location.country ?? "Belgium",
+        postalCode: location.postalCode.trim() || "",
+        city: location.city.trim() || "",
+        country: location.country?.trim() || "Belgium",
         lat: location.lat ?? null,
         lng: location.lng ?? null,
-        phone: location.phone,
-        email: location.email ?? null,
+        phone: location.phone.trim() || "",
+        email: location.email?.trim() || null,
         websiteUrl: location.websiteUrl ?? null,
         instagramHandle: location.instagramHandle ?? null,
         facebookUrl: location.facebookUrl ?? null,
@@ -316,38 +319,41 @@ export async function POST(request: NextRequest) {
 
       const locationId = insertedLocations[0].id;
 
-      // Invitation
-      const [insertedInvitation] = await tx.insert(invitations).values({
-        merchantId,
-        invitedBy: auth.user.id,
-        email: invitation.email,
-        role: invitation.role,
-        locationAccess: invitation.locationAccess ?? null,
-        token: invitationToken,
-        expiresAt: invitationExpiresAt,
-        acceptedAt: null,
-      }).returning({ id: invitations.id });
+      let invitationTokenOut: string | null = null;
+      if (shouldInvite) {
+        await tx.insert(invitations).values({
+          merchantId,
+          invitedBy: auth.user.id,
+          email: inviteEmail,
+          role: invitation.role,
+          locationAccess: invitation.locationAccess ?? null,
+          token: invitationToken,
+          expiresAt: invitationExpiresAt,
+          acceptedAt: null,
+        });
+        invitationTokenOut = invitationToken;
+      }
 
-      return { merchantId, locationId, invitationToken };
+      return { merchantId, locationId, invitationToken: invitationTokenOut };
     });
 
-    // Send invitation email (best-effort - don't fail the request if email fails)
     let emailSent = false;
-    try {
-      const { sendInvitationEmail } = await import("@/lib/email");
-      const emailResult = await sendInvitationEmail(
-        invitation.email,
-        result.invitationToken,
-        merchant.name,
-        invitation.role,
-      );
-      emailSent = emailResult.success;
-      if (!emailResult.success) {
-        console.error("[invitation-email] Failed to send:", emailResult.error);
+    if (shouldInvite && result.invitationToken) {
+      try {
+        const { sendInvitationEmail } = await import("@/lib/email");
+        const emailResult = await sendInvitationEmail(
+          inviteEmail,
+          result.invitationToken,
+          merchant.name.trim() || "Untitled store",
+          invitation.role,
+        );
+        emailSent = emailResult.success;
+        if (!emailResult.success) {
+          console.error("[invitation-email] Failed to send:", emailResult.error);
+        }
+      } catch (emailErr) {
+        console.error("[invitation-email] Error sending invitation email:", emailErr);
       }
-    } catch (emailErr) {
-      console.error("[invitation-email] Error sending invitation email:", emailErr);
-      // Don't throw - merchant creation succeeded, email is secondary
     }
 
     if (!result.merchantId || !result.locationId) {
@@ -356,6 +362,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Revalidate the admin merchants page cache to show the new merchant immediately
+    revalidateTag(ADMIN_MERCHANTS_CACHE_TAG, "max");
     revalidatePath("/admin/merchants");
 
     return NextResponse.json(

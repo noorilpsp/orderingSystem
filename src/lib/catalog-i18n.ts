@@ -38,6 +38,29 @@ export function normalizeCatalogI18n(raw: unknown): CatalogI18n | null {
   };
 }
 
+/** Build catalog i18n from Arabic CSV/form strings. Empty values are omitted. */
+export function catalogI18nFromArFields(fields: {
+  name?: string | null;
+  description?: string | null;
+  customerInstructions?: string | null;
+}): CatalogI18n | null {
+  return normalizeCatalogI18n({
+    ar: {
+      name: fields.name ?? "",
+      description: fields.description ?? "",
+      customerInstructions: fields.customerInstructions ?? "",
+    },
+  });
+}
+
+export function catalogArField(
+  i18n: CatalogI18n | null | undefined,
+  field: keyof CatalogLocaleFields,
+): string {
+  const value = i18n?.ar?.[field];
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function resolveCatalogText(
   locale: "en" | "ar",
   base: { name: string; description?: string | null },

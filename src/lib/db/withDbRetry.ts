@@ -13,8 +13,16 @@ function isTransientDbError(error: unknown): boolean {
     combined.includes("fetch failed") ||
     combined.includes("etimedout") ||
     combined.includes("econnreset") ||
+    combined.includes("econnrefused") ||
     combined.includes("connection terminated") ||
-    combined.includes("failed query")
+    combined.includes("connection closed") ||
+    combined.includes("socket hang up") ||
+    combined.includes("network") ||
+    combined.includes("timeout") ||
+    combined.includes("too many connections") ||
+    combined.includes("failed query") ||
+    combined.includes("server closed the connection") ||
+    combined.includes("cannot acquire")
   );
 }
 
@@ -45,13 +53,50 @@ export async function withDbRetry<T>(
 
 export function toUserFacingDbError(error: unknown, fallback: string): string {
   if (isTransientDbError(error)) {
-    return "Database connection timed out. Please try again.";
+    return "Connection is slow or unstable. Please try again.";
   }
   if (error instanceof Error && error.message.trim()) {
-    if (error.message.startsWith("Failed query:")) {
+    const message = error.message.trim();
+    // Never surface raw SQL / driver dump to guests or staff UI.
+    if (looksLikeRawDbDump(message)) {
       return fallback;
     }
-    return error.message;
+    return message;
   }
   return fallback;
+}
+
+/** True when a string looks like a drizzle/neon SQL dump (unsafe for UI). */
+export function looksLikeRawDbDump(message: string): boolean {
+  const trimmed = message.trim();
+  if (!trimmed) return false;
+  return (
+    trimmed.startsWith("Failed query:") ||
+    trimmed.includes(' from "') ||
+    trimmed.includes(" select ") ||
+    /params:\s/i.test(trimmed) ||
+    /\$\d+/.test(trimmed)
+  );
+}
+
+/**
+ * Sanitize any API/client error string before showing it in toasts or inline UI.
+ * Safe to import from client components.
+ */
+export function toUserFacingErrorMessage(
+  error: unknown,
+  fallback = "Something went wrong. Please try again.",
+): string {
+  if (error == null) return fallback;
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (!trimmed) return fallback;
+    if (looksLikeRawDbDump(trimmed) || isTransientDbError(trimmed)) {
+      return fallback === "Something went wrong. Please try again."
+        ? "Connection is slow or unstable. Please try again."
+        : fallback;
+    }
+    return trimmed;
+  }
+  return toUserFacingDbError(error, fallback);
 }

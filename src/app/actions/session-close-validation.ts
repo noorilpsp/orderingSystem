@@ -118,7 +118,15 @@ export async function canCloseSession(
     .select({
       pending_count: sql<number>`(SELECT count(*)::int FROM payments WHERE session_id = ${sessionId} AND status IN ('pending'))`.as("pending_count"),
       orders_total: sql<string>`(SELECT COALESCE(SUM(total),0)::numeric FROM orders WHERE session_id = ${sessionId} AND status != 'cancelled')`.as("orders_total"),
-      payments_total: sql<string>`(SELECT COALESCE(SUM(amount),0)::numeric FROM payments WHERE session_id = ${sessionId} AND status = 'completed')`.as("payments_total"),
+      // Count session payments and per-order payments on this visit (avoid double-pay gaps).
+      payments_total: sql<string>`(
+        SELECT COALESCE(SUM(amount),0)::numeric FROM payments p
+        WHERE p.status = 'completed'
+          AND (
+            p.session_id = ${sessionId}
+            OR p.order_id IN (SELECT id FROM orders WHERE session_id = ${sessionId})
+          )
+      )`.as("payments_total"),
     })
     .from(sessionsTable)
     .where(eq(sessionsTable.id, sessionId))

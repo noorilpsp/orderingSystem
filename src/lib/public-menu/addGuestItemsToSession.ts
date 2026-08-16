@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   items as itemsTable,
@@ -11,11 +11,9 @@ import {
   orderItems as orderItemsTable,
   orderItemCustomizations as orderItemCustomizationsTable,
   sessions as sessionsTable,
-  tables as tablesTable,
   seats as seatsTable,
 } from "@/lib/db/schema/orders";
 import { withTx } from "@/domain/tx";
-import { getOpenWave } from "@/domain/orderHelpers";
 import { recalculateOrderTotals, recalculateSessionTotals } from "@/domain/orderTotals";
 import {
   getStationRoutingContext,
@@ -24,6 +22,8 @@ import {
 import { resolveOptionPriceFromSelectedOptionIds } from "@/lib/public-menu/resolve-customization-option-price";
 import { fireGuestWave } from "@/lib/public-menu/fireGuestWave";
 import type { PublicOrderItemInput } from "@/lib/public-menu/types";
+import { repricePromoLines } from "@/lib/promotions/applyOrderBogo";
+import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
 
 type DbOrTx = typeof db;
 
@@ -45,14 +45,20 @@ async function createGuestNextWave(
     .where(eq(ordersTable.sessionId, sessionId));
   const nextWave = (maxRow?.maxWave ?? 0) + 1;
 
-  const tableRow = session.tableId
-    ? await dbOrTx.query.tables.findFirst({
-        where: eq(tablesTable.id, session.tableId),
-        columns: { tableNumber: true },
-      })
-    : null;
-  const tableNum = tableRow?.tableNumber?.match(/^[A-Za-z]*(\d+)$/)?.[1] ?? "1";
-  const orderNumber = `T${tableNum}-${Date.now().toString(36).slice(-6)}`.slice(0, 20);
+  // Same daily sequence as pickup (ORD-001 → DI-001 on the board).
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const todayOrders = await dbOrTx.query.orders.findMany({
+    where: and(
+      eq(ordersTable.locationId, session.locationId),
+      gte(ordersTable.createdAt, today),
+      lte(ordersTable.createdAt, tomorrow),
+    ),
+    columns: { id: true },
+  });
+  const orderNumber = `ORD-${String(todayOrders.length + 1).padStart(3, "0")}`;
   const now = new Date();
 
   const [inserted] = await dbOrTx
@@ -105,52 +111,62 @@ export async function addGuestItemsToSession(
   }
 
   const seatId = options?.seatId?.trim();
-  if (!seatId) {
-    return { ok: false, message: "seatId is required" };
-  }
+  let seatRow = seatId
+    ? await db.query.seats.findFirst({
+        where: and(
+          eq(seatsTable.id, seatId),
+          eq(seatsTable.sessionId, sessionId),
+          eq(seatsTable.status, "active"),
+        ),
+        columns: { id: true, seatNumber: true },
+      })
+    : null;
 
-  const seatRow = await db.query.seats.findFirst({
-    where: and(
-      eq(seatsTable.id, seatId),
-      eq(seatsTable.sessionId, sessionId),
-      eq(seatsTable.status, "active"),
-    ),
-    columns: { id: true, seatNumber: true },
-  });
   if (!seatRow) {
-    return { ok: false, message: "Seat not found for this table" };
+    seatRow = await db.query.seats.findFirst({
+      where: and(eq(seatsTable.sessionId, sessionId), eq(seatsTable.status, "active")),
+      columns: { id: true, seatNumber: true },
+      orderBy: [asc(seatsTable.seatNumber)],
+    });
   }
 
+  if (!seatRow) {
+    const now = new Date();
+    const [createdSeat] = await db
+      .insert(seatsTable)
+      .values({
+        sessionId,
+        seatNumber: 1,
+        status: "active",
+        updatedAt: now,
+      })
+      .returning({ id: seatsTable.id, seatNumber: seatsTable.seatNumber });
+    seatRow = createdSeat ?? null;
+  }
+
+  if (!seatRow) {
+    return { ok: false, message: "Unable to assign a seat for this table" };
+  }
+
+  const resolvedSeatId = seatRow.id;
   const resolvedSeatNumber = seatRow.seatNumber;
 
   return withTx(async (tx) => {
-    let openWave = await getOpenWave(sessionId, undefined, undefined, tx);
-    if (!openWave) {
-      const created = await createGuestNextWave(sessionId, tx);
-      if (!created.ok) return { ok: false, message: created.error };
-      openWave = await getOpenWave(sessionId, created.order.wave, undefined, tx);
-    }
-    if (!openWave) return { ok: false, message: "Unable to create order wave" };
+    // Each guest checkout is its own kitchen ticket (no append to in-progress orders).
+    const created = await createGuestNextWave(sessionId, tx);
+    if (!created.ok) return { ok: false, message: created.error };
 
-    let orderId = openWave.id;
+    let orderId = created.order.id;
     let order = await tx.query.orders.findFirst({
       where: eq(ordersTable.id, orderId),
       columns: { id: true, locationId: true, status: true, firedAt: true, orderNumber: true },
     });
     if (!order) return { ok: false, message: "Order not found" };
 
-    if (order.firedAt != null) {
-      const created = await createGuestNextWave(sessionId, tx);
-      if (!created.ok) return { ok: false, message: created.error };
-      order = await tx.query.orders.findFirst({
-        where: eq(ordersTable.id, created.order.id),
-        columns: { id: true, locationId: true, status: true, firedAt: true, orderNumber: true },
-      });
-      if (!order) return { ok: false, message: "Order not found" };
-      orderId = order.id;
+    const itemIds = [...new Set(items.map((item) => item.itemId).filter(Boolean))];
+    if (itemIds.length === 0) {
+      return { ok: false, message: "At least one menu item is required" };
     }
-
-    const itemIds = [...new Set(items.map((item) => item.itemId))];
     const menuItems = await tx
       .select({
         id: itemsTable.id,
@@ -162,6 +178,10 @@ export async function addGuestItemsToSession(
       .from(itemsTable)
       .where(and(eq(itemsTable.locationId, order.locationId), inArray(itemsTable.id, itemIds)));
     const menuItemMap = new Map(menuItems.map((item) => [item.id, item]));
+    const promoByItem = await resolveItemPromos(
+      order.locationId,
+      new Map(menuItems.map((item) => [item.id, Number(item.price) || 0])),
+    );
 
     if (menuItems.length !== itemIds.length) {
       return { ok: false, message: "One or more items are invalid" };
@@ -229,7 +249,7 @@ export async function addGuestItemsToSession(
       }
 
       const qty = Math.max(1, Math.floor(input.quantity ?? 1));
-      const price = Number(menuItem.price);
+      const price = promoByItem.get(menuItem.id)?.price ?? Number(menuItem.price);
       let customizationsTotal = 0;
       const custRows: Array<{
         groupId: string;
@@ -282,7 +302,7 @@ export async function addGuestItemsToSession(
             itemPrice: price.toFixed(2),
             quantity: 1,
             seat: resolvedSeatNumber,
-            seatId,
+            seatId: resolvedSeatId,
             customizationsTotal: unitCustomizationsTotal.toFixed(2),
             lineTotal: unitLineTotal.toFixed(2),
             notes: input.notes ?? null,
@@ -301,6 +321,14 @@ export async function addGuestItemsToSession(
         }
       }
     }
+
+    await repricePromoLines({
+      locationId: order.locationId,
+      orderId,
+      sessionId,
+      itemIds,
+      dbOrTx: tx,
+    });
 
     await recalculateOrderTotals(orderId, tx);
     await recalculateSessionTotals(sessionId, tx);

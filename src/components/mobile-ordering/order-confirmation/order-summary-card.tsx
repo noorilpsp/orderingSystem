@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronDown } from "lucide-react";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 
 interface OrderItem {
   quantity: number;
@@ -23,12 +24,12 @@ export function OrderSummaryCard({
   expanded,
   onToggle,
 }: OrderSummaryCardProps) {
+  const { formatMoney } = useGuestLocalization();
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <Card>
       <CardContent className="pt-6">
-        {/* Header - Always Visible */}
         <button
           onClick={onToggle}
           className="w-full flex items-center justify-between text-left"
@@ -37,9 +38,7 @@ export function OrderSummaryCard({
             <p className="font-semibold text-foreground">
               {itemCount} {itemCount === 1 ? "item" : "items"}
             </p>
-            <p className="text-sm text-muted-foreground">
-              €{total.toFixed(2)}
-            </p>
+            <p className="text-sm text-muted-foreground">{formatMoney(total)}</p>
           </div>
           <motion.div
             animate={{ rotate: expanded ? 180 : 0 }}
@@ -49,7 +48,6 @@ export function OrderSummaryCard({
           </motion.div>
         </button>
 
-        {/* Expandable Content */}
         <AnimatePresence>
           {expanded && (
             <motion.div
@@ -74,14 +72,14 @@ export function OrderSummaryCard({
                       </p>
                     </div>
                     <p className="text-foreground font-medium ml-4">
-                      €{(item.price * item.quantity).toFixed(2)}
+                      {formatMoney(item.price * item.quantity)}
                     </p>
                   </motion.div>
                 ))}
                 <div className="pt-2 border-t mt-3">
                   <div className="flex justify-between items-center">
                     <p className="font-bold text-lg">Total</p>
-                    <p className="font-bold text-lg">€{total.toFixed(2)}</p>
+                    <p className="font-bold text-lg">{formatMoney(total)}</p>
                   </div>
                 </div>
               </div>

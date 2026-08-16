@@ -22,67 +22,60 @@ type EmailResult = {
  */
 export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
   const { to, subject, html, from } = options;
+  let lastError: string | undefined;
 
-  // Try Brevo first (formerly Sendinblue)
-  if (process.env.BREVO_API_KEY) {
+  // Try Brevo first (formerly Sendinblue). On 401/other failure, continue to Resend.
+  const brevoKey = process.env.BREVO_API_KEY?.trim();
+  if (brevoKey) {
     try {
       const brevo = await import("@getbrevo/brevo").catch(() => null);
       if (brevo) {
         const apiInstance = new brevo.TransactionalEmailsApi();
-        
-        // Set API key - Brevo uses api-key header
+
         apiInstance.setApiKey(
           brevo.TransactionalEmailsApiApiKeys.apiKey,
-          process.env.BREVO_API_KEY,
+          brevoKey,
         );
 
         const sendSmtpEmail = new brevo.SendSmtpEmail();
         sendSmtpEmail.subject = subject;
         sendSmtpEmail.htmlContent = html;
-        
-        // Sender email is required and must be verified in Brevo
-        const senderEmail = from || process.env.BREVO_FROM_EMAIL;
-        if (!senderEmail) {
-          return {
-            success: false,
-            error: "BREVO_FROM_EMAIL not set. Please configure it in your .env.local",
-          };
-        }
-        
-        sendSmtpEmail.sender = {
-          name: process.env.BREVO_SENDER_NAME || "BerryTap",
-          email: senderEmail,
-        };
-        sendSmtpEmail.to = [{ email: to }];
 
-        const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-        return { success: true, messageId: result.body?.messageId || "sent" };
+        const senderEmail = from || process.env.BREVO_FROM_EMAIL?.trim();
+        if (senderEmail) {
+          sendSmtpEmail.sender = {
+            name: process.env.BREVO_SENDER_NAME?.split("#")[0]?.trim() || "BerryTap",
+            email: senderEmail,
+          };
+          sendSmtpEmail.to = [{ email: to }];
+
+          const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+          return { success: true, messageId: result.body?.messageId || "sent" };
+        }
+        lastError = "BREVO_FROM_EMAIL not set";
+        console.warn("[email]", lastError, "— trying next provider");
       }
     } catch (err: any) {
       console.error("[email] Brevo error:", err);
-      // Better error message for 401 (authentication failed)
-      if (err.response?.status === 401) {
-        return {
-          success: false,
-          error: "Brevo authentication failed. Please check your BREVO_API_KEY is correct.",
-        };
-      }
-      const errorMessage =
-        err.response?.body?.message || err.message || "Brevo send failed";
-      return { success: false, error: errorMessage };
+      lastError =
+        err.response?.status === 401
+          ? "Brevo authentication failed (401). API key is present but rejected."
+          : err.response?.body?.message || err.message || "Brevo send failed";
+      console.warn("[email] Falling through to next provider:", lastError);
     }
   }
 
   // Try Resend (recommended for Vercel deployments)
-  if (process.env.RESEND_API_KEY) {
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  if (resendKey) {
     try {
       const resend = await import("resend").catch(() => null);
       if (resend) {
         const { Resend } = resend;
-        const resendClient = new Resend(process.env.RESEND_API_KEY);
+        const resendClient = new Resend(resendKey);
 
         const { data, error } = await resendClient.emails.send({
-          from: from || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
+          from: from || process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev",
           to,
           subject,
           html,
@@ -155,7 +148,10 @@ export async function sendInvitationEmail(
   merchantName: string,
   role: string,
 ): Promise<EmailResult> {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
+    .split("#")[0]
+    .trim()
+    .replace(/\/$/, "");
   const invitationUrl = `${siteUrl}/invite/${invitationToken}`;
 
   const html = `

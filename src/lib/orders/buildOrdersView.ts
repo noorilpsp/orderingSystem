@@ -4,7 +4,7 @@
  * Caller must have validated auth and location access.
  */
 
-import { eq, and, inArray, isNull, ne, desc, asc } from "drizzle-orm";
+import { eq, and, inArray, isNull, isNotNull, ne, desc, asc, gte, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   orders,
@@ -12,8 +12,16 @@ import {
   orderItemCustomizations,
   sessions,
   orderTimeline,
+  seats,
+  tables,
 } from "@/lib/db/schema/orders";
-import { merchantLocations } from "@/lib/db/schema";
+import {
+  merchantLocations,
+  items as catalogItems,
+  customizationGroups,
+  customizationOptions,
+} from "@/lib/db/schema";
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 import type {
   OrdersView,
   OrdersUnifiedOrder,
@@ -22,7 +30,12 @@ import type {
   OrdersOrderSource,
   OrdersPaymentState,
   OrdersPaymentMethod,
+  OrdersServiceRequest,
 } from "./ordersView";
+import {
+  hasBillRequest,
+  hasWaiterRequestAlert,
+} from "@/lib/floor-map/acknowledgeTableService";
 import {
   deriveCanonicalWaveStatusFromItemStatuses,
   mapCanonicalWaveStatusToStoreLikeStatus,
@@ -31,6 +44,10 @@ import {
 import { isScheduledOrderParked } from "@/lib/public-menu/scheduledOrderRelease";
 import { processGuestOrderPushReminders } from "@/lib/public-menu/guest-order-push-reminders";
 import { formatCounterOrderLabel } from "@/lib/orders/formatCounterOrderLabel";
+import {
+  buildTableCheckOrder,
+  formatTableSeatGuestLabel,
+} from "@/lib/orders/buildTableCheckOrder";
 import { coerceTaxRatePercent } from "@/lib/tax-rate";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -85,8 +102,20 @@ async function loadCustomizationsByOrderItemId(
       optionName: orderItemCustomizations.optionName,
       optionPrice: orderItemCustomizations.optionPrice,
       quantity: orderItemCustomizations.quantity,
+      groupId: orderItemCustomizations.groupId,
+      optionId: orderItemCustomizations.optionId,
+      groupI18n: customizationGroups.i18n,
+      optionI18n: customizationOptions.i18n,
     })
     .from(orderItemCustomizations)
+    .leftJoin(
+      customizationGroups,
+      eq(orderItemCustomizations.groupId, customizationGroups.id),
+    )
+    .leftJoin(
+      customizationOptions,
+      eq(orderItemCustomizations.optionId, customizationOptions.id),
+    )
     .where(inArray(orderItemCustomizations.orderItemId, orderItemIds));
 
   for (const row of rows) {
@@ -96,6 +125,10 @@ async function loadCustomizationsByOrderItemId(
       optionName: row.optionName,
       optionPrice: parseFloat(String(row.optionPrice ?? 0)) || 0,
       quantity: row.quantity ?? 1,
+      groupId: row.groupId ?? null,
+      optionId: row.optionId ?? null,
+      groupI18n: normalizeCatalogI18n(row.groupI18n),
+      optionI18n: normalizeCatalogI18n(row.optionI18n),
     });
     map.set(row.orderItemId, list);
   }
@@ -147,6 +180,29 @@ function mapDbItemStatus(s: string): string {
   return s === "pending" ? "held" : "sent";
 }
 
+function mapOrderLineToViewItem(it: {
+  id: string;
+  itemId?: string | null;
+  itemName: string | null;
+  itemI18n?: unknown;
+  quantity: number | null;
+  lineTotal: string | null;
+  status: string;
+  notes: string | null;
+}, extra?: Partial<OrdersViewItem> & { customizations?: OrdersViewItem["customizations"] }): OrdersViewItem {
+  return {
+    id: it.id,
+    name: it.itemName ?? "",
+    itemId: it.itemId ?? null,
+    i18n: normalizeCatalogI18n(it.itemI18n),
+    qty: it.quantity ?? 1,
+    status: mapDbItemStatus(it.status),
+    price: parseFloat(String(it.lineTotal ?? 0)) || 0,
+    notes: it.notes ?? null,
+    ...extra,
+  };
+}
+
 function mapOrderStatusToUnified(
   status: string,
   paymentStatus: string
@@ -158,6 +214,12 @@ function mapOrderStatusToUnified(
   if (status === "preparing") return "preparing";
   if (status === "confirmed" || status === "pending") return "sent";
   return "sent";
+}
+
+/** Paid only when paymentStatus says so — kitchen "completed" is not settlement. */
+function resolveOrdersPaymentState(paymentStatus: string): OrdersPaymentState {
+  if (paymentStatus === "refunded" || paymentStatus === "paid") return "paid";
+  return "unpaid";
 }
 
 /** When older rows stored tax as 0, derive money fields from the location rate for display. */
@@ -225,7 +287,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
     dineInMode,
   };
 
-  const [openSessions, standaloneOrders] = await Promise.all([
+  const [openSessions, standaloneOrders, locationTables] = await Promise.all([
     db.query.sessions.findMany({
       where: and(
         eq(sessions.locationId, locationId),
@@ -265,7 +327,47 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       },
       limit: 100,
     }),
+    db.query.tables.findMany({
+      where: eq(tables.locationId, locationId),
+      columns: {
+        id: true,
+        tableNumber: true,
+        displayId: true,
+        alerts: true,
+        stage: true,
+      },
+    }),
   ]);
+
+  const serviceRequests: OrdersServiceRequest[] = [];
+  for (const table of locationTables) {
+    const tableNumber = (table.displayId?.trim() || table.tableNumber).trim();
+    if (hasWaiterRequestAlert(table.alerts as string[] | null)) {
+      serviceRequests.push({
+        id: `${table.id}:waiter`,
+        tableId: table.id,
+        tableNumber,
+        requestType: "waiter",
+      });
+    }
+    if (hasBillRequest(table.stage)) {
+      serviceRequests.push({
+        id: `${table.id}:bill`,
+        tableId: table.id,
+        tableNumber,
+        requestType: "bill",
+      });
+    }
+  }
+  serviceRequests.sort((a, b) => {
+    if (a.requestType !== b.requestType) {
+      return a.requestType === "waiter" ? -1 : 1;
+    }
+    return a.tableNumber.localeCompare(b.tableNumber, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
 
   const tableOrders: OrdersUnifiedOrder[] = [];
   const sessionIds = openSessions.map((s) => s.id);
@@ -283,10 +385,20 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
         wave: true,
         firedAt: true,
         status: true,
+        orderNumber: true,
+        orderType: true,
+        paymentStatus: true,
         subtotal: true,
         taxAmount: true,
         total: true,
+        notes: true,
+        estimatedReadyAt: true,
+        createdAt: true,
         updatedAt: true,
+        customerId: true,
+      },
+      with: {
+        customer: { columns: { name: true } },
       },
     });
 
@@ -297,20 +409,73 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
             .select({
               orderId: orderItems.orderId,
               id: orderItems.id,
+              itemId: orderItems.itemId,
               itemName: orderItems.itemName,
+              itemI18n: catalogItems.i18n,
               quantity: orderItems.quantity,
               lineTotal: orderItems.lineTotal,
               status: orderItems.status,
               voidedAt: orderItems.voidedAt,
               notes: orderItems.notes,
+              seat: orderItems.seat,
+              seatId: orderItems.seatId,
             })
             .from(orderItems)
+            .leftJoin(catalogItems, eq(orderItems.itemId, catalogItems.id))
             .where(inArray(orderItems.orderId, sessionOrderIds))
         : [];
+
+    const sessionSeatIds = [
+      ...new Set(
+        sessionOrderItems
+          .map((i) => i.seatId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
+    const seatsById = new Map<string, { seatNumber: number; guestName: string | null }>();
+    if (sessionSeatIds.length > 0) {
+      const seatRows = await db
+        .select({
+          id: seats.id,
+          seatNumber: seats.seatNumber,
+          guestName: seats.guestName,
+        })
+        .from(seats)
+        .where(inArray(seats.id, sessionSeatIds));
+      for (const row of seatRows) {
+        seatsById.set(row.id, {
+          seatNumber: row.seatNumber,
+          guestName: row.guestName ?? null,
+        });
+      }
+    }
 
     const sessionCustomizationsByItemId = await loadCustomizationsByOrderItemId(
       sessionOrderItems.filter((i) => !i.voidedAt).map((i) => i.id),
     );
+
+    const sessionTimeline =
+      sessionOrderIds.length > 0 && channels.deliveryToTable
+        ? await db
+            .select({
+              orderId: orderTimeline.orderId,
+              status: orderTimeline.status,
+              createdAt: orderTimeline.createdAt,
+            })
+            .from(orderTimeline)
+            .where(inArray(orderTimeline.orderId, sessionOrderIds))
+            .orderBy(asc(orderTimeline.createdAt))
+        : [];
+
+    const sessionTimelineByOrder = new Map<
+      string,
+      Array<{ status: string; createdAt: Date | null }>
+    >();
+    for (const row of sessionTimeline) {
+      const list = sessionTimelineByOrder.get(row.orderId) ?? [];
+      list.push({ status: row.status, createdAt: row.createdAt });
+      sessionTimelineByOrder.set(row.orderId, list);
+    }
 
     const ordersBySession = new Map<string, typeof sessionOrders>();
     for (const o of sessionOrders) {
@@ -329,95 +494,337 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       itemsByOrderId.set(i.orderId, list);
     }
 
-    for (const sess of openSessions) {
-      const table = sess.table;
-      if (!table) continue;
-      const tableNum = table.tableNumber?.match(/^[A-Za-z]*(\d+)$/)?.[1] ?? "?";
-      const label = `T${tableNum}`;
-      const sectionLabel = SECTION_LABELS[table.section ?? "main"] ?? table.section ?? "Main";
-      const guestCount = sess.guestCount ?? 0;
-      const guestLabel = `${guestCount} guest${guestCount === 1 ? "" : "s"}`;
-      const openedAt = sess.openedAt?.getTime() ?? Date.now();
+    // Delivery-to-table: kitchen tickets stay separate; served+unpaid roll into one table check.
+    if (channels.deliveryToTable) {
+      for (const sess of openSessions) {
+        const table = sess.table;
+        if (!table) continue;
+        const rawTableNumber = table.tableNumber?.trim() || "?";
+        const plainNumeric = rawTableNumber.match(/^(?:T)?(\d+)$/i)?.[1];
+        const tableLabel = plainNumeric ? `T${plainNumeric}` : rawTableNumber;
+        const sectionLabel =
+          SECTION_LABELS[table.section ?? "main"] ?? table.section ?? "Main";
 
-      const sessOrders = (ordersBySession.get(sess.id) ?? []).sort(
-        (a, b) => (a.wave ?? 1) - (b.wave ?? 1)
+        const servedUnpaid: OrdersUnifiedOrder[] = [];
+
+        for (const o of ordersBySession.get(sess.id) ?? []) {
+          const items = (itemsByOrderId.get(o.id) ?? []).map((it) => {
+            const customizations = sessionCustomizationsByItemId.get(it.id) ?? [];
+            const seatMeta = it.seatId ? seatsById.get(it.seatId) : undefined;
+            const seatGuestName =
+              seatMeta?.guestName?.trim() ||
+              o.customer?.name?.trim() ||
+              null;
+            return mapOrderLineToViewItem(it, {
+              seatNumber: seatMeta?.seatNumber ?? (it.seat > 0 ? it.seat : null),
+              seatGuestName,
+              customizations: customizations.length > 0 ? customizations : undefined,
+            });
+          });
+          if (items.length === 0) continue;
+
+          const paymentStatus = (o.paymentStatus ?? "unpaid") as string;
+          const status = mapOrderStatusToUnified(o.status, paymentStatus);
+          const paymentState = resolveOrdersPaymentState(paymentStatus);
+          const createdAt = o.createdAt?.getTime() ?? sess.openedAt?.getTime() ?? 0;
+          const stageEnteredAt = buildStageEnteredAt(
+            createdAt,
+            sessionTimelineByOrder.get(o.id) ?? [],
+          );
+          const money = withDerivedTax({
+            subtotal: parseFloat(String(o.subtotal ?? 0)) || 0,
+            taxAmount: parseFloat(String(o.taxAmount ?? 0)) || 0,
+            total: parseFloat(String(o.total ?? 0)) || 0,
+            taxRatePercent,
+          });
+          const code = formatCounterOrderLabel({
+            orderNumber: o.orderNumber,
+            orderType: o.orderType ?? "dine_in",
+            orderId: o.id,
+          });
+
+          const ticket: OrdersUnifiedOrder = {
+            id: `order-${o.id}`,
+            source: "table",
+            label: code,
+            sectionLabel,
+            guestLabel: formatTableSeatGuestLabel(tableLabel, items),
+            status,
+            createdAt,
+            updatedAt: o.updatedAt?.getTime() ?? createdAt,
+            stageEnteredAt,
+            subtotal: money.subtotal,
+            taxAmount: money.taxAmount,
+            total: money.total,
+            itemCount: items.reduce((sum, item) => sum + item.qty, 0),
+            items,
+            waves: [],
+            tableId: table.id,
+            sessionId: sess.id,
+            orderId: o.id,
+            waveNumber: o.wave ?? 1,
+            note: o.notes ?? undefined,
+            needsAccept: status === "sent",
+            paymentState,
+            paymentMethod: null,
+            targetEtaMinutes: resolveTargetEtaMinutes({
+              estimatedReadyAt: o.estimatedReadyAt,
+              createdAtMs: createdAt,
+              preparingEnteredAtMs: stageEnteredAt.preparing ?? null,
+              fallbackPrepMinutes: prepMinutes,
+            }),
+          };
+
+          if (status === "served" && paymentState !== "paid") {
+            servedUnpaid.push(ticket);
+            continue;
+          }
+          if (status === "voided" || status === "refunded") {
+            tableOrders.push(ticket);
+            continue;
+          }
+          tableOrders.push(ticket);
+        }
+
+        const check = buildTableCheckOrder(
+          servedUnpaid.map((t) => ({
+            ...t,
+            // buildTableCheckOrder reads table code from guestLabel / label
+            label: tableLabel,
+            guestLabel: `Table ${tableLabel}`,
+          })),
+        );
+        if (check) tableOrders.push(check);
+      }
+    } else {
+      for (const sess of openSessions) {
+        const table = sess.table;
+        if (!table) continue;
+        const rawTableNumber = table.tableNumber?.trim() || "?";
+        const plainNumeric = rawTableNumber.match(/^(?:T)?(\d+)$/i)?.[1];
+        const label = plainNumeric ? `T${plainNumeric}` : rawTableNumber;
+        const sectionLabel =
+          SECTION_LABELS[table.section ?? "main"] ?? table.section ?? "Main";
+        const guestCount = sess.guestCount ?? 0;
+        const guestLabel = `${guestCount} guest${guestCount === 1 ? "" : "s"}`;
+        const openedAt = sess.openedAt?.getTime() ?? Date.now();
+
+        const sessOrders = (ordersBySession.get(sess.id) ?? []).sort(
+          (a, b) => (a.wave ?? 1) - (b.wave ?? 1),
+        );
+
+        const waves: Array<{ number: number; status: OrdersWaveStatus }> = [];
+        const allItems: OrdersViewItem[] = [];
+        let total = 0;
+        let subtotal = 0;
+        let taxAmount = 0;
+
+        for (const o of sessOrders) {
+          const waveNum = o.wave ?? 1;
+          const items = itemsByOrderId.get(o.id) ?? [];
+          const statuses = items.map((i) => itemStatusToWaveStatus(i.status));
+          let waveStatus: OrdersWaveStatus = "held";
+          if (o.firedAt) {
+            if (statuses.every((s) => s === "served")) waveStatus = "served";
+            else if (statuses.some((s) => s === "ready")) waveStatus = "ready";
+            else if (statuses.some((s) => s === "cooking")) waveStatus = "cooking";
+            else waveStatus = "fired";
+          } else {
+            waveStatus = "held";
+          }
+          waves.push({ number: waveNum, status: waveStatus });
+          for (const it of items) {
+            const customizations = sessionCustomizationsByItemId.get(it.id) ?? [];
+            allItems.push(
+              mapOrderLineToViewItem(it, {
+                customizations: customizations.length > 0 ? customizations : undefined,
+              }),
+            );
+          }
+          total += parseFloat(String(o.total ?? 0)) || 0;
+          subtotal += parseFloat(String(o.subtotal ?? 0)) || 0;
+          taxAmount += parseFloat(String(o.taxAmount ?? 0)) || 0;
+        }
+
+        let status: OrdersUnifiedStatus;
+        if (waves.some((w) => w.status === "ready")) status = "ready";
+        else if (waves.some((w) => w.status === "cooking")) status = "preparing";
+        else if (waves.some((w) => w.status === "fired") || waves.some((w) => w.status === "held"))
+          status = "sent";
+        else if (waves.every((w) => w.status === "served")) status = "served";
+        else status = "sent";
+
+        const lastUpdated =
+          sessOrders.length > 0
+            ? Math.max(...sessOrders.map((o) => o.updatedAt?.getTime() ?? 0))
+            : openedAt;
+
+        const money = withDerivedTax({
+          subtotal,
+          taxAmount,
+          total,
+          taxRatePercent,
+        });
+
+        tableOrders.push({
+          id: `table-${table.id}`,
+          source: "table",
+          label,
+          sectionLabel,
+          guestLabel,
+          status,
+          createdAt: openedAt,
+          updatedAt: lastUpdated,
+          subtotal: money.subtotal,
+          taxAmount: money.taxAmount,
+          total: money.total,
+          itemCount: allItems.length,
+          items: allItems,
+          waves,
+          tableId: table.id,
+          sessionId: sess.id,
+        });
+      }
+    }
+  }
+
+  // Closed delivery-to-table visits from today (after Paid → session close).
+  if (channels.deliveryToTable) {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const closedVisitFilters = [
+      eq(orders.locationId, locationId),
+      isNotNull(orders.sessionId),
+      gte(orders.updatedAt, startOfToday),
+      inArray(orders.status, ["completed", "cancelled"]),
+    ];
+    if (sessionIds.length > 0) {
+      closedVisitFilters.push(notInArray(orders.sessionId, sessionIds));
+    }
+
+    const closedVisitOrders = await db.query.orders.findMany({
+      where: and(...closedVisitFilters),
+      orderBy: [desc(orders.updatedAt)],
+      columns: {
+        id: true,
+        sessionId: true,
+        wave: true,
+        status: true,
+        orderNumber: true,
+        paymentStatus: true,
+        subtotal: true,
+        taxAmount: true,
+        total: true,
+        notes: true,
+        estimatedReadyAt: true,
+        createdAt: true,
+        updatedAt: true,
+        tableId: true,
+      },
+      with: {
+        table: {
+          columns: {
+            id: true,
+            tableNumber: true,
+            displayId: true,
+            section: true,
+          },
+        },
+      },
+      limit: 100,
+    });
+
+    const closedVisitOrderIds = closedVisitOrders.map((o) => o.id);
+    if (closedVisitOrderIds.length > 0) {
+      const closedItems = await db
+        .select({
+          orderId: orderItems.orderId,
+          id: orderItems.id,
+          itemId: orderItems.itemId,
+          itemName: orderItems.itemName,
+          itemI18n: catalogItems.i18n,
+          quantity: orderItems.quantity,
+          lineTotal: orderItems.lineTotal,
+          status: orderItems.status,
+          voidedAt: orderItems.voidedAt,
+          notes: orderItems.notes,
+        })
+        .from(orderItems)
+        .leftJoin(catalogItems, eq(orderItems.itemId, catalogItems.id))
+        .where(inArray(orderItems.orderId, closedVisitOrderIds));
+
+      const closedCustomizationsByItemId = await loadCustomizationsByOrderItemId(
+        closedItems.filter((i) => !i.voidedAt).map((i) => i.id),
       );
 
-      const waves: Array<{ number: number; status: OrdersWaveStatus }> = [];
-      const allItems: OrdersViewItem[] = [];
-      let total = 0;
-      let subtotal = 0;
-      let taxAmount = 0;
-
-      for (const o of sessOrders) {
-        const waveNum = o.wave ?? 1;
-        const items = itemsByOrderId.get(o.id) ?? [];
-        const statuses = items.map((i) => itemStatusToWaveStatus(i.status));
-        let waveStatus: OrdersWaveStatus = "held";
-        if (o.firedAt) {
-          if (statuses.every((s) => s === "served")) waveStatus = "served";
-          else if (statuses.some((s) => s === "ready")) waveStatus = "ready";
-          else if (statuses.some((s) => s === "cooking")) waveStatus = "cooking";
-          else waveStatus = "fired";
-        } else {
-          waveStatus = "held";
-        }
-        waves.push({ number: waveNum, status: waveStatus });
-        for (const it of items) {
-          const customizations = sessionCustomizationsByItemId.get(it.id) ?? [];
-          allItems.push({
-            id: it.id,
-            name: it.itemName ?? "",
-            qty: it.quantity ?? 1,
-            status: mapDbItemStatus(it.status),
-            price: parseFloat(String(it.lineTotal ?? 0)) || 0,
-            notes: it.notes ?? null,
-            customizations: customizations.length > 0 ? customizations : undefined,
-          });
-        }
-        total += parseFloat(String(o.total ?? 0)) || 0;
-        subtotal += parseFloat(String(o.subtotal ?? 0)) || 0;
-        taxAmount += parseFloat(String(o.taxAmount ?? 0)) || 0;
+      const itemsByClosedOrderId = new Map<string, typeof closedItems>();
+      for (const i of closedItems) {
+        if (i.voidedAt) continue;
+        const list = itemsByClosedOrderId.get(i.orderId) ?? [];
+        list.push(i);
+        itemsByClosedOrderId.set(i.orderId, list);
       }
 
-      let status: OrdersUnifiedStatus;
-      if (waves.some((w) => w.status === "ready")) status = "ready";
-      else if (waves.some((w) => w.status === "cooking")) status = "preparing";
-      else if (waves.some((w) => w.status === "fired") || waves.some((w) => w.status === "held"))
-        status = "sent";
-      else if (waves.every((w) => w.status === "served")) status = "served";
-      else status = "sent";
+      const closedBySession = new Map<string, OrdersUnifiedOrder[]>();
+      for (const o of closedVisitOrders) {
+        const table = o.table;
+        if (!table || !o.sessionId) continue;
+        const items = (itemsByClosedOrderId.get(o.id) ?? []).map((it) => {
+          const customizations = closedCustomizationsByItemId.get(it.id) ?? [];
+          return mapOrderLineToViewItem(it, {
+            customizations: customizations.length > 0 ? customizations : undefined,
+          });
+        });
+        if (items.length === 0) continue;
 
-      const lastUpdated =
-        sessOrders.length > 0
-          ? Math.max(...sessOrders.map((o) => o.updatedAt?.getTime() ?? 0))
-          : openedAt;
+        const paymentStatus = (o.paymentStatus ?? "unpaid") as string;
+        const status = mapOrderStatusToUnified(o.status, paymentStatus);
+        const createdAt = o.createdAt?.getTime() ?? 0;
+        const money = withDerivedTax({
+          subtotal: parseFloat(String(o.subtotal ?? 0)) || 0,
+          taxAmount: parseFloat(String(o.taxAmount ?? 0)) || 0,
+          total: parseFloat(String(o.total ?? 0)) || 0,
+          taxRatePercent,
+        });
+        const rawTableNumber = table.tableNumber?.trim() || "?";
+        const plainNumeric = rawTableNumber.match(/^(?:T)?(\d+)$/i)?.[1];
+        const tableLabel = plainNumeric ? `T${plainNumeric}` : rawTableNumber;
+        const sectionLabel =
+          SECTION_LABELS[table.section ?? "main"] ?? table.section ?? "Main";
 
-      const money = withDerivedTax({
-        subtotal,
-        taxAmount,
-        total,
-        taxRatePercent,
-      });
+        const ticket: OrdersUnifiedOrder = {
+          id: `order-${o.id}`,
+          source: "table",
+          label: tableLabel,
+          sectionLabel,
+          guestLabel: `Table ${tableLabel}`,
+          status,
+          createdAt,
+          updatedAt: o.updatedAt?.getTime() ?? createdAt,
+          subtotal: money.subtotal,
+          taxAmount: money.taxAmount,
+          total: money.total,
+          itemCount: items.reduce((sum, item) => sum + item.qty, 0),
+          items,
+          waves: [],
+          tableId: table.id,
+          sessionId: o.sessionId,
+          orderId: o.id,
+          waveNumber: o.wave ?? 1,
+          note: o.notes ?? undefined,
+          needsAccept: false,
+          paymentState: "paid",
+          paymentMethod: null,
+        };
+        const list = closedBySession.get(o.sessionId) ?? [];
+        list.push(ticket);
+        closedBySession.set(o.sessionId, list);
+      }
 
-      tableOrders.push({
-        id: `table-${table.id}`,
-        source: "table",
-        label,
-        sectionLabel,
-        guestLabel,
-        status,
-        createdAt: openedAt,
-        updatedAt: lastUpdated,
-        subtotal: money.subtotal,
-        taxAmount: money.taxAmount,
-        total: money.total,
-        itemCount: allItems.length,
-        items: allItems,
-        waves,
-        tableId: table.id,
-        sessionId: sess.id,
-      });
+      for (const members of closedBySession.values()) {
+        const check = buildTableCheckOrder(members, { paid: true });
+        if (check) tableOrders.push(check);
+      }
     }
   }
 
@@ -425,7 +832,9 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
   let standaloneItems: Array<{
     orderId: string;
     id: string;
+    itemId: string | null;
     itemName: string | null;
+    itemI18n: unknown;
     quantity: number | null;
     lineTotal: string | null;
     status: string;
@@ -444,7 +853,9 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
         .select({
           orderId: orderItems.orderId,
           id: orderItems.id,
+          itemId: orderItems.itemId,
           itemName: orderItems.itemName,
+          itemI18n: catalogItems.i18n,
           quantity: orderItems.quantity,
           lineTotal: orderItems.lineTotal,
           status: orderItems.status,
@@ -452,6 +863,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
           notes: orderItems.notes,
         })
         .from(orderItems)
+        .leftJoin(catalogItems, eq(orderItems.itemId, catalogItems.id))
         .where(inArray(orderItems.orderId, standaloneOrderIds)),
       db
         .select({
@@ -476,15 +888,11 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
     if (i.voidedAt) continue;
     const list = itemsByStandaloneOrder.get(i.orderId) ?? [];
     const customizations = standaloneCustomizationsByItemId.get(i.id) ?? [];
-    list.push({
-      id: i.id,
-      name: i.itemName ?? "",
-      qty: i.quantity ?? 1,
-      status: mapDbItemStatus(i.status),
-      price: parseFloat(String(i.lineTotal ?? 0)) || 0,
-      notes: i.notes ?? null,
-      customizations: customizations.length > 0 ? customizations : undefined,
-    });
+    list.push(
+      mapOrderLineToViewItem(i, {
+        customizations: customizations.length > 0 ? customizations : undefined,
+      }),
+    );
     itemsByStandaloneOrder.set(i.orderId, list);
   }
 
@@ -512,11 +920,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       orderId: o.id,
     });
     const customerName = o.customer?.name ?? "Guest";
-    // Completed pay-later tickets are settled (also written on complete); keep board/UI consistent.
-    const paymentState: OrdersPaymentState =
-      paymentStatus === "refunded" || paymentStatus === "paid" || o.status === "completed"
-        ? "paid"
-        : "unpaid";
+    const paymentState = resolveOrdersPaymentState(paymentStatus);
     const createdAt = o.createdAt?.getTime() ?? 0;
     const stageEnteredAt = buildStageEnteredAt(createdAt, timelineByOrder.get(o.id) ?? []);
     const scheduledPickupAtMs = o.scheduledPickupAt?.getTime() ?? null;
@@ -538,7 +942,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       id: `order-${o.id}`,
       source,
       label: code,
-      sectionLabel: source === "pickup" ? "Pickup" : "Dine-in",
+      sectionLabel: source === "pickup" ? "Pickup" : "Dine",
       guestLabel: customerName,
       status,
       createdAt,
@@ -578,5 +982,6 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
     orders: allOrders,
     defaultPrepMinutes: prepMinutes,
     channels,
+    serviceRequests,
   };
 }

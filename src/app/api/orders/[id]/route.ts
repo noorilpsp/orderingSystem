@@ -123,9 +123,32 @@ export async function GET(
             phone: order.customer.phone,
           }
         : null,
-      assignedStaff: order.assignedStaff
-        ? { id: order.assignedStaff.id, fullName: order.assignedStaff.fullName }
-        : null,
+      assignedStaff: (() => {
+        // Prefer who accepted / started preparing (oldest preparing timeline event).
+        const preparingAsc = [...order.timeline]
+          .filter((entry) => entry.status === "preparing")
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          );
+        const accepted = preparingAsc[0];
+        if (accepted?.changedByStaff) {
+          return {
+            id: accepted.changedByStaff.id,
+            fullName: accepted.changedByStaff.fullName,
+          };
+        }
+        if (accepted?.changedByUser) {
+          return {
+            id: accepted.changedByUser.id,
+            fullName: accepted.changedByUser.fullName,
+          };
+        }
+        if (order.assignedStaff) {
+          return { id: order.assignedStaff.id, fullName: order.assignedStaff.fullName };
+        }
+        return null;
+      })(),
       items: order.orderItems.map((item) => ({
         id: item.id,
         itemName: item.itemName,

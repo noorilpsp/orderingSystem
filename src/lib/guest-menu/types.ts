@@ -3,8 +3,8 @@ import type { CatalogI18n } from "@/lib/catalog-i18n";
 export type GuestRestaurant = {
   name: string;
   description: string;
-  bannerUrl: string;
-  logoUrl: string;
+  bannerUrl: string | null;
+  logoUrl: string | null;
   address: string;
   phone: string;
   website: string;
@@ -14,6 +14,14 @@ export type GuestRestaurant = {
     facebookUrl?: string | null;
     tiktokUrl?: string | null;
   };
+  /** ISO 4217 currency code from merchant localization. */
+  currency: string;
+  /** Merchant default language (e.g. en-US, ar). */
+  defaultLanguage: string;
+  /** Languages offered on the guest menu (`en` | `ar`). */
+  availableLanguages: Array<"en" | "ar">;
+  dateFormat: string | null;
+  numberFormat: string | null;
 };
 
 export type GuestCategory = {
@@ -35,6 +43,9 @@ export type GuestMenuItem = {
   name: string;
   description: string;
   price: number;
+  /** Original price when a sale is live. */
+  compareAtPrice?: number | null;
+  promoKind?: "sale_price" | "bogo" | null;
   image: string;
   tags: GuestTag[];
   status: "live" | "soldout";
@@ -45,10 +56,15 @@ export type GuestMenuItem = {
 };
 
 export type GuestCartItem = {
+  /** Catalog menu item id. Multiple cart rows can share this when customizations differ. */
   id: string;
+  /** Unique cart row id. Distinct toppings for the same menu item get different line ids. */
+  lineId?: string;
   name: string;
   quantity: number;
   price: number;
+  compareAtPrice?: number | null;
+  promoKind?: "sale_price" | "bogo" | null;
   /** Catalog loyalty reward attached as a $0 cart line. */
   rewardId?: string;
   selectedOptions?: Record<string, string[]>;

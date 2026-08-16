@@ -8,6 +8,8 @@ import type { MenuItem } from "@/lib/menu-data";
 import { cn } from "@/lib/utils";
 import { resolveTagLabel } from "@/lib/catalog-i18n";
 import { useGuestT, useGuestLocale, useLocalizedCatalogText } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
+import { PromoPrice } from "@/components/shared/promo-price";
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -29,6 +31,7 @@ export function MenuItemCard({
 }: MenuItemCardProps) {
   const t = useGuestT();
   const { locale } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
   const { name: localizedName, description: localizedDescription } =
     useLocalizedCatalogText(
       { name: item.name, description: item.description },
@@ -230,7 +233,13 @@ export function MenuItemCard({
           {tags}
           <div className="mt-auto flex items-center justify-between gap-3 pt-2">
             <p className="font-semibold text-foreground">
-              €{item.price.toFixed(2)}
+              <PromoPrice
+                price={item.price}
+                compareAtPrice={item.compareAtPrice}
+                promoKind={item.promoKind}
+                formatMoney={formatMoney}
+                bogoLabel={t("menu.bogo")}
+              />
             </p>
             {tileQuantityControls}
           </div>
@@ -259,7 +268,13 @@ export function MenuItemCard({
           </p>
           {tags}
           <p className="font-semibold text-foreground">
-            €{item.price.toFixed(2)}
+            <PromoPrice
+              price={item.price}
+              compareAtPrice={item.compareAtPrice}
+              promoKind={item.promoKind}
+              formatMoney={formatMoney}
+              bogoLabel={t("menu.bogo")}
+            />
           </p>
         </div>
       </div>

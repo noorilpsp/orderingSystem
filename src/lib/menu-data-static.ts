@@ -1,11 +1,16 @@
 export const restaurant = {
   name: "Pizza Palace",
   description: "Authentic, fresh Italian pizza since 1985.",
-  bannerUrl: "/banner.jpg",
-  logoUrl: "/logo.jpg",
+  bannerUrl: null as string | null,
+  logoUrl: null as string | null,
   address: "123 Main Street, Brussels",
   phone: "+32 2 123 4567",
   website: "www.pizzapalace.be",
+  currency: "EUR",
+  defaultLanguage: "en-US",
+  availableLanguages: ["en", "ar"] as Array<"en" | "ar">,
+  dateFormat: "DD/MM/YYYY" as string | null,
+  numberFormat: "1.234,56" as string | null,
   hours: [
     { day: "Monday", time: "11:00 - 22:00" },
     { day: "Tuesday", time: "11:00 - 22:00" },

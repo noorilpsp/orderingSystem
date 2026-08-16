@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
@@ -12,18 +12,23 @@ import {
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { isRewardCartLine } from "@/lib/public-menu/guest-reward-cart";
 import {
+  getGuestCartItemCompareAtLineTotal,
   getGuestCartItemLineTotal,
   getGuestCartItemUnitPrice,
 } from "@/lib/public-menu/guest-cart-pricing";
+import { guestCartLineId } from "@/lib/public-menu/guest-cart-lines";
 import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
+import { PromoPrice } from "@/components/shared/promo-price";
 import { resolveCatalogText } from "@/lib/catalog-i18n";
 import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
+import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/guest-deal-badge";
 
 interface CartBarProps {
   items: CartItem[];
   total: number;
   menuItems: MenuItem[];
-  onAddToCart: (item: MenuItem) => void;
+  onAddToCart: (item: MenuItem | CartItem) => void;
   onRemoveFromCart: (itemId: string) => void;
   onItemClick: (item: CartItem, menuItem: MenuItem) => void;
   hideTrigger?: boolean;
@@ -45,6 +50,7 @@ export function CartBar({
   const router = useRouter();
   const t = useGuestT();
   const { locale } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
   const publicMenu = usePublicMenuOptional();
   const restaurant = publicMenu?.restaurant ?? staticRestaurant;
   const customizationGroups = publicMenu?.customizationGroups ?? staticCustomizationGroups;
@@ -52,6 +58,15 @@ export function CartBar({
   const resolvedCheckoutPath = checkoutPath ?? publicMenu?.checkoutPath ?? "/mobile/checkout";
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [isSheetDragging, setIsSheetDragging] = useState(false);
+  const touchStartY = useRef(0);
+  const dragYRef = useRef(0);
+  const draggingFromHandleRef = useRef(false);
+  const pullingSheetRef = useRef(false);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<HTMLDivElement>(null);
 
   const itemCount = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
@@ -61,14 +76,124 @@ export function CartBar({
   const tax = Math.round(subtotal * (taxRatePercent / 100) * 100) / 100;
   const cartTotal = subtotal + tax;
 
+  const setSheetOffset = (next: number) => {
+    dragYRef.current = next;
+    setDragY(next);
+  };
+
+  const closeCart = () => {
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current = null;
+    setSheetOffset(0);
+    setIsSheetDragging(false);
+    setIsOpen(false);
+  };
+
+  const finishSheetDrag = () => {
+    const wasPulling =
+      draggingFromHandleRef.current ||
+      pullingSheetRef.current ||
+      dragYRef.current > 0;
+    draggingFromHandleRef.current = false;
+    pullingSheetRef.current = false;
+    if (!wasPulling) return;
+    const y = dragYRef.current;
+    setIsSheetDragging(false);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (y > 100) {
+          const offscreen = Math.max(
+            typeof window !== "undefined" ? window.innerHeight : 800,
+            y + 160,
+          );
+          setSheetOffset(offscreen);
+          if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+          dismissTimerRef.current = setTimeout(() => {
+            dismissTimerRef.current = null;
+            setSheetOffset(0);
+            setIsOpen(false);
+          }, 280);
+          return;
+        }
+        setSheetOffset(0);
+      });
+    });
+  };
+
+  const handleHandleTouchStart = (e: React.TouchEvent) => {
+    if (dismissTimerRef.current) return;
+    draggingFromHandleRef.current = true;
+    pullingSheetRef.current = true;
+    setIsSheetDragging(true);
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleContentTouchStart = (e: React.TouchEvent) => {
+    if (dismissTimerRef.current) return;
+    draggingFromHandleRef.current = false;
+    pullingSheetRef.current = false;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
   useEffect(() => {
     setMounted(true);
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
     if (!externalOpenSignal || externalOpenSignal <= 0) return;
     setIsOpen(true);
   }, [externalOpenSignal]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      document.body.style.overflow = "unset";
+      return;
+    }
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !mounted) return;
+    const handleEl = handleRef.current;
+    const scrollEl = scrollRef.current;
+
+    const onHandleMove = (event: TouchEvent) => {
+      if (!draggingFromHandleRef.current) return;
+      const diff = event.touches[0].clientY - touchStartY.current;
+      if (diff > 0) {
+        event.preventDefault();
+        setSheetOffset(diff);
+      }
+    };
+
+    const onScrollMove = (event: TouchEvent) => {
+      if (draggingFromHandleRef.current) return;
+      const diff = event.touches[0].clientY - touchStartY.current;
+      const atTop = !scrollEl || scrollEl.scrollTop <= 5;
+      if (!pullingSheetRef.current) {
+        if (!(atTop && diff > 6)) return;
+        pullingSheetRef.current = true;
+        setIsSheetDragging(true);
+      }
+      if (diff > 0) {
+        event.preventDefault();
+        setSheetOffset(diff);
+      }
+    };
+
+    handleEl?.addEventListener("touchmove", onHandleMove, { passive: false });
+    scrollEl?.addEventListener("touchmove", onScrollMove, { passive: false });
+    return () => {
+      handleEl?.removeEventListener("touchmove", onHandleMove);
+      scrollEl?.removeEventListener("touchmove", onScrollMove);
+    };
+  }, [isOpen, mounted]);
 
   const cartButtonClass =
     "sheen-overlay relative flex min-h-12 w-full items-center justify-between rounded-xl border border-white/26 bg-black/78 px-4 py-3 text-white backdrop-blur-2xl shadow-[0_14px_30px_rgba(0,0,0,0.42)] ring-1 ring-white/10 transition-transform duration-200 hover:bg-black/84 active:scale-[0.99] dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84";
@@ -88,7 +213,7 @@ export function CartBar({
               {itemCount > 0 ? <span className="font-semibold">({itemCount})</span> : null}
             </div>
             <span className="text-lg font-bold">
-              {itemCount > 0 ? `€${cartTotal.toFixed(2)}` : t("cart.emptyShort")}
+              {itemCount > 0 ? formatMoney(cartTotal) : t("cart.emptyShort")}
             </span>
           </button>
         </div>
@@ -101,24 +226,46 @@ export function CartBar({
             <button
               type="button"
               className="fixed inset-0 z-[54] bg-black/30"
-              onClick={() => setIsOpen(false)}
+              onClick={closeCart}
               aria-label={t("cart.closeDrawer")}
+              style={{
+                opacity: Math.max(0, 1 - dragY / 420),
+                transition: isSheetDragging ? "none" : "opacity 0.28s ease-out",
+              }}
             />
 
             <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[55]">
               <div className="pointer-events-auto mx-auto w-full max-w-none pb-[env(safe-area-inset-bottom)] px-1.5 md:max-w-2xl md:px-4">
-                <div className="liquid-glass animate-in slide-in-from-bottom-6 fade-in-0 rounded-t-2xl border-t border-border/90 bg-card/95 shadow-2xl shadow-black/45 backdrop-blur-xl duration-300">
-                  <div className="flex h-8 items-center justify-center">
+                <div
+                  className="liquid-glass animate-in slide-in-from-bottom-6 fade-in-0 rounded-t-2xl border-t border-border/90 bg-card/95 shadow-2xl shadow-black/45 backdrop-blur-xl will-change-transform duration-300"
+                  style={{
+                    transform: `translateY(${dragY}px)`,
+                    transition: isSheetDragging ? "none" : "transform 0.28s ease-out",
+                  }}
+                >
+                  <div
+                    ref={handleRef}
+                    className="flex h-8 touch-none items-center justify-center"
+                    onTouchStart={handleHandleTouchStart}
+                    onTouchEnd={finishSheetDrag}
+                    onTouchCancel={finishSheetDrag}
+                  >
                     <div className="h-1 w-12 rounded-full bg-border" />
                   </div>
 
-                  <div className="max-h-[78vh] overflow-y-auto px-4 pb-4 md:px-5">
+                  <div
+                    ref={scrollRef}
+                    className="max-h-[78vh] overflow-y-auto px-4 pb-4 md:px-5"
+                    onTouchStart={handleContentTouchStart}
+                    onTouchEnd={finishSheetDrag}
+                    onTouchCancel={finishSheetDrag}
+                  >
                     <div className="flex items-center justify-between pb-4">
                       <ShoppingCart className="h-6 w-6 text-foreground" />
                       <p className="flex-1 text-center text-xl font-bold text-foreground">{t("cart.title")}</p>
                       <button
                         type="button"
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeCart}
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-background/90 hover:text-foreground"
                         aria-label={t("common.close")}
                       >
@@ -160,7 +307,7 @@ export function CartBar({
 
                               return (
                                 <div
-                                  key={cartItem.id}
+                                  key={guestCartLineId(cartItem)}
                                   className="border-b border-border/70 pb-6 last:border-b-0"
                                 >
                                   <div className="flex items-center gap-3">
@@ -183,7 +330,7 @@ export function CartBar({
                                         {t("cart.reward")}
                                       </p>
                                       <p className="mt-1 text-sm font-medium text-muted-foreground">
-                                        €0.00
+                                        {formatMoney(0)}
                                       </p>
                                     </div>
                                     <div
@@ -212,9 +359,30 @@ export function CartBar({
                                 { name: menuItem.name, description: menuItem.description },
                                 menuItem.i18n,
                               ).name || cartItem.name;
+                            const pricedCartItem = {
+                              ...cartItem,
+                              promoKind: cartItem.promoKind ?? menuItem.promoKind,
+                              compareAtPrice:
+                                cartItem.compareAtPrice ?? menuItem.compareAtPrice,
+                            };
+                            const unitPrice = getGuestCartItemUnitPrice(
+                              pricedCartItem,
+                              customizationGroups,
+                            );
+                            const lineTotal = getGuestCartItemLineTotal(
+                              pricedCartItem,
+                              customizationGroups,
+                            );
+                            const compareAtLineTotal = getGuestCartItemCompareAtLineTotal(
+                              pricedCartItem,
+                              customizationGroups,
+                            );
+                            const showLineTotal =
+                              cartItem.quantity > 1 &&
+                              Math.abs(lineTotal - unitPrice) > 0.009;
 
                             return (
-                              <div key={cartItem.id} className="border-b border-border/70 pb-6 last:border-b-0">
+                              <div key={guestCartLineId(cartItem)} className="border-b border-border/70 pb-6 last:border-b-0">
                                 <div
                                   className="flex cursor-pointer items-center gap-3 transition-opacity hover:opacity-80"
                                   onClick={() => {
@@ -231,6 +399,12 @@ export function CartBar({
                                   <div className="flex min-w-0 flex-1 flex-col">
                                     <p className="text-base font-semibold text-foreground">
                                       {localizedName}
+                                      <GuestDealBadge
+                                        kind={guestDealKind({
+                                          promoKind:
+                                            cartItem.promoKind ?? menuItem.promoKind,
+                                        })}
+                                      />
                                     </p>
 
                                     {(cartItem.selectedOptions ||
@@ -267,18 +441,25 @@ export function CartBar({
                                       </div>
                                     )}
 
-                                    <p className="mt-1 text-sm font-medium text-muted-foreground">
-                                      €{getGuestCartItemUnitPrice(cartItem, customizationGroups).toFixed(2)}
-                                      {cartItem.quantity > 1
-                                        ? ` · €${getGuestCartItemLineTotal(cartItem, customizationGroups).toFixed(2)}`
-                                        : ""}
+                                    <p className="mt-1 text-sm font-medium text-foreground">
+                                      {compareAtLineTotal != null ? (
+                                        <PromoPrice
+                                          price={lineTotal}
+                                          compareAtPrice={compareAtLineTotal}
+                                          formatMoney={formatMoney}
+                                        />
+                                      ) : showLineTotal ? (
+                                        `${formatMoney(unitPrice)} · ${formatMoney(lineTotal)}`
+                                      ) : (
+                                        formatMoney(lineTotal)
+                                      )}
                                     </p>
                                   </div>
 
                                   <div className={`menu-item-controls ${qtyWrapClass}`} onClick={(event) => event.stopPropagation()}>
                                     <button
                                       type="button"
-                                      onClick={() => onRemoveFromCart(cartItem.id)}
+                                      onClick={() => onRemoveFromCart(guestCartLineId(cartItem))}
                                       className={qtyButtonClass}
                                       aria-label={`${t("cart.remove")} ${localizedName}`}
                                     >
@@ -293,7 +474,9 @@ export function CartBar({
                                     </span>
                                     <button
                                       type="button"
-                                      onClick={() => onAddToCart(menuItem)}
+                                      onClick={() =>
+                                        onAddToCart({ ...cartItem, quantity: 1 })
+                                      }
                                       className={qtyButtonClass}
                                       aria-label={`Add ${localizedName}`}
                                     >
@@ -312,13 +495,13 @@ export function CartBar({
                               <div className="flex items-center justify-between">
                                 <span className="text-sm font-semibold text-foreground">{t("common.subtotal")}</span>
                                 <span className="text-base font-semibold text-foreground">
-                                  €{subtotal.toFixed(2)}
+                                  {formatMoney(subtotal)}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between">
                                 <span className="text-sm font-semibold text-foreground">{t("common.tax")}</span>
                                 <span className="text-base font-semibold text-foreground">
-                                  €{tax.toFixed(2)}
+                                  {formatMoney(tax)}
                                 </span>
                               </div>
                             </>
@@ -326,7 +509,7 @@ export function CartBar({
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-bold text-foreground">{t("common.total")}</span>
                             <span className="text-lg font-bold text-foreground">
-                              €{cartTotal.toFixed(2)}
+                              {formatMoney(cartTotal)}
                             </span>
                           </div>
 

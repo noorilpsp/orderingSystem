@@ -209,7 +209,7 @@ export default function MenuOverviewPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto">
-        <div className="px-6 pt-8 pb-6 border-b border-border">
+        <div className="px-6 py-3 border-b border-border">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Menu Items Overview</h1>

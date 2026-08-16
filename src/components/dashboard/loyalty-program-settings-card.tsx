@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_LOYALTY_SETTINGS,
   normalizeLoyaltySettings,
-  type LoyaltyPointsScope,
 } from "@/lib/db/schema/merchants";
 import { useTenant } from "@/lib/contexts/TenantContext";
 import { toast } from "sonner";
@@ -23,9 +21,6 @@ export function LoyaltyProgramSettingsCard() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [enabled, setEnabled] = useState(DEFAULT_LOYALTY_SETTINGS.enabled);
-  const [pointsScope, setPointsScope] = useState<LoyaltyPointsScope>(
-    DEFAULT_LOYALTY_SETTINGS.pointsScope,
-  );
   const [pointsPerDollar, setPointsPerDollar] = useState(
     String(DEFAULT_LOYALTY_SETTINGS.pointsPerDollar),
   );
@@ -44,7 +39,6 @@ export function LoyaltyProgramSettingsCard() {
       loyaltySettings as Parameters<typeof normalizeLoyaltySettings>[0],
     );
     setEnabled(normalized.enabled);
-    setPointsScope(normalized.pointsScope);
     setPointsPerDollar(String(normalized.pointsPerDollar));
     setRedeemPointsPerDollarOff(String(normalized.redeemPointsPerDollarOff));
     setAllowOpenWalletRedeem(normalized.allowOpenWalletRedeem);
@@ -109,7 +103,7 @@ export function LoyaltyProgramSettingsCard() {
         body: JSON.stringify({
           loyaltySettings: {
             enabled,
-            pointsScope,
+            pointsScope: "location",
             pointsPerDollar: earnRate,
             redeemPointsPerDollarOff: redeemRate,
             allowOpenWalletRedeem,
@@ -139,7 +133,7 @@ export function LoyaltyProgramSettingsCard() {
           <CardTitle>Program settings</CardTitle>
         </div>
         <CardDescription>
-          Live settings for earn and redeem. Sample analytics below use demo data.
+          Earn and redeem settings for this store.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -170,37 +164,6 @@ export function LoyaltyProgramSettingsCard() {
 
             {enabled ? (
               <>
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Points balance scope</Label>
-                  <RadioGroup
-                    value={pointsScope}
-                    onValueChange={(value) => {
-                      setPointsScope(value as LoyaltyPointsScope);
-                      setDirty(true);
-                    }}
-                    className="space-y-3"
-                  >
-                    <div className="flex items-start space-x-3 rounded-lg border p-4">
-                      <RadioGroupItem value="merchant" id="loyalty-program-scope-merchant" className="mt-0.5" />
-                      <Label htmlFor="loyalty-program-scope-merchant" className="flex-1 cursor-pointer space-y-1">
-                        <span className="block text-sm font-medium">All locations</span>
-                        <span className="block text-xs font-normal text-muted-foreground">
-                          One balance across every store under this merchant
-                        </span>
-                      </Label>
-                    </div>
-                    <div className="flex items-start space-x-3 rounded-lg border p-4">
-                      <RadioGroupItem value="location" id="loyalty-program-scope-location" className="mt-0.5" />
-                      <Label htmlFor="loyalty-program-scope-location" className="flex-1 cursor-pointer space-y-1">
-                        <span className="block text-sm font-medium">Per location</span>
-                        <span className="block text-xs font-normal text-muted-foreground">
-                          Separate balance at each store
-                        </span>
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="loyalty-earn-rate">Earn rate</Label>

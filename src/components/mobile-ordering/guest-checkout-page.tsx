@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Clock, Loader2, Store, User } from "lucide-react";
-import { EditTableModal } from "@/components/mobile-ordering/menu/edit-table-modal";
-import { GuestSeatBanner } from "@/components/mobile-ordering/guest-seat-banner";
 import { OrderTypeToggle } from "@/components/mobile-ordering/checkout/order-type-toggle";
 import {
   PickupTimingPicker,
@@ -29,21 +27,23 @@ import {
   previewCatalogDiscount,
 } from "@/lib/public-menu/guest-reward-cart";
 import {
+  getGuestCartItemCompareAtLineTotal,
   getGuestCartItemLineTotal,
   sumGuestCartItems,
 } from "@/lib/public-menu/guest-cart-pricing";
+import { guestCartLineId } from "@/lib/public-menu/guest-cart-lines";
 import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
+import { PromoPrice } from "@/components/shared/promo-price";
 import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 import { resolveCatalogText } from "@/lib/catalog-i18n";
-
-function euro(value: number) {
-  return `€${value.toFixed(2)}`;
-}
+import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/guest-deal-badge";
 
 export function GuestCheckoutPage() {
   const router = useRouter();
   const t = useGuestT();
   const { locale } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
   const {
     storeSlug,
     cart,
@@ -59,17 +59,16 @@ export function GuestCheckoutPage() {
     orderModes,
     unavailableReason,
     placeGuestOrder,
-    guestSeat,
-    guestSeatLoading,
-    guestDeviceId,
     customer,
     accountLoginPath,
     loyaltySettings,
     rewards,
     taxRate: taxRatePercent,
+    guestSeat,
+    guestDeviceId,
+    claimGuestSeat,
   } = usePublicMenu();
 
-  const [isEditTableOpen, setIsEditTableOpen] = useState(false);
   const [pickupTimingMode, setPickupTimingMode] = useState<PickupTimingMode>("now");
   const [scheduledPickupAt, setScheduledPickupAt] = useState<string | null>(null);
   const [orderNotes, setOrderNotes] = useState("");
@@ -123,9 +122,10 @@ export function GuestCheckoutPage() {
 
   const dineInEnabled = orderModes.dine_in?.enabled !== false;
   const pickupEnabled = orderModes.pickup?.enabled !== false;
-  const showOrderTypeToggle = dineInEnabled && pickupEnabled;
   const guestSessionMode = resolveGuestSessionMode(orderModes);
   const isSelfPickupMode = guestSessionMode === "self_service";
+  // Delivery-to-table: order type is fixed by QR. Self-pickup can toggle dine-in ↔ pickup.
+  const showOrderTypeToggle = dineInEnabled && pickupEnabled && isSelfPickupMode;
   // Delivery-to-table needs a table. Self pickup dine-in is counter collect —
   // never bind checkout to a table (avoids sticky ?table= looking "auto-selected").
   const usesTableSession = orderType === "dine-in" && !isSelfPickupMode;
@@ -157,18 +157,16 @@ export function GuestCheckoutPage() {
   const isFormComplete =
     canPlaceOrder &&
     !!paymentMethod &&
-    (!usesTableSession || (tableNumber.trim().length > 0 && !!guestSeat)) &&
+    (!usesTableSession || tableNumber.trim().length > 0) &&
     (orderType !== "pickup" ||
       pickupTimingMode === "now" ||
       (pickupTimingMode === "schedule" && !!scheduledPickupAt));
-
-  const seatReady = !usesTableSession || (!guestSeatLoading && !!guestSeat);
 
   const cardClass =
     "rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-md";
 
   const handlePlaceOrder = () => {
-    if (!isFormComplete || unavailableReason || placingRef.current || !seatReady) return;
+    if (!isFormComplete || unavailableReason || placingRef.current) return;
     placingRef.current = true;
     setIsSubmitting(true);
 
@@ -209,12 +207,19 @@ export function GuestCheckoutPage() {
 
       const guestNotes = orderNotes.trim() || null;
 
+      // Delivery-to-table: ensure this phone has a seat before placing (for split later).
+      let seatId: string | null = guestSeat?.seatId ?? null;
+      if (usesTableSession && guestDeviceId && !seatId) {
+        const claimed = await claimGuestSeat();
+        seatId = claimed?.seatId ?? null;
+      }
+
       const placementKey = placeGuestOrder({
         storeSlug,
         orderType: apiOrderType,
         paymentTiming: "pay_later",
         tableNumber: usesTableSession ? tableNumber : null,
-        seatId: usesTableSession ? guestSeat?.seatId ?? null : null,
+        seatId: usesTableSession ? seatId : null,
         deviceId: usesTableSession ? guestDeviceId || null : null,
         notes: guestNotes,
         scheduledPickupAt:
@@ -277,7 +282,7 @@ export function GuestCheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen pb-36">
+    <div className="min-h-screen pb-28">
       <header className="checkout-header sticky top-0 z-30 border-b border-border/70 bg-card/80 px-2 backdrop-blur-xl lg:px-4">
         <div
           className="mx-auto flex w-full max-w-none items-center justify-start gap-2 px-1 py-1 lg:px-4"
@@ -359,14 +364,32 @@ export function GuestCheckoutPage() {
                     catalogItem.i18n,
                   ).name
                 : item.name;
+              const pricedItem = {
+                ...item,
+                promoKind: item.promoKind ?? catalogItem?.promoKind,
+                compareAtPrice: item.compareAtPrice ?? catalogItem?.compareAtPrice,
+              };
+              const lineTotal = getGuestCartItemLineTotal(
+                pricedItem,
+                customizationGroups,
+              );
+              const compareAtLineTotal = isRewardCartLine(item)
+                ? null
+                : getGuestCartItemCompareAtLineTotal(
+                    pricedItem,
+                    customizationGroups,
+                  );
               return (
-              <div key={item.id} className="flex items-start justify-between gap-3">
+              <div key={guestCartLineId(item)} className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">
                     {item.quantity}× {displayName}
-                    {isRewardCartLine(item) ? (
-                      <span className="ml-2 text-xs font-semibold text-orange-600">{t("cart.reward")}</span>
-                    ) : null}
+                    <GuestDealBadge
+                      kind={guestDealKind({
+                        promoKind: pricedItem.promoKind,
+                        isLoyaltyReward: isRewardCartLine(item),
+                      })}
+                    />
                   </p>
                   {Object.keys(item.selectedOptions ?? {}).length > 0 ? (
                     <div className="mt-0.5 space-y-0.5">
@@ -385,8 +408,16 @@ export function GuestCheckoutPage() {
                     </p>
                   ) : null}
                 </div>
-                <p className="text-sm font-semibold text-foreground">
-                  {euro(getGuestCartItemLineTotal(item, customizationGroups))}
+                <p className="shrink-0 text-sm font-semibold text-foreground">
+                  {compareAtLineTotal != null ? (
+                    <PromoPrice
+                      price={lineTotal}
+                      compareAtPrice={compareAtLineTotal}
+                      formatMoney={formatMoney}
+                    />
+                  ) : (
+                    formatMoney(lineTotal)
+                  )}
                 </p>
               </div>
               );
@@ -396,28 +427,18 @@ export function GuestCheckoutPage() {
 
         {usesTableSession && dineInEnabled ? (
           <section className={cardClass}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-base font-semibold text-foreground">{t("context.table")}</p>
-                <p className="text-sm text-muted-foreground">
-                  {tableNumber
-                    ? t("context.tableNumber", { number: tableNumber })
-                    : "—"}
-                  {guestSeat ? ` · Seat ${guestSeat.seatNumber}` : ""}
-                  {guestSeat?.guestName ? ` · ${guestSeat.guestName}` : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="text-sm font-medium text-primary underline"
-                onClick={() => setIsEditTableOpen(true)}
-              >
-                {t("checkout.edit")}
-              </button>
-            </div>
-            <div className="mt-3">
-              <GuestSeatBanner compact />
-            </div>
+            <p className="text-base font-semibold text-foreground">{t("context.table")}</p>
+            <p className="text-sm text-muted-foreground">
+              {tableNumber
+                ? t("context.tableNumber", { number: tableNumber })
+                : t("checkout.selectTableHint")}
+            </p>
+            {guestSeat ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Seat {guestSeat.seatNumber}
+                {guestSeat.guestName ? ` · ${guestSeat.guestName}` : ""}
+              </p>
+            ) : null}
           </section>
         ) : null}
 
@@ -447,6 +468,7 @@ export function GuestCheckoutPage() {
           />
         </section>
 
+        <div className="space-y-2">
         <PaymentMethodSection
           orderType={orderType}
           usesTableSession={usesTableSession}
@@ -459,20 +481,20 @@ export function GuestCheckoutPage() {
           {taxRatePercent > 0 || loyaltyDiscount > 0 ? (
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{t("common.subtotal")}</span>
-              <span className="font-medium text-foreground">{euro(subtotal)}</span>
+              <span className="font-medium text-foreground">{formatMoney(subtotal)}</span>
             </div>
           ) : null}
           {taxRatePercent > 0 ? (
             <div className="mt-2 flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{t("checkout.taxPercent", { percent: taxRatePercent })}</span>
-              <span className="font-medium text-foreground">{euro(tax)}</span>
+              <span className="font-medium text-foreground">{formatMoney(tax)}</span>
             </div>
           ) : null}
           {loyaltyDiscount > 0 ? (
             <div className="mt-2 flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{t("checkout.rewardDiscount")}</span>
               <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                −{euro(loyaltyDiscount)}
+                −{formatMoney(loyaltyDiscount)}
               </span>
             </div>
           ) : null}
@@ -487,12 +509,13 @@ export function GuestCheckoutPage() {
           <div className="my-2 h-px bg-border/80" />
           <div className="flex items-center justify-between">
             <span className="text-base font-bold text-foreground">{t("common.total")}</span>
-            <span className="text-2xl font-bold text-foreground">{euro(total)}</span>
+            <span className="text-2xl font-bold text-foreground">{formatMoney(total)}</span>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {paymentMethodFooterHint(paymentMethod, t)}
           </p>
         </section>
+        </div>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-40">
@@ -517,24 +540,16 @@ export function GuestCheckoutPage() {
             </div>
             <button
               type="button"
-              disabled={!isFormComplete || !!unavailableReason || !seatReady}
+              disabled={!isFormComplete || !!unavailableReason}
               className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50"
               onClick={handlePlaceOrder}
             >
-              {!seatReady && usesTableSession
-                ? t("checkout.assigningSeat")
-                : `${t("checkout.placeOrder")} • ${euro(total)}`}
+              {`${t("checkout.placeOrder")} • ${formatMoney(total)}`}
             </button>
           </div>
         </div>
       </div>
 
-      <EditTableModal
-        open={isEditTableOpen}
-        onOpenChange={setIsEditTableOpen}
-        tableNumber={tableNumber}
-        onConfirm={setTableNumber}
-      />
     </div>
   );
 }

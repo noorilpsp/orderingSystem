@@ -113,6 +113,8 @@ export const getMerchantsList = unstable_cache(
   },
 );
 
+export const ADMIN_MERCHANTS_CACHE_TAG = "admin-merchants-list";
+
 export const getAdminMerchants = unstable_cache(
   () =>
     db.query.merchants.findMany({
@@ -140,6 +142,7 @@ export const getAdminMerchants = unstable_cache(
   ["admin-merchants-list"],
   {
     revalidate: 60 * 60 * 2, // two hours
+    tags: [ADMIN_MERCHANTS_CACHE_TAG],
   },
 );
 

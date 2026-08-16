@@ -11,9 +11,13 @@ import { signup } from '@/app/actions/auth'
 
 export default function SignupForm() {
   const [email, setEmail] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [emailFocused, setEmailFocused] = useState(false)
+  const [nameFocused, setNameFocused] = useState(false)
+  const [phoneFocused, setPhoneFocused] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +47,6 @@ export default function SignupForm() {
       setEmail(decodedEmail)
       setInvitationEmail(decodedEmail)
       setIsEmailLocked(true)
-      // Auto-advance to password field since email is locked and valid
       setShowPassword(true)
     }
   }, [searchParams])
@@ -87,8 +90,8 @@ export default function SignupForm() {
     }
 
     // Validate required fields before submitting
-    if (!email || !password) {
-      setError('Please fill in all fields')
+    if (!email || !fullName.trim() || !phone.trim() || !password) {
+      setError('Please fill in your name, phone, email, and password')
       return
     }
 
@@ -107,6 +110,8 @@ export default function SignupForm() {
       const result = await signup({
         email,
         password,
+        fullName: fullName.trim(),
+        phone: phone.trim(),
         returnTo: returnTo || undefined,
       })
 
@@ -278,43 +283,107 @@ export default function SignupForm() {
               )}
 
               {showPassword && (
-                <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
-                  <input
-                    id="password"
-                    type="password"
-                    placeholder=""
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)}
-                    required
-                    autoFocus
-                    className="w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 rounded-b-xl focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
-                  />
-                  <label
-                    htmlFor="password"
-                    className={`absolute left-4 transition-all pointer-events-none ${
-                      passwordFocused || password.length > 0
-                        ? 'top-2 text-xs text-muted-foreground'
-                        : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
-                    }`}
-                  >
-                    Password
-                  </label>
-                  <Button
-                    type="submit"
-                    disabled={password.length === 0 || loading}
-                    size="icon"
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
-                      password.length === 0 || loading
-                        ? 'opacity-40 cursor-not-allowed'
-                        : 'cursor-pointer'
-                    }`}
-                  >
-                    <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
-                    <span className="sr-only">Submit</span>
-                  </Button>
-                </div>
+                <>
+                  <div className="relative">
+                    <input
+                      id="fullName"
+                      type="text"
+                      placeholder=""
+                      value={fullName}
+                      onChange={(e) => {
+                        setFullName(e.target.value)
+                        if (error) setError(null)
+                      }}
+                      onFocus={() => setNameFocused(true)}
+                      onBlur={() => setNameFocused(false)}
+                      required
+                      autoFocus
+                      className="w-full h-14 px-4 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
+                    />
+                    <label
+                      htmlFor="fullName"
+                      className={`absolute left-4 transition-all pointer-events-none ${
+                        nameFocused || fullName.length > 0
+                          ? 'top-2 text-xs text-muted-foreground'
+                          : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
+                      }`}
+                    >
+                      Full name
+                    </label>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      id="phone"
+                      type="tel"
+                      placeholder=""
+                      value={phone}
+                      onChange={(e) => {
+                        setPhone(e.target.value)
+                        if (error) setError(null)
+                      }}
+                      onFocus={() => setPhoneFocused(true)}
+                      onBlur={() => setPhoneFocused(false)}
+                      required
+                      className="w-full h-14 px-4 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
+                    />
+                    <label
+                      htmlFor="phone"
+                      className={`absolute left-4 transition-all pointer-events-none ${
+                        phoneFocused || phone.length > 0
+                          ? 'top-2 text-xs text-muted-foreground'
+                          : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
+                      }`}
+                    >
+                      Phone
+                    </label>
+                  </div>
+
+                  <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
+                    <input
+                      id="password"
+                      type="password"
+                      placeholder=""
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onFocus={() => setPasswordFocused(true)}
+                      onBlur={() => setPasswordFocused(false)}
+                      required
+                      className="w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 rounded-b-xl focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
+                    />
+                    <label
+                      htmlFor="password"
+                      className={`absolute left-4 transition-all pointer-events-none ${
+                        passwordFocused || password.length > 0
+                          ? 'top-2 text-xs text-muted-foreground'
+                          : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
+                      }`}
+                    >
+                      Password
+                    </label>
+                    <Button
+                      type="submit"
+                      disabled={
+                        fullName.trim().length === 0 ||
+                        phone.trim().length === 0 ||
+                        password.length === 0 ||
+                        loading
+                      }
+                      size="icon"
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
+                        fullName.trim().length === 0 ||
+                        phone.trim().length === 0 ||
+                        password.length === 0 ||
+                        loading
+                          ? 'opacity-40 cursor-not-allowed'
+                          : 'cursor-pointer'
+                      }`}
+                    >
+                      <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
+                      <span className="sr-only">Submit</span>
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           </form>

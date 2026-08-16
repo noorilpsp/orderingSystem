@@ -1,12 +1,11 @@
 "use client";
 
-import { CreditCard, DollarSign, Store, UtensilsCrossed } from "lucide-react";
+import { DollarSign, Store, UtensilsCrossed } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGuestT } from "@/lib/guest-i18n";
 import type { EnMessageKey } from "@/lib/guest-i18n";
 
 export type GuestPaymentMethodId =
-  | "pay_now_card"
   | "pay_at_pickup"
   | "pay_at_table"
   | "pay_at_counter";
@@ -15,7 +14,7 @@ type PaymentMethodOption = {
   id: GuestPaymentMethodId;
   labelKey: EnMessageKey;
   descriptionKey: EnMessageKey;
-  icon: typeof CreditCard;
+  icon: typeof DollarSign;
 };
 
 export function defaultGuestPaymentMethod(input: {
@@ -33,16 +32,8 @@ function paymentMethodOptions(input: {
   orderType: "dine-in" | "pickup";
   usesTableSession: boolean;
 }): PaymentMethodOption[] {
-  const payNowCard: PaymentMethodOption = {
-    id: "pay_now_card",
-    labelKey: "checkout.payNowCard",
-    descriptionKey: "checkout.payNowCardDesc",
-    icon: CreditCard,
-  };
-
   if (input.orderType === "pickup") {
     return [
-      payNowCard,
       {
         id: "pay_at_pickup",
         labelKey: "checkout.payAtPickup",
@@ -54,7 +45,6 @@ function paymentMethodOptions(input: {
 
   if (input.usesTableSession) {
     return [
-      payNowCard,
       {
         id: "pay_at_table",
         labelKey: "checkout.payAtTable",
@@ -65,7 +55,6 @@ function paymentMethodOptions(input: {
   }
 
   return [
-    payNowCard,
     {
       id: "pay_at_counter",
       labelKey: "checkout.payAtCounter",
@@ -80,8 +69,6 @@ export function paymentMethodFooterHint(
   t: (key: EnMessageKey) => string,
 ): string {
   switch (method) {
-    case "pay_now_card":
-      return t("checkout.payNowCardHint");
     case "pay_at_pickup":
       return t("checkout.payAtPickupHint");
     case "pay_at_table":
@@ -121,11 +108,11 @@ export function PaymentMethodSection({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-md",
+        "rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-sm backdrop-blur-md",
         className,
       )}
     >
-      <p className="mb-3 text-base font-semibold text-foreground">{t("checkout.paymentMethod")}</p>
+      <p className="mb-2 text-base font-semibold text-foreground">{t("checkout.paymentMethod")}</p>
       <div role="radiogroup" aria-label={t("checkout.paymentMethod")} className="space-y-2">
         {methods.map((method) => {
           const Icon = method.icon;
@@ -138,7 +125,7 @@ export function PaymentMethodSection({
               aria-checked={isSelected}
               onClick={() => onMethodChange(method.id)}
               className={cn(
-                "flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
+                "flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
                 isSelected
                   ? "border-primary/60 bg-primary/10"
                   : "border-border/70 bg-background/40 hover:border-foreground/30",

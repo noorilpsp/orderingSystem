@@ -18,8 +18,14 @@ import {
   customizationGroups as customizationGroupsTable,
 } from "@/lib/db/schema/menus";
 import { merchantLocations as merchantLocationsTable } from "@/lib/db/schema";
-import { getActiveStationKeysForRouting } from "@/lib/kds/getLocationStations";
+import {
+  getStationRoutingContext,
+  resolveStationOverride,
+} from "@/lib/kds/resolveStationForOrderItem";
 import { floorPlans as floorPlansTable } from "@/lib/db/schema/floor-plans";
+import { awardLoyaltyPointsForCompletedOrders } from "@/lib/loyalty/awardLoyaltyPointsForCompletedOrder";
+import { repricePromoLines } from "@/lib/promotions/applyOrderBogo";
+import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
 import { canFireWave, canAddItems, canRefireItem, canModifyOrderItem } from "@/domain/serviceFlow";
 import {
   fireWave as fireWaveAction,
@@ -32,6 +38,7 @@ import {
   ensureSessionForTableByTableUuid,
   updateOrderMetadata,
   cancelOrderByOrderId,
+  refundOrderByOrderId,
   addItemToOrderByOrderId,
   updateOrderStatusByOrderId,
   addPaymentToOrder as addPaymentToOrderAction,
@@ -131,6 +138,8 @@ export type ServiceResult =
       meta?: Record<string, unknown>;
       /** Correlate events triggered by the same user action (e.g. close table). */
       correlationId?: string;
+      /** Orders completed during session close (for loyalty awards). */
+      completedOrderIds?: string[];
     }
   | {
       ok: false;
@@ -413,7 +422,7 @@ async function createPickupDeliveryOrder(
         })
       : [];
   const itemMap = new Map(menuItems.map((m) => [m.id, m]));
-  const { validKeys, firstKey } = await getActiveStationKeysForRouting(input.locationId);
+  const stationCtx = await getStationRoutingContext(input.locationId);
 
   const lineItems: PickupDeliveryLineItemInput[] = [];
   let subtotal = 0;
@@ -464,14 +473,13 @@ async function createPickupDeliveryOrder(
 
     const lineTotal = itemPrice * qty + customizationsTotal;
     subtotal += lineTotal;
-    const menuDefault = menuItem?.defaultStation?.trim() || null;
-    let resolvedStation: string;
-    let source: string;
-    if (menuDefault && validKeys.has(menuDefault)) {
-      resolvedStation = menuDefault;
-      source = "menuItem";
-    } else {
-      if (menuDefault && process.env.NODE_ENV !== "production") {
+    const resolvedStation = resolveStationOverride(
+      stationCtx,
+      menuItem?.defaultStation,
+    );
+    if (stationCtx.kdsEnabled && process.env.NODE_ENV !== "production") {
+      const menuDefault = menuItem?.defaultStation?.trim() || null;
+      if (menuDefault && !stationCtx.validKeys.has(menuDefault)) {
         // eslint-disable-next-line no-console
         console.log("[kds-routing] menuItem.defaultStation rejected", {
           itemId: item.itemId,
@@ -479,16 +487,11 @@ async function createPickupDeliveryOrder(
           reason: "not in active location_stations",
         });
       }
-      resolvedStation = firstKey ?? "kitchen";
-      source = firstKey ? "firstActiveStation" : "fallback";
-      if (process.env.NODE_ENV !== "production" && (menuDefault || firstKey)) {
-        // eslint-disable-next-line no-console
-        console.log("[kds-routing] createPickupDeliveryOrder resolved", {
-          itemId: item.itemId,
-          resolvedStation,
-          source,
-        });
-      }
+      // eslint-disable-next-line no-console
+      console.log("[kds-routing] createPickupDeliveryOrder resolved", {
+        itemId: item.itemId,
+        resolvedStation,
+      });
     }
 
     lineItems.push({
@@ -545,6 +548,23 @@ async function createPickupDeliveryOrder(
   );
 
   if (!result.ok) return { ok: false, reason: result.error };
+
+  try {
+    const { sendIncomingOrderPush } = await import("@/lib/orders/sendIncomingOrderPush");
+    await sendIncomingOrderPush({
+      locationId: input.locationId,
+      orderId: result.orderId,
+      orderNumber,
+      orderType: input.orderType,
+      itemCount: lineItems.reduce(
+        (sum, item) => sum + Math.max(1, item.quantity ?? 1),
+        0,
+      ),
+    });
+  } catch (error) {
+    console.error("[createOrderFromApi] push notify failed", error);
+  }
+
   return { ok: true, orderId: result.orderId };
 }
 
@@ -577,6 +597,7 @@ export async function updateItemQuantity(
     columns: {
       id: true,
       orderId: true,
+      itemId: true,
       voidedAt: true,
       sentToKitchenAt: true,
       itemPrice: true,
@@ -598,8 +619,21 @@ export async function updateItemQuantity(
     .set({ quantity: qty, lineTotal })
     .where(eq(orderItemsTable.id, orderItemId));
 
-  await recalculateOrderTotals(item.orderId);
   const ctx = await getItemContext(orderItemId);
+  const order = await db.query.orders.findFirst({
+    where: eq(ordersTable.id, item.orderId),
+    columns: { locationId: true, sessionId: true },
+  });
+  if (order && item.itemId) {
+    await repricePromoLines({
+      locationId: order.locationId,
+      orderId: item.orderId,
+      sessionId: order.sessionId,
+      itemIds: [item.itemId],
+    });
+  }
+
+  await recalculateOrderTotals(item.orderId);
   if (ctx?.sessionId) {
     await recalculateSessionTotals(ctx.sessionId);
   }
@@ -764,7 +798,11 @@ export async function addItemsToOrder(
       and(eq(itemsTable.locationId, orderRef.locationId), inArray(itemsTable.id, itemIds))
     );
     const menuItemMap = new Map(menuItems.map((m) => [m.id, m]));
-    const { validKeys, firstKey } = await getActiveStationKeysForRouting(orderRef.locationId);
+    const promoByItem = await resolveItemPromos(
+      orderRef.locationId,
+      new Map(menuItems.map((item) => [item.id, Number(item.price) || 0])),
+    );
+    const stationCtx = await getStationRoutingContext(orderRef.locationId);
 
     const now = new Date();
     const inserted: string[] = [];
@@ -796,7 +834,7 @@ export async function addItemsToOrder(
       return { ok: false, reason: "item_not_found", data: { itemId: input.itemId } };
     }
     const qty = Math.max(1, Math.floor(input.quantity ?? 1));
-    const price = Number(menuItem.price);
+    const price = promoByItem.get(menuItem.id)?.price ?? Number(menuItem.price);
     let customizationsTotal = 0;
     const custRows: { groupId: string; optionId: string; groupName: string; optionName: string; optionPrice: string; quantity: number }[] = [];
     for (const cust of input.customizations ?? []) {
@@ -816,18 +854,15 @@ export async function addItemsToOrder(
     const lineTotal = price * qty + customizationsTotal;
     itemCount += qty;
 
-      const inputOverride = input.stationOverride?.trim() || null;
-      const menuDefault = menuItem.defaultStation?.trim() || null;
-      let resolvedStation: string;
-      let source: string;
-      if (inputOverride && validKeys.has(inputOverride)) {
-        resolvedStation = inputOverride;
-        source = "input";
-      } else if (menuDefault && validKeys.has(menuDefault)) {
-        resolvedStation = menuDefault;
-        source = "menuItem";
-      } else {
-        if (inputOverride && process.env.NODE_ENV !== "production") {
+      const resolvedStation = resolveStationOverride(
+        stationCtx,
+        menuItem.defaultStation,
+        input.stationOverride,
+      );
+      if (stationCtx.kdsEnabled && process.env.NODE_ENV !== "production") {
+        const inputOverride = input.stationOverride?.trim() || null;
+        const menuDefault = menuItem.defaultStation?.trim() || null;
+        if (inputOverride && !stationCtx.validKeys.has(inputOverride)) {
           // eslint-disable-next-line no-console
           console.log("[kds-routing] input.stationOverride rejected", {
             orderId: orderRef.id,
@@ -836,7 +871,7 @@ export async function addItemsToOrder(
             reason: "not in active location_stations",
           });
         }
-        if (menuDefault && process.env.NODE_ENV !== "production") {
+        if (menuDefault && !stationCtx.validKeys.has(menuDefault)) {
           // eslint-disable-next-line no-console
           console.log("[kds-routing] menuItem.defaultStation rejected", {
             orderId: orderRef.id,
@@ -845,17 +880,12 @@ export async function addItemsToOrder(
             reason: "not in active location_stations",
           });
         }
-        resolvedStation = firstKey ?? "kitchen";
-        source = firstKey ? "firstActiveStation" : "fallback";
-        if (process.env.NODE_ENV !== "production" && (inputOverride || menuDefault || firstKey)) {
-          // eslint-disable-next-line no-console
-          console.log("[kds-routing] addItemsToOrder resolved", {
-            orderId: orderRef.id,
-            itemId: input.itemId,
-            resolvedStation,
-            source,
-          });
-        }
+        // eslint-disable-next-line no-console
+        console.log("[kds-routing] addItemsToOrder resolved", {
+          orderId: orderRef.id,
+          itemId: input.itemId,
+          resolvedStation,
+        });
       }
 
       const seatKey = input.seatId ?? "shared";
@@ -895,6 +925,14 @@ export async function addItemsToOrder(
         }
       }
     }
+
+    await repricePromoLines({
+      locationId: orderRef.locationId,
+      orderId: orderRef.id,
+      sessionId,
+      itemIds,
+      dbOrTx: tx,
+    });
 
     await recalculateOrderTotals(orderRef.id, tx);
     await recalculateSessionTotals(sessionId, tx);
@@ -1426,7 +1464,27 @@ export async function voidItem(
   if (!result.ok) {
     return { ok: false, reason: "item_already_voided", data: { error: result.error } };
   }
+  const voided = await db.query.orderItems.findFirst({
+    where: eq(orderItemsTable.id, orderItemId),
+    columns: { orderId: true, itemId: true },
+  });
   const ctx = await getItemContext(orderItemId);
+  if (voided?.itemId && ctx) {
+    const order = await db.query.orders.findFirst({
+      where: eq(ordersTable.id, voided.orderId),
+      columns: { locationId: true, sessionId: true },
+    });
+    if (order) {
+      await repricePromoLines({
+        locationId: order.locationId,
+        orderId: voided.orderId,
+        sessionId: order.sessionId,
+        itemIds: [voided.itemId],
+      });
+      await recalculateOrderTotals(voided.orderId);
+      if (order.sessionId) await recalculateSessionTotals(order.sessionId);
+    }
+  }
   safeEmit({
     type: "item.status_changed",
     payload: {
@@ -1533,6 +1591,21 @@ export async function cancelOrder(orderId: string, userId: string): Promise<Serv
   return { ok: true, orderId };
 }
 
+export async function refundOrder(orderId: string, userId: string): Promise<ServiceResult> {
+  const order = await db.query.orders.findFirst({
+    where: eq(ordersTable.id, orderId),
+    with: { location: { columns: { id: true, merchantId: true } } },
+    columns: { id: true, locationId: true },
+  });
+  if (!order) return { ok: false, reason: "order_not_found" };
+  const location = await verifyLocationAccess(order.locationId);
+  if (!location) return { ok: false, reason: "unauthorized" };
+
+  const result = await refundOrderByOrderId(orderId, userId);
+  if (!result.ok) return { ok: false, reason: result.error };
+  return { ok: true, orderId };
+}
+
 export type AddItemToExistingOrderInput = {
   itemId: string;
   quantity: number;
@@ -1616,7 +1689,11 @@ export async function addItemToExistingOrder(
   }
 
   const qty = Math.max(1, input.quantity);
-  const itemPrice = Number(menuItem.price);
+  const promoByItem = await resolveItemPromos(
+    order.locationId,
+    new Map([[input.itemId, Number(menuItem.price) || 0]]),
+  );
+  const itemPrice = promoByItem.get(input.itemId)?.price ?? Number(menuItem.price);
   const lineTotal = itemPrice * qty + customizationsTotal;
 
   const actResult = await addItemToOrderByOrderId(orderId, {
@@ -1630,6 +1707,16 @@ export async function addItemToExistingOrder(
     customizations: customizationsToCreate,
   });
   if (!actResult.ok) return { ok: false, reason: actResult.error };
+  if (input.itemId) {
+    await repricePromoLines({
+      locationId: order.locationId,
+      orderId,
+      sessionId: order.sessionId,
+      itemIds: [input.itemId],
+    });
+    await recalculateOrderTotals(orderId);
+    if (order.sessionId) await recalculateSessionTotals(order.sessionId);
+  }
   return { ok: true, orderItemId: actResult.orderItemId, orderId };
 }
 
@@ -1638,6 +1725,8 @@ export type UpdateOrderStatusInput = {
   note?: string | null;
   changedByStaffId?: string | null;
   changedByUserId?: string | null;
+  /** Minutes from now until estimated ready (sets estimatedReadyAt). */
+  etaMinutes?: number | null;
 };
 
 export async function updateOrderStatus(
@@ -1653,10 +1742,16 @@ export async function updateOrderStatus(
   const location = await verifyLocationAccess(order.locationId);
   if (!location) return { ok: false, reason: "unauthorized" };
 
+  let estimatedReadyAt: Date | null | undefined;
+  if (typeof input.etaMinutes === "number" && Number.isFinite(input.etaMinutes) && input.etaMinutes > 0) {
+    estimatedReadyAt = new Date(Date.now() + Math.round(input.etaMinutes) * 60_000);
+  }
+
   const result = await updateOrderStatusByOrderId(orderId, input.status, {
     note: input.note,
     changedByStaffId: input.changedByStaffId,
     changedByUserId: input.changedByUserId,
+    estimatedReadyAt,
   });
   if (!result.ok) return { ok: false, reason: result.error };
   return { ok: true, orderId };
@@ -1845,30 +1940,55 @@ export async function closeSessionService(
   payment?: CloseSessionPayment,
   options?: CloseOrderForTableOptions
 ): Promise<ServiceResult> {
-  return withTx(async (tx) => {
+  const result = await withTx(async (tx) => {
     const correlationId = generateCorrelationId();
     const session = await tx.query.sessions.findFirst({
     where: eq(sessionsTable.id, sessionId),
       columns: { id: true, locationId: true, tableId: true, status: true },
     });
-    if (!session) return { ok: false, reason: "session_not_found" };
+    if (!session) return { ok: false as const, reason: "session_not_found" };
     if (session.status !== "open") {
-      return { ok: false, reason: "session_already_closed", error: "Session already closed" };
+      return { ok: false as const, reason: "session_already_closed", error: "Session already closed" };
     }
 
     const location = await verifyLocationAccess(session.locationId);
-    if (!location) return { ok: false, reason: "unauthorized" };
+    if (!location) return { ok: false as const, reason: "unauthorized" };
 
     const forceClose = options?.force === true;
+
+    // POS "Mark paid": bump payment to cover whatever is still owed on the visit.
+    let effectivePayment = payment;
+    if (!forceClose && payment) {
+      await recalculateSessionTotals(sessionId, tx);
+      const probe = await canCloseSessionAction(
+        sessionId,
+        { incomingPaymentAmount: 0 },
+        tx,
+      );
+      if (probe.ok) {
+        // Already covered (e.g. per-order payments) — close without inserting another charge.
+        effectivePayment = undefined;
+      } else if (probe.reason === "unpaid_balance") {
+        const remaining = Math.max(0, Number(probe.remaining ?? 0));
+        if (remaining > 0.01) {
+          effectivePayment = {
+            ...payment,
+            amount: Math.max(Number(payment.amount ?? 0) || 0, remaining),
+          };
+        } else {
+          effectivePayment = undefined;
+        }
+      }
+    }
 
     if (!forceClose) {
       await recalculateSessionTotals(sessionId, tx);
       const canClose = await canCloseSessionAction(sessionId, {
-        incomingPaymentAmount: payment?.amount,
+        incomingPaymentAmount: effectivePayment?.amount,
       }, tx);
       if (!canClose.ok) {
         return {
-          ok: false,
+          ok: false as const,
           reason: canClose.reason,
           ...(canClose.reason === "unfinished_items" && { items: canClose.items }),
           ...(canClose.reason === "unpaid_balance" && {
@@ -1890,9 +2010,9 @@ export async function closeSessionService(
       }
     }
 
-    const result = await closeSessionAction(sessionId, payment, { ...options, correlationId }, tx);
+    const closeResult = await closeSessionAction(sessionId, effectivePayment, { ...options, correlationId }, tx);
 
-    if (result.ok) {
+    if (closeResult.ok) {
       safeEmit({
         type: "session.closed",
         payload: { sessionId, closedAt: new Date().toISOString() },
@@ -1900,27 +2020,43 @@ export async function closeSessionService(
       });
     }
 
-    if (!result.ok) {
+    if (!closeResult.ok) {
       return {
-        ok: false,
-        reason: result.reason ?? "close_failed",
-        error: result.error,
-        items: result.items,
-        remaining: result.remaining,
-        sessionTotal: result.sessionTotal,
-        paymentsTotal: result.paymentsTotal,
+        ok: false as const,
+        reason: closeResult.reason ?? "close_failed",
+        error: closeResult.error,
+        items: closeResult.items,
+        remaining: closeResult.remaining,
+        sessionTotal: closeResult.sessionTotal,
+        paymentsTotal: closeResult.paymentsTotal,
         data: {
-          error: result.error,
-          items: result.items,
-          remaining: result.remaining,
-          sessionTotal: result.sessionTotal,
-          paymentsTotal: result.paymentsTotal,
+          error: closeResult.error,
+          items: closeResult.items,
+          remaining: closeResult.remaining,
+          sessionTotal: closeResult.sessionTotal,
+          paymentsTotal: closeResult.paymentsTotal,
         },
       };
     }
 
-    return { ok: true, sessionId, meta: { closedAt: new Date() }, correlationId };
+    return {
+      ok: true as const,
+      sessionId,
+      meta: { closedAt: new Date() },
+      correlationId,
+      completedOrderIds: closeResult.completedOrderIds ?? [],
+    };
   });
+
+  if (result.ok && result.completedOrderIds?.length) {
+    try {
+      await awardLoyaltyPointsForCompletedOrders(result.completedOrderIds);
+    } catch (error) {
+      console.error("[closeSessionService] loyalty award failed", sessionId, error);
+    }
+  }
+
+  return result;
 }
 
 

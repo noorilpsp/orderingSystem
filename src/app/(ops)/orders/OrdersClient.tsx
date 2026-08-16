@@ -14,11 +14,13 @@ function getPayloadErrorMessage(payload: unknown, fallback: string): string {
   return typeof msg === "string" && msg.trim() ? msg : fallback
 }
 import Link from "next/link"
-import { AlertTriangle, Armchair, Banknote, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MapPinned, MoreHorizontal, Search, ShoppingBag, Store, Users } from "lucide-react"
+import { AlertTriangle, Armchair, Banknote, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MoreHorizontal, Search, ShoppingBag, Store, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 
 import { IncomingOrderOverlay, IncomingWaitingBadge } from "@/components/orders/incoming-order-overlay"
+import { ServiceRequestBanner } from "@/components/orders/service-request-banner"
 import { OrdersStaffMenu } from "@/components/orders/orders-staff-menu"
 import { OpsCustomizationDisplayLines } from "@/components/shared/customization-display-lines"
 import {
@@ -42,13 +44,26 @@ import { Input } from "@/components/ui/input"
 import { fetchPos } from "@/lib/pos/fetchPos"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import type { CatalogI18n } from "@/lib/catalog-i18n"
+import {
+  opsGuestCountLabel,
+  opsItemsCountLabel,
+  opsOrderMatchesQuery,
+  opsTableWithCodeLabel,
+  resolveOpsCatalogName,
+  useStaffLocale,
+  type OpsLocale,
+  type OpsTranslate,
+} from "@/lib/ops-i18n"
 import {
   createIncomingOrderAlertSound,
   notifyIncomingOrderAlert,
   primeIncomingOrderAlertAudio,
 } from "@/lib/orders/incoming-order-alert-sound"
 import type { OrdersStaffProfile } from "@/lib/orders/getOrdersStaffProfile"
-import { isOrdersView, type OrdersView } from "@/lib/orders/ordersView"
+import { isOrdersView, type OrdersServiceRequest, type OrdersView } from "@/lib/orders/ordersView"
+import { extractTableCode, mergeServedTableTicketsForBoard, formatTableSeatGuestLabel } from "@/lib/orders/buildTableCheckOrder"
+import { groupOpsOrderItems } from "@/lib/orders/groupOpsOrderItems"
 
 type OrderSource = "table" | "pickup" | "dine_in_no_table"
 type UnifiedStatus = "sent" | "preparing" | "ready" | "served" | "voided" | "refunded"
@@ -73,27 +88,38 @@ type UnifiedOrder = {
   items: Array<{
     id: string
     name: string
+    itemId?: string | null
+    i18n?: CatalogI18n | null
     qty: number
     status: string
     price: number
     notes?: string | null
+    seatNumber?: number | null
+    seatGuestName?: string | null
     customizations?: Array<{
       groupName: string
       optionName: string
       optionPrice: number
       quantity: number
+      groupId?: string | null
+      optionId?: string | null
+      groupI18n?: CatalogI18n | null
+      optionI18n?: CatalogI18n | null
     }>
   }>
   waves: Array<{ number: number; status: LocalWaveStatus }>
   tableId?: string
   sessionId?: string
   orderId?: string
+  waveNumber?: number
+  memberOrderIds?: string[]
   note?: string
   scheduledPickupAt?: number | null
   scheduledParked?: boolean
   paymentState?: PaymentState
   paymentMethod?: PaymentMethod
   targetEtaMinutes?: number
+  needsAccept?: boolean
 }
 
 type BoardMode = "live" | "history" | "scheduled"
@@ -124,23 +150,33 @@ function mergeOrdersViewWithLocal(
   const mergedOrders = server.orders.map((serverOrder) => {
     const localOrder = localById.get(serverOrder.id)
     if (!localOrder) return serverOrder
-    if (
+    const protectStatus =
       protectedOrderIds.has(serverOrder.id) ||
       counterStatusRank(localOrder.status) > counterStatusRank(serverOrder.status)
-    ) {
-      return {
-        ...serverOrder,
-        status: localOrder.status,
-        updatedAt: Math.max(localOrder.updatedAt, serverOrder.updatedAt),
-        stageEnteredAt: {
-          ...serverOrder.stageEnteredAt,
-          ...localOrder.stageEnteredAt,
-        },
-        items: localOrder.items.length > 0 ? localOrder.items : serverOrder.items,
-        targetEtaMinutes: localOrder.targetEtaMinutes ?? serverOrder.targetEtaMinutes,
-      }
+    // Keep optimistic Paid until the server catches up (Mark paid → History).
+    const protectPayment =
+      protectedOrderIds.has(serverOrder.id) ||
+      (localOrder.paymentState === "paid" && serverOrder.paymentState !== "paid")
+
+    if (!protectStatus && !protectPayment) return serverOrder
+
+    return {
+      ...serverOrder,
+      status: protectStatus ? localOrder.status : serverOrder.status,
+      paymentState: protectPayment
+        ? localOrder.paymentState
+        : serverOrder.paymentState,
+      paymentMethod: protectPayment
+        ? localOrder.paymentMethod
+        : serverOrder.paymentMethod,
+      updatedAt: Math.max(localOrder.updatedAt, serverOrder.updatedAt),
+      stageEnteredAt: {
+        ...serverOrder.stageEnteredAt,
+        ...localOrder.stageEnteredAt,
+      },
+      items: localOrder.items.length > 0 ? localOrder.items : serverOrder.items,
+      targetEtaMinutes: localOrder.targetEtaMinutes ?? serverOrder.targetEtaMinutes,
     }
-    return serverOrder
   })
 
   // Keep optimistic local rows the server has not returned yet (rare).
@@ -155,13 +191,52 @@ function mergeOrdersViewWithLocal(
     orders: mergedOrders,
     channels: server.channels ?? local.channels,
     defaultPrepMinutes: server.defaultPrepMinutes ?? local.defaultPrepMinutes,
+    serviceRequests: server.serviceRequests ?? local.serviceRequests ?? [],
   }
 }
 
-const sourceLabel: Record<OrderSource, string> = {
-  table: "Delivery to table",
-  pickup: "Pickup",
-  dine_in_no_table: "Dine-in",
+function sourceLabelFor(t: OpsTranslate, source: OrderSource): string {
+  switch (source) {
+    case "table":
+      return t("source.table")
+    case "pickup":
+      return t("source.pickup")
+    case "dine_in_no_table":
+      return t("source.dine")
+    default: {
+      const _exhaustive: never = source
+      return _exhaustive
+    }
+  }
+}
+
+/** Source chip text — table orders include the table code (e.g. "Table T5"). */
+function sourceBadgeLabel(
+  order: Pick<UnifiedOrder, "source" | "label" | "guestLabel">,
+  t: OpsTranslate,
+): string {
+  if (order.source !== "table") return sourceLabelFor(t, order.source)
+  const code = extractTableCode(order)
+  return opsTableWithCodeLabel(t, code)
+}
+
+function localizeTableGuestLabel(t: OpsTranslate, label: string): string {
+  const guests = opsGuestCountLabel(t, label)
+  if (guests !== label) return guests
+  return label.replace(/^Table\s+/i, `${t("source.table")} `)
+}
+
+/** Card subtitle: Table Tx · Sx · Name for kitchen tickets; table checks stay Table Tx only. */
+function orderCardGuestLine(order: UnifiedOrder, t: OpsTranslate): string {
+  if (order.source !== "table") return localizeTableGuestLabel(t, order.guestLabel)
+  const code = extractTableCode(order)
+  const tableOnly = opsTableWithCodeLabel(t, code)
+  if (isTableCheck(order)) return tableOnly
+  const fromItems = formatTableSeatGuestLabel(code, order.items)
+  if (order.items.some((item) => item.seatNumber != null && item.seatNumber > 0)) {
+    return localizeTableGuestLabel(t, fromItems)
+  }
+  return localizeTableGuestLabel(t, order.guestLabel || fromItems)
 }
 
 const sourceChipClass: Record<OrderSource, string> = {
@@ -170,8 +245,8 @@ const sourceChipClass: Record<OrderSource, string> = {
   dine_in_no_table: "border-amber-300/45 bg-amber-500/12 text-amber-100",
 }
 
-const liveStatusOrder: UnifiedStatus[] = ["ready", "preparing", "sent"]
-const liveStatusFilterOrder: UnifiedStatus[] = ["sent", "preparing", "ready"]
+const liveStatusOrder: UnifiedStatus[] = ["ready", "preparing", "sent", "served"]
+const liveStatusFilterOrder: UnifiedStatus[] = ["sent", "preparing", "ready", "served"]
 const historyStatusOrder: UnifiedStatus[] = ["served", "voided", "refunded"]
 
 const statusChipClass: Record<UnifiedStatus, string> = {
@@ -181,24 +256,6 @@ const statusChipClass: Record<UnifiedStatus, string> = {
   served: "border-emerald-300/45 bg-emerald-500/12 text-emerald-100",
   voided: "border-red-400/40 bg-red-500/10 text-red-200",
   refunded: "border-fuchsia-300/45 bg-fuchsia-500/12 text-fuchsia-100",
-}
-
-const statusChipLabel: Record<UnifiedStatus, string> = {
-  sent: "New",
-  preparing: "Preparing",
-  ready: "Ready",
-  served: "Served",
-  voided: "Voided",
-  refunded: "Refunded",
-}
-
-const statusFilterLabel: Record<UnifiedStatus, string> = {
-  sent: "New",
-  preparing: "Preparing",
-  ready: "Ready",
-  served: "Served",
-  voided: "Voided",
-  refunded: "Refunded",
 }
 
 const statusFilterToneClass: Record<
@@ -252,14 +309,14 @@ const statusTone: Record<UnifiedStatus, OrderTone> = {
 }
 
 const toneBorderClass: Record<OrderTone, string> = {
-  urgent: "border-l-red-400/80",
-  active: "border-l-amber-400/60",
-  served: "border-l-emerald-400/70",
-  billing: "border-l-blue-400/60",
-  closed: "border-l-slate-300/55",
-  voided: "border-l-rose-400/70",
-  refunded: "border-l-fuchsia-400/70",
-  completed_history: "border-l-indigo-400/75",
+  urgent: "border-s-red-400/80",
+  active: "border-s-amber-400/60",
+  served: "border-s-emerald-400/70",
+  billing: "border-s-blue-400/60",
+  closed: "border-s-slate-300/55",
+  voided: "border-s-rose-400/70",
+  refunded: "border-s-fuchsia-400/70",
+  completed_history: "border-s-indigo-400/75",
 }
 
 const toneDotClass: Record<OrderTone, string> = {
@@ -317,15 +374,6 @@ const toneAccentBg: Record<OrderTone, string> = {
   completed_history: "#818cf820",
 }
 
-const groupLabel: Record<UnifiedStatus, string> = {
-  ready: "URGENT",
-  preparing: "PREPARING",
-  sent: "NEW",
-  served: "SERVED",
-  voided: "VOIDED",
-  refunded: "REFUNDED",
-}
-
 const historyCompletedTone = {
   chipClass: "border-indigo-300/45 bg-indigo-500/12 text-indigo-100",
   filterActive: "border-indigo-300/60 bg-indigo-500/22 text-indigo-100",
@@ -349,26 +397,82 @@ function minutesAgo(ts: number): number {
   return Math.max(0, Math.round((Date.now() - ts) / 60000))
 }
 
-function formatDateTime(ts: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+function statusChipLabel(status: UnifiedStatus, t: OpsTranslate, historyCompleted = false): string {
+  if (historyCompleted) return t("status.completed")
+  switch (status) {
+    case "sent":
+      return t("status.new")
+    case "preparing":
+      return t("status.preparing")
+    case "ready":
+      return t("status.ready")
+    case "served":
+      return t("status.served")
+    case "voided":
+      return t("status.voided")
+    case "refunded":
+      return t("status.refunded")
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
+}
+
+function statusGroupLabel(status: UnifiedStatus, t: OpsTranslate, historyCompleted = false): string {
+  if (historyCompleted) return t("group.completed")
+  switch (status) {
+    case "sent":
+      return t("group.new")
+    case "preparing":
+      return t("group.preparing")
+    case "ready":
+      return t("group.urgent")
+    case "served":
+      return t("group.served")
+    case "voided":
+      return t("group.voided")
+    case "refunded":
+      return t("group.refunded")
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
+}
+
+function formatItemStatusLabel(status: string, t: OpsTranslate): string {
+  return statusChipLabel(itemStatusToUnified(status), t)
+}
+
+function paymentMethodLabel(method: Exclude<PaymentMethod, null>, t: OpsTranslate): string {
+  switch (method) {
+    case "card":
+      return t("payment.card")
+    case "cash":
+      return t("payment.cash")
+    case "other":
+      return t("payment.other")
+    default: {
+      const _exhaustive: never = method
+      return _exhaustive
+    }
+  }
+}
+
+function formatScheduledPickupWhen(
+  ms: number | null | undefined,
+  locale: OpsLocale,
+  t: OpsTranslate,
+): string {
+  if (ms == null) return t("status.scheduled")
+  return new Date(ms).toLocaleString(locale === "ar" ? "ar" : "en-US", {
+    weekday: "short",
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-  }).format(ts)
-}
-
-function formatMoney(amount: number): string {
-  const safe = Number.isFinite(amount) ? amount : 0
-  return `€${safe.toFixed(2)}`
-}
-
-function formatItemStatusLabel(status: string): string {
-  if (status === "held" || status === "pending" || status === "sent") return "New"
-  if (status === "preparing" || status === "cooking") return "Preparing"
-  if (status === "ready") return "Ready"
-  if (status === "served") return "Served"
-  return status
+  })
 }
 
 function itemStatusToUnified(status: string): UnifiedStatus {
@@ -379,6 +483,48 @@ function itemStatusToUnified(status: string): UnifiedStatus {
   if (status === "voided") return "voided"
   if (status === "refunded") return "refunded"
   return "sent"
+}
+
+type UnifiedOrderItem = UnifiedOrder["items"][number]
+
+type SeatItemGroup = {
+  key: string
+  seatNumber: number | null
+  seatGuestName: string | null
+  items: Array<{ item: UnifiedOrderItem; index: number }>
+  total: number
+}
+
+function groupOrderItemsBySeat(items: UnifiedOrderItem[]): SeatItemGroup[] {
+  const groups = new Map<string, SeatItemGroup>()
+
+  items.forEach((item, index) => {
+    const hasSeat = item.seatNumber != null && item.seatNumber > 0
+    const key = hasSeat ? `seat-${item.seatNumber}` : "unassigned"
+    const existing = groups.get(key)
+    if (existing) {
+      existing.items.push({ item, index })
+      existing.total += item.price
+      if (!existing.seatGuestName && item.seatGuestName) {
+        existing.seatGuestName = item.seatGuestName
+      }
+      return
+    }
+    groups.set(key, {
+      key,
+      seatNumber: hasSeat ? item.seatNumber! : null,
+      seatGuestName: item.seatGuestName ?? null,
+      items: [{ item, index }],
+      total: item.price,
+    })
+  })
+
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.seatNumber == null && b.seatNumber == null) return 0
+    if (a.seatNumber == null) return 1
+    if (b.seatNumber == null) return -1
+    return a.seatNumber - b.seatNumber
+  })
 }
 
 function formatMinutesCompact(totalMinutes: number): string {
@@ -474,34 +620,64 @@ function getCounterStageMinutes(
   })
 }
 
+function isTableCheck(order: UnifiedOrder): boolean {
+  return order.id.startsWith("check-")
+}
+
+function isOpenTableCheck(order: UnifiedOrder): boolean {
+  return order.source === "table" && Boolean(order.sessionId)
+}
+
+function isOrderFromToday(order: UnifiedOrder, nowMs: number = Date.now()): boolean {
+  const d = new Date(nowMs)
+  d.setHours(0, 0, 0, 0)
+  const start = d.getTime()
+  // Prefer completion/update time so late finishes still land in today's history;
+  // fall back to createdAt for tickets missing updatedAt.
+  const ts = order.updatedAt > 0 ? order.updatedAt : order.createdAt
+  return ts >= start
+}
+
 function isOrderVisibleInBoardMode(order: UnifiedOrder, mode: BoardMode): boolean {
   if (mode === "scheduled") {
     return order.scheduledParked === true
   }
+
+  const isPaid = order.paymentState === "paid"
+  const isOpenCheck = isOpenTableCheck(order)
+
   if (mode === "live") {
     if (order.scheduledParked) return false
-    return order.status === "ready" || order.status === "preparing" || order.status === "sent"
+    if (order.status === "ready" || order.status === "preparing" || order.status === "sent") {
+      return true
+    }
+    // Table check (served+unpaid rollup) stays on Live until Paid.
+    if (order.status === "served" && isOpenCheck && !isPaid) return true
+    return false
   }
-  return (
-    order.status === "served" ||
-    order.status === "voided" ||
-    order.status === "refunded"
-  )
+
+  // History
+  if (order.status === "voided" || order.status === "refunded") {
+    return isOrderFromToday(order)
+  }
+  if (order.status === "served") {
+    if (isOpenCheck || order.source === "table") {
+      return isPaid && isOrderFromToday(order)
+    }
+    return isOrderFromToday(order)
+  }
+  return false
 }
 
-function formatScheduledPickupWhen(ms: number | null | undefined): string {
-  if (ms == null) return "Scheduled"
-  return new Date(ms).toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
+function isCounterStyleOrder(order: UnifiedOrder): boolean {
+  if (order.source === "pickup" || order.source === "dine_in_no_table") return true
+  if (order.source !== "table") return false
+  // Kitchen tickets and rolled-up table checks (paid once).
+  return order.id.startsWith("order-") || isTableCheck(order)
 }
 
 function getNextFireableWaveNumber(order: UnifiedOrder): number | null {
-  if (order.source !== "table") return null
+  if (order.source !== "table" || isTableCheck(order)) return null
   const next = order.waves.find((wave) => wave.status === "held" || wave.status === "not_started")
   return next ? next.number : null
 }
@@ -517,6 +693,7 @@ function WaveStrip({ waves }: { waves: UnifiedOrder["waves"] }) {
             "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded-md border px-2 text-[10px] font-black tracking-wide",
             waveChipClass[wave.status]
           )}
+          dir="ltr"
         >
           W{wave.number}
         </span>
@@ -530,8 +707,16 @@ function getIdentifier(order: UnifiedOrder): {
   text: string
 } {
   if (order.source === "table") {
-    const number = order.label.match(/\d+/)?.[0] ?? order.label
-    return { Icon: HandPlatter, text: `T${number}` }
+    if (isTableCheck(order)) {
+      return { Icon: HandPlatter, text: order.label }
+    }
+    // Kitchen ticket: DI-xxx (table shown as secondary guestLabel).
+    const code = order.label.toUpperCase().startsWith("DI-")
+      ? order.label
+      : order.label.toUpperCase().startsWith("PU-")
+        ? order.label
+        : `DI-${order.label}`
+    return { Icon: HandPlatter, text: code }
   }
   if (order.source === "pickup") {
     const code = order.label.toUpperCase().startsWith("PU-") ? order.label : `PU-${order.label}`
@@ -556,17 +741,24 @@ function OrderCard({
   onOpenDetail: (order: UnifiedOrder) => void
   onFireTableWave: (order: UnifiedOrder) => void
 }) {
+  const { formatMoney } = useMerchantLocalization()
+  const { t, locale } = useStaffLocale()
   const elapsed = minutesAgo(order.createdAt)
   const isHistoryCompleted = boardMode === "history" && order.status === "served"
+  const displayItems = groupOpsOrderItems(order.items)
   const tone: OrderTone = isHistoryCompleted ? "completed_history" : statusTone[order.status]
   const isUrgent = order.status === "ready"
   const isPreparing = order.status === "preparing"
   const hasAllergyHint = /allergy|no nuts|no nut|allergic/i.test(order.note ?? "")
   const identifier = getIdentifier(order)
-  const canMarkReady = order.status === "preparing" && order.source !== "table"
-  const canMarkServed = order.status === "ready" && order.source !== "table"
+  const canMarkReady = order.status === "preparing" && isCounterStyleOrder(order) && !isTableCheck(order)
+  const canMarkServed = order.status === "ready" && isCounterStyleOrder(order) && !isTableCheck(order)
   const nextFireableWaveNumber = getNextFireableWaveNumber(order)
-  const canFireNextWave = order.source === "table" && order.status === "served" && nextFireableWaveNumber !== null
+  const canFireNextWave =
+    order.source === "table" &&
+    !isCounterStyleOrder(order) &&
+    order.status === "served" &&
+    nextFireableWaveNumber !== null
 
   return (
     <article
@@ -580,7 +772,7 @@ function OrderCard({
         }
       }}
       className={cn(
-        "group flex cursor-pointer flex-col rounded-xl border-l-[3px] border border-white/[0.06] bg-card/60 text-left backdrop-blur-sm transition-all duration-200",
+        "group flex cursor-pointer flex-col rounded-xl border-s-[3px] border border-white/[0.06] bg-card/60 text-start backdrop-blur-sm transition-all duration-200",
         toneBorderClass[tone],
         toneGlowClass[tone],
         isUrgent && "bg-red-500/[0.04]",
@@ -588,7 +780,7 @@ function OrderCard({
       )}
       style={isUrgent ? ({ "--glow-urgent": "0 72% 51%" } as React.CSSProperties) : undefined}
     >
-      <header className="flex items-center gap-1.5 px-4 pt-3.5 pb-2.5">
+      <header className="flex items-start gap-1.5 px-4 pt-3.5 pb-2.5">
         <span
           className={cn(
             "relative inline-flex h-6 w-6 items-center justify-center rounded-full shrink-0",
@@ -598,64 +790,60 @@ function OrderCard({
           {isUrgent ? <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-50" /> : null}
           <identifier.Icon className="relative z-10 h-3.5 w-3.5 text-slate-950/90" />
         </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={cn("font-mono text-sm font-bold tracking-wide", toneTextClass[tone])}>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={cn("font-mono text-sm font-bold tracking-wide", toneTextClass[tone])} dir="ltr">
               {identifier.text}
             </span>
-            <span className={cn("inline-flex h-5 items-center rounded border px-1 text-[10px] font-semibold", sourceChipClass[order.source])}>
-              {sourceLabel[order.source]}
+            <span className={cn("inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] font-semibold", sourceChipClass[order.source])}>
+              {sourceBadgeLabel(order, t)}
             </span>
             <span
               className={cn(
-                "inline-flex h-5 items-center rounded border px-1 text-[10px] font-semibold",
+                "inline-flex h-5 shrink-0 items-center rounded border px-1 text-[10px] font-semibold",
                 isHistoryCompleted ? historyCompletedTone.chipClass : statusChipClass[order.status]
               )}
             >
-              {isHistoryCompleted ? "Completed" : statusChipLabel[order.status]}
+              {statusChipLabel(order.status, t, isHistoryCompleted)}
             </span>
             {order.paymentState ? (
               <span
                 className={cn(
-                  "inline-flex h-5 items-center gap-1 rounded border px-1 text-[10px] font-semibold",
+                  "inline-flex h-5 shrink-0 items-center gap-1 rounded border px-1 text-[10px] font-semibold",
                   paymentStateClass[order.paymentState]
                 )}
               >
                 {order.paymentState === "paid" ? <CheckCircle2 className="h-3 w-3" /> : <Clock3 className="h-3 w-3" />}
-                <span>{order.paymentState === "paid" ? "Paid" : "Unpaid"}</span>
+                <span>{order.paymentState === "paid" ? t("payment.paid") : t("payment.unpaid")}</span>
               </span>
             ) : null}
           </div>
-          <div className="mt-1 flex items-center text-[11px] text-muted-foreground/70">
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground/70">
             <span className="inline-flex items-center gap-1">
-              <MapPinned className="h-3 w-3" />
-              <span>{order.sectionLabel}</span>
-            </span>
-            <span className="ml-1.5 inline-flex items-center gap-1">
               <Users className="h-3 w-3" />
-              <span>{order.guestLabel}</span>
+              <span>{orderCardGuestLine(order, t)}</span>
             </span>
           </div>
         </div>
-        <div className="ml-auto text-right">
-          <div className="text-sm font-semibold tabular-nums text-foreground">
+        <div className="ms-auto shrink-0 text-end">
+          <div className="text-sm font-semibold tabular-nums text-foreground" dir="ltr">
             {formatMoney(order.total)}
           </div>
-          <div className={cn("mt-0.5 flex items-center justify-end gap-0.5 font-mono text-[11px]", isUrgent ? "text-red-400/80" : "text-muted-foreground/60")}>
+          <div className={cn("mt-0.5 flex items-center justify-end gap-0.5 font-mono text-[11px]", isUrgent ? "text-red-400/80" : "text-muted-foreground/60")} dir="ltr">
             <Clock3 className="h-3 w-3" />
             {formatMinutesCompact(elapsed)}
           </div>
-          <div className="mt-0.5 text-xs font-semibold text-foreground/90">{order.itemCount} items</div>
+          <div className="mt-0.5 text-xs font-semibold text-foreground/90">{opsItemsCountLabel(t, order.itemCount)}</div>
         </div>
       </header>
 
-      {order.items.length > 0 ? (
+      {displayItems.length > 0 ? (
         <div className="mx-4 mb-2 space-y-1.5 border-t border-white/10 pt-2">
-          {order.items.slice(0, 4).map((item) => (
-            <div key={item.id} className="flex items-start justify-between gap-2 text-xs">
+          {displayItems.slice(0, 4).map((item, index) => (
+            <div key={`${item.id}-${index}`} className="flex items-start justify-between gap-2 text-xs">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-foreground/85">
-                  {item.qty}× {item.name}
+                  <span dir="ltr">{item.qty}×</span> {resolveOpsCatalogName(locale, item.name, item.i18n)}
                 </p>
                 {item.customizations && item.customizations.length > 0 ? (
                   <OpsCustomizationDisplayLines
@@ -666,19 +854,19 @@ function OrderCard({
                 ) : null}
                 {item.notes ? (
                   <p className="mt-0.5 truncate text-[11px]">
-                    <span className="text-white/45">Note:</span>{" "}
+                    <span className="text-white/45">{t("common.note")}</span>{" "}
                     <span className="italic text-amber-200/80">{item.notes}</span>
                   </p>
                 ) : null}
               </div>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
+              <span className="shrink-0 tabular-nums text-muted-foreground" dir="ltr">
                 {formatMoney(item.price)}
               </span>
             </div>
           ))}
-          {order.items.length > 4 ? (
-            <p className="text-[11px] text-muted-foreground">
-              +{order.items.length - 4} more
+          {displayItems.length > 4 ? (
+            <p className="pt-0.5 text-xs font-semibold text-foreground/80">
+            {t("card.more", { count: displayItems.length - 4 })}
             </p>
           ) : null}
         </div>
@@ -686,7 +874,7 @@ function OrderCard({
 
       {order.note ? (
         <div className={cn("mx-4 mb-2 rounded-md border px-2 py-1.5 text-[11px]", hasAllergyHint ? "border-amber-400/30 bg-amber-500/10 text-amber-200/90" : "border-white/10 bg-black/20 text-muted-foreground")}>
-          <span className="not-italic text-white/55">Instructions:</span>{" "}
+          <span className="not-italic text-white/55">{t("common.instructions")}</span>{" "}
           <span className="italic">{order.note}</span>
         </div>
       ) : null}
@@ -696,9 +884,9 @@ function OrderCard({
           <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-500/10 px-2.5 py-2">
             <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold leading-tight text-amber-200">In preparation</p>
+              <p className="text-[11px] font-semibold leading-tight text-amber-200">{t("prep.inPreparation")}</p>
               <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
-                Mark ready when the order is done for the guest.
+                {t("prep.markReadyHint")}
               </p>
             </div>
             <button
@@ -707,9 +895,9 @@ function OrderCard({
                 event.stopPropagation()
                 onMarkReady(order)
               }}
-              className="ml-2 inline-flex h-7 shrink-0 items-center gap-1 self-center rounded-md border border-red-300/50 bg-red-500/20 px-2.5 text-[11px] font-semibold text-red-100 transition-colors hover:bg-red-500/30"
+              className="ms-2 inline-flex h-7 shrink-0 items-center gap-1 self-center rounded-md border border-red-300/50 bg-red-500/20 px-2.5 text-[11px] font-semibold text-red-100 transition-colors hover:bg-red-500/30"
             >
-              Ready
+              {t("action.ready")}
             </button>
           </div>
         </div>
@@ -720,9 +908,9 @@ function OrderCard({
           <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-500/10 px-2.5 py-2">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold leading-tight text-red-400">Items are ready for pickup</p>
+              <p className="text-[11px] font-semibold leading-tight text-red-400">{t("ready.itemsReady")}</p>
               <p className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
-                Move this order to handoff / served.
+                {t("ready.moveHandoff")}
               </p>
             </div>
             {canMarkServed ? (
@@ -732,17 +920,17 @@ function OrderCard({
                   event.stopPropagation()
                   onMarkServed(order)
                 }}
-                className="ml-2 inline-flex h-7 shrink-0 items-center gap-1 self-center rounded-md border border-emerald-300/50 bg-emerald-500/20 px-2.5 text-[11px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
+                className="ms-2 inline-flex h-7 shrink-0 items-center gap-1 self-center rounded-md border border-emerald-300/50 bg-emerald-500/20 px-2.5 text-[11px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                Served
+                {t("action.served")}
               </button>
             ) : null}
           </div>
         </div>
       ) : null}
 
-      {order.waves.length > 0 ? (
+      {order.waves.length > 0 && !isCounterStyleOrder(order) ? (
         <div className="px-4 pb-2.5">
           <div className="flex items-center justify-between gap-2">
             <WaveStrip waves={order.waves} />
@@ -756,7 +944,7 @@ function OrderCard({
                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-orange-300/45 bg-orange-500/14 px-2.5 text-[11px] font-semibold text-orange-100 transition-colors hover:bg-orange-500/24"
               >
                 <Flame className="h-3.5 w-3.5" />
-                Fire W{nextFireableWaveNumber}
+                {t("action.fireWave", { number: nextFireableWaveNumber })}
               </button>
             ) : null}
           </div>
@@ -768,27 +956,28 @@ function OrderCard({
 }
 
 function OrdersNoLocationState({ staffProfile }: { staffProfile: OrdersStaffProfile | null }) {
+  const { t } = useStaffLocale()
   return (
     <div className="relative flex h-full min-h-[400px] flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_12%_8%,rgba(34,211,238,0.16),transparent_35%),radial-gradient(circle_at_84%_0%,rgba(16,185,129,0.12),transparent_32%),hsl(222,24%,8%)] text-foreground px-4">
-      <div className="absolute right-4 top-4">
+      <div className="absolute end-4 top-4">
         <OrdersStaffMenu profile={staffProfile} />
       </div>
       <Store className="h-12 w-12 text-muted-foreground/60" strokeWidth={1.5} />
       <p className="text-center text-base font-medium text-muted-foreground max-w-sm">
-        No location selected. Select a store in dashboard or settings.
+        {t("board.noLocation")}
       </p>
       <Link
         href="/dashboard"
         className="rounded-lg border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-medium text-foreground/90 hover:bg-white/10 transition-colors"
       >
-        Go to Dashboard
+        {t("board.goToDashboard")}
       </Link>
     </div>
   )
 }
 
 function OrdersErrorState({
-  message,
+  message: _message,
   onRetry,
   staffProfile,
 }: {
@@ -796,19 +985,20 @@ function OrdersErrorState({
   onRetry: () => void
   staffProfile: OrdersStaffProfile | null
 }) {
+  const { t } = useStaffLocale()
   return (
     <div className="relative flex h-full min-h-[400px] flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_12%_8%,rgba(34,211,238,0.16),transparent_35%),radial-gradient(circle_at_84%_0%,rgba(16,185,129,0.12),transparent_32%),hsl(222,24%,8%)] px-4 text-foreground">
-      <div className="absolute right-4 top-4">
+      <div className="absolute end-4 top-4">
         <OrdersStaffMenu profile={staffProfile} />
       </div>
       <AlertTriangle className="h-12 w-12 text-amber-500/80" strokeWidth={1.5} />
-      <p className="max-w-sm text-center text-base font-medium text-muted-foreground">{message}</p>
+      <p className="max-w-sm text-center text-base font-medium text-muted-foreground">{t("error.loadFailed")}</p>
       <Button
         onClick={onRetry}
         variant="outline"
         className="rounded-lg border-white/15 bg-white/[0.06] text-foreground/90 hover:bg-white/10"
       >
-        Retry
+        {t("common.retry")}
       </Button>
     </div>
   )
@@ -856,6 +1046,8 @@ function OrdersBoard({
   staffProfile: OrdersStaffProfile | null
 }) {
   const router = useRouter()
+  const { formatMoney, formatDateTime } = useMerchantLocalization()
+  const { t, locale, dir } = useStaffLocale()
   const [query, setQuery] = useState("")
   const [boardMode, setBoardMode] = useState<BoardMode>("live")
   const [sourceFilter, setSourceFilter] = useState<"all" | OrderSource>("all")
@@ -871,6 +1063,9 @@ function OrdersBoard({
   const [incomingSnoozed, setIncomingSnoozed] = useState(false)
   const [incomingAccepting, setIncomingAccepting] = useState(false)
   const [progressNowMs, setProgressNowMs] = useState(() => Date.now())
+  const [serviceAckPendingId, setServiceAckPendingId] = useState<string | null>(null)
+  const seenServiceRequestIdsRef = useRef<Set<string>>(new Set())
+  const serviceRequestsHydratedRef = useRef(false)
   const inFlightActionsRef = useRef<Set<string>>(new Set())
   const orderActionQueueRef = useRef<Map<string, Promise<void>>>(new Map())
 
@@ -896,6 +1091,7 @@ function OrdersBoard({
     let cancelled = false
 
     const poll = async () => {
+      if (document.visibilityState !== "visible") return
       try {
         const res = await fetch(
           `/api/orders/view?locationId=${encodeURIComponent(locationId)}`,
@@ -920,9 +1116,14 @@ function OrdersBoard({
     const id = window.setInterval(() => {
       void poll()
     }, ORDERS_POLL_MS)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void poll()
+    }
+    document.addEventListener("visibilitychange", onVisibility)
     return () => {
       cancelled = true
       window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisibility)
     }
   }, [ordersView.locationId])
 
@@ -935,7 +1136,10 @@ function OrdersBoard({
   const baseOrders = ordersView.orders
 
   const allOrders = useMemo(
-    () => [...baseOrders].sort((a, b) => a.createdAt - b.createdAt),
+    () =>
+      mergeServedTableTicketsForBoard(
+        [...baseOrders].sort((a, b) => a.createdAt - b.createdAt),
+      ),
     [baseOrders]
   )
 
@@ -944,12 +1148,117 @@ function OrdersBoard({
       allOrders
         .filter(
           (order) =>
-            order.source !== "table" &&
+            !order.scheduledParked &&
             order.status === "sent" &&
-            !order.scheduledParked,
+            isCounterStyleOrder(order),
         )
         .sort((a, b) => a.createdAt - b.createdAt),
     [allOrders]
+  )
+
+  const serviceRequests = useMemo(
+    () => ordersView.serviceRequests ?? [],
+    [ordersView.serviceRequests],
+  )
+
+  useEffect(() => {
+    const nextIds = new Set(serviceRequests.map((request) => request.id))
+    if (!serviceRequestsHydratedRef.current) {
+      serviceRequestsHydratedRef.current = true
+      seenServiceRequestIdsRef.current = nextIds
+      return
+    }
+
+    const newlyArrived = serviceRequests.filter(
+      (request) => !seenServiceRequestIdsRef.current.has(request.id),
+    )
+    seenServiceRequestIdsRef.current = nextIds
+    if (newlyArrived.length === 0) return
+
+    const first = newlyArrived[0]
+    const label =
+      first.requestType === "waiter"
+        ? t("service.toastWaiter", { code: first.tableNumber })
+        : t("service.toastCheck", { code: first.tableNumber })
+    toast.message(label, {
+      description:
+        newlyArrived.length > 1
+          ? t("service.toastMany", { count: newlyArrived.length })
+          : first.requestType === "waiter"
+            ? t("service.toastWaiterDesc")
+            : t("service.toastCheckDesc"),
+    })
+    if (!incomingMuted) {
+      void createIncomingOrderAlertSound().start()
+      window.setTimeout(() => createIncomingOrderAlertSound().stop(), 1800)
+    }
+  }, [serviceRequests, incomingMuted, t])
+
+  const handleAcknowledgeServiceRequest = useCallback(
+    async (request: OrdersServiceRequest) => {
+      if (serviceAckPendingId) return
+      setServiceAckPendingId(request.id)
+      setOrdersView((prev) => ({
+        ...prev,
+        serviceRequests: (prev.serviceRequests ?? []).filter(
+          (row) => row.id !== request.id,
+        ),
+      }))
+      try {
+        const res = await fetchPos(
+          `/api/tables/${encodeURIComponent(request.tableId)}/acknowledge-service`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ requestType: request.requestType }),
+          },
+        )
+        const payload = (await res.json().catch(() => null)) as {
+          ok?: boolean
+          error?: { message?: string }
+        } | null
+        if (!res.ok || payload?.ok === false) {
+          throw new Error(
+            getPayloadErrorMessage(
+              payload,
+              request.requestType === "bill"
+                ? t("service.failCheck")
+                : t("service.failWaiter"),
+            ),
+          )
+        }
+        toast.success(
+          request.requestType === "bill"
+            ? t("service.ackCheck", { code: request.tableNumber })
+            : t("service.ackWaiter", { code: request.tableNumber }),
+        )
+      } catch (error) {
+        setOrdersView((prev) => {
+          const existing = prev.serviceRequests ?? []
+          if (existing.some((row) => row.id === request.id)) return prev
+          return {
+            ...prev,
+            serviceRequests: [...existing, request].sort((a, b) => {
+              if (a.requestType !== b.requestType) {
+                return a.requestType === "waiter" ? -1 : 1
+              }
+              return a.tableNumber.localeCompare(b.tableNumber, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              })
+            }),
+          }
+        })
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : t("service.failUpdate"),
+        )
+      } finally {
+        setServiceAckPendingId(null)
+      }
+    },
+    [serviceAckPendingId, t],
   )
 
   const scheduledOrders = useMemo(
@@ -1063,6 +1372,7 @@ function OrdersBoard({
           ...row,
           status,
           updatedAt: now,
+          needsAccept: status === "sent" ? row.needsAccept : false,
           ...(typeof extras?.targetEtaMinutes === "number"
             ? { targetEtaMinutes: extras.targetEtaMinutes }
             : {}),
@@ -1107,6 +1417,8 @@ function OrdersBoard({
           return {
             ...row,
             status: previousStatus,
+            needsAccept:
+              previousStatus === "sent" && row.source === "table" ? true : row.needsAccept,
             stageEnteredAt: prevStage
               ? { ...nextStageEntered, [prevStage]: nextStageEntered[prevStage] ?? row.updatedAt }
               : nextStageEntered,
@@ -1144,7 +1456,7 @@ function OrdersBoard({
 
   const handleMarkReady = useCallback(
     (order: UnifiedOrder) => {
-      if (order.status !== "preparing" || order.source === "table") return
+      if (order.status !== "preparing" || !isCounterStyleOrder(order)) return
       const orderId = order.orderId ?? order.id.replace(/^order-/, "")
       if (!orderId) return
       const actionKey = `ready:${order.id}`
@@ -1168,17 +1480,17 @@ function OrdersBoard({
           } | null
           if (!res.ok || payload?.ok === false) {
             rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-            toast.error(getPayloadErrorMessage(payload, "Failed to mark ready. Please try again."))
+            toast.error(getPayloadErrorMessage(payload, t("error.markReady")))
           }
         } catch {
           rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-          toast.error("Request failed. Please try again.")
+          toast.error(t("error.requestFailed"))
         } finally {
           endAction(actionKey)
         }
       })
     },
-    [beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus]
+    [beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus, t]
   )
 
   const patchOrderPayment = useCallback(
@@ -1207,7 +1519,7 @@ function OrdersBoard({
 
   const handleMarkServed = useCallback(
     (order: UnifiedOrder) => {
-      if (order.status !== "ready" || order.source === "table") return
+      if (order.status !== "ready" || !isCounterStyleOrder(order)) return
       const orderId = order.orderId ?? order.id.replace(/^order-/, "")
       if (!orderId) return
       const actionKey = `served:${order.id}`
@@ -1217,8 +1529,12 @@ function OrdersBoard({
       const previousPaymentState = order.paymentState ?? "unpaid"
       const previousPaymentMethod = order.paymentMethod ?? null
       const optimisticStatus = "served" as const
+      const settleOnServe = !isOpenTableCheck(order)
       patchOrderStatus(order.id, optimisticStatus)
-      patchOrderPayment(order.id, { paymentState: "paid", paymentMethod: "cash" })
+      // Pickup / counter: served settles. Delivery-to-table: stays unpaid until Paid.
+      if (settleOnServe) {
+        patchOrderPayment(order.id, { paymentState: "paid", paymentMethod: "cash" })
+      }
       toast.success(`${order.label} marked served`)
 
       enqueueOrderAction(order.id, async () => {
@@ -1234,30 +1550,34 @@ function OrdersBoard({
           } | null
           if (!res.ok || payload?.ok === false) {
             rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
+            if (settleOnServe) {
+              patchOrderPayment(order.id, {
+                paymentState: previousPaymentState,
+                paymentMethod: previousPaymentMethod,
+              })
+            }
+            toast.error(getPayloadErrorMessage(payload, t("error.markServed")))
+          }
+        } catch {
+          rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
+          if (settleOnServe) {
             patchOrderPayment(order.id, {
               paymentState: previousPaymentState,
               paymentMethod: previousPaymentMethod,
             })
-            toast.error(getPayloadErrorMessage(payload, "Failed to mark served. Please try again."))
           }
-        } catch {
-          rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-          patchOrderPayment(order.id, {
-            paymentState: previousPaymentState,
-            paymentMethod: previousPaymentMethod,
-          })
-          toast.error("Request failed. Please try again.")
+          toast.error(t("error.requestFailed"))
         } finally {
           endAction(actionKey)
         }
       })
     },
-    [beginAction, endAction, enqueueOrderAction, patchOrderPayment, patchOrderStatus, rollbackOrderStatus]
+    [beginAction, endAction, enqueueOrderAction, patchOrderPayment, patchOrderStatus, rollbackOrderStatus, t]
   )
 
   const handleMarkPaid = useCallback(
     (order: UnifiedOrder, method: Exclude<PaymentMethod, null> = "cash") => {
-      if (order.source === "table") return
+      if (!isCounterStyleOrder(order)) return
       if (order.status === "voided" || order.status === "refunded") return
       if (order.paymentState === "paid") return
       const orderId = order.orderId ?? order.id.replace(/^order-/, "")
@@ -1267,6 +1587,101 @@ function OrdersBoard({
 
       const previousPaymentState = order.paymentState ?? "unpaid"
       const previousPaymentMethod = order.paymentMethod ?? null
+      const openTableSessionId = isOpenTableCheck(order) ? order.sessionId : null
+
+      if (openTableSessionId) {
+        // Pay closes the whole table visit (rolled-up check or any session ticket).
+        const sessionOrders = ordersView.orders.filter(
+          (row) => row.sessionId === openTableSessionId,
+        )
+        const paymentSnapshots = sessionOrders.map((row) => ({
+          id: row.id,
+          paymentState: row.paymentState ?? "unpaid",
+          paymentMethod: row.paymentMethod ?? null,
+          status: row.status,
+        }))
+        const closeAmount =
+          Math.round(
+            (isTableCheck(order)
+              ? order.total
+              : sessionOrders
+                  .filter((row) => row.paymentState !== "paid")
+                  .reduce((sum, row) => sum + (Number(row.total) || 0), 0)) * 100,
+          ) / 100
+        const paymentAmount = Math.max(closeAmount, Number(order.total) || 0, 0.01)
+
+        // Optimistic: leave Live immediately (check → History).
+        for (const row of sessionOrders) {
+          if (row.status === "voided" || row.status === "refunded") continue
+          if (row.status === "sent" || row.status === "preparing" || row.status === "ready") {
+            // Still in kitchen — leave status; server will reject close if unfinished.
+            continue
+          }
+          patchOrderStatus(row.id, "served")
+          patchOrderPayment(row.id, { paymentState: "paid", paymentMethod: method })
+        }
+        if (isTableCheck(order) || order.status === "served") {
+          patchOrderStatus(order.id, "served")
+          patchOrderPayment(order.id, { paymentState: "paid", paymentMethod: method })
+        }
+        setSelectedOrderId(null)
+        toast.success(`${order.label} paid · table closed`)
+
+        enqueueOrderAction(order.id, async () => {
+          const restore = () => {
+            for (const snap of paymentSnapshots) {
+              if (snap.status !== "voided" && snap.status !== "refunded") {
+                rollbackOrderStatus(snap.id, "served", snap.status)
+              }
+              patchOrderPayment(snap.id, {
+                paymentState: snap.paymentState,
+                paymentMethod: snap.paymentMethod,
+              })
+            }
+            if (isTableCheck(order)) {
+              patchOrderPayment(order.id, {
+                paymentState: previousPaymentState,
+                paymentMethod: previousPaymentMethod,
+              })
+            }
+          }
+          try {
+            const res = await fetchPos(
+              `/api/sessions/${encodeURIComponent(openTableSessionId)}/close`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  payment: {
+                    amount: paymentAmount,
+                    method: method === "other" ? "other" : method,
+                  },
+                }),
+              },
+            )
+            const payload = (await res.json().catch(() => null)) as {
+              ok?: boolean
+              error?: { message?: string }
+            } | null
+            if (!res.ok || payload?.ok === false) {
+              restore()
+              toast.error(
+                getPayloadErrorMessage(
+                  payload,
+                  t("error.closeTable"),
+                ),
+              )
+            }
+          } catch {
+            restore()
+            toast.error(t("error.requestFailed"))
+          } finally {
+            endAction(actionKey)
+          }
+        })
+        return
+      }
+
       patchOrderPayment(order.id, { paymentState: "paid", paymentMethod: method })
       toast.success(`${order.label} marked paid`)
 
@@ -1289,25 +1704,25 @@ function OrdersBoard({
               paymentState: previousPaymentState,
               paymentMethod: previousPaymentMethod,
             })
-            toast.error(getPayloadErrorMessage(payload, "Failed to mark paid. Please try again."))
+            toast.error(getPayloadErrorMessage(payload, t("error.markPaid")))
           }
         } catch {
           patchOrderPayment(order.id, {
             paymentState: previousPaymentState,
             paymentMethod: previousPaymentMethod,
           })
-          toast.error("Request failed. Please try again.")
+          toast.error(t("error.requestFailed"))
         } finally {
           endAction(actionKey)
         }
       })
     },
-    [beginAction, endAction, enqueueOrderAction, patchOrderPayment]
+    [beginAction, endAction, enqueueOrderAction, ordersView.orders, patchOrderPayment, patchOrderStatus, rollbackOrderStatus, t]
   )
 
   const handleVoidOrder = useCallback(
     (order: UnifiedOrder) => {
-      if (order.source === "table") return
+      if (!isCounterStyleOrder(order)) return
       if (order.status === "voided" || order.status === "refunded") return
       if (order.paymentState === "paid") return
       const orderId = order.orderId ?? order.id.replace(/^order-/, "")
@@ -1334,22 +1749,22 @@ function OrdersBoard({
           } | null
           if (!res.ok || payload?.ok === false) {
             rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-            toast.error(getPayloadErrorMessage(payload, "Failed to void order. Please try again."))
+            toast.error(getPayloadErrorMessage(payload, t("error.void")))
           }
         } catch {
           rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-          toast.error("Request failed. Please try again.")
+          toast.error(t("error.requestFailed"))
         } finally {
           endAction(actionKey)
         }
       })
     },
-    [beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus]
+    [beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus, t]
   )
 
   const handleRefundOrder = useCallback(
     (order: UnifiedOrder) => {
-      if (order.source === "table") return
+      if (!isCounterStyleOrder(order)) return
       if (order.status === "refunded") return
       if (order.paymentState !== "paid") return
       const orderId = order.orderId ?? order.id.replace(/^order-/, "")
@@ -1376,23 +1791,21 @@ function OrdersBoard({
           } | null
           if (!res.ok || payload?.ok === false) {
             rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-            toast.error(getPayloadErrorMessage(payload, "Failed to refund order. Please try again."))
+            toast.error(getPayloadErrorMessage(payload, t("error.refund")))
           }
         } catch {
           rollbackOrderStatus(order.id, optimisticStatus, previousStatus)
-          toast.error("Request failed. Please try again.")
+          toast.error(t("error.requestFailed"))
         } finally {
           endAction(actionKey)
         }
       })
     },
-    [beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus]
+    [beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus, t]
   )
 
   const handleAcceptIncoming = useCallback((etaMinutes: number) => {
     if (!activeIncoming) return
-    const orderId = activeIncoming.orderId ?? activeIncoming.id.replace(/^order-/, "")
-    if (!orderId) return
     const actionKey = `accept:${activeIncoming.id}`
     if (!beginAction(actionKey)) return
     setIncomingAccepting(true)
@@ -1401,11 +1814,19 @@ function OrdersBoard({
     const previousStatus = accepted.status
     const optimisticStatus = "preparing" as const
     const safeEta = Math.min(180, Math.max(1, Math.round(etaMinutes)))
+    const orderId = accepted.orderId ?? accepted.id.replace(/^order-/, "")
     patchOrderStatus(accepted.id, optimisticStatus, { targetEtaMinutes: safeEta })
     toast.success(`${accepted.label} accepted · ${safeEta}m`)
 
     enqueueOrderAction(accepted.id, async () => {
       try {
+        if (!orderId) {
+          rollbackOrderStatus(accepted.id, optimisticStatus, previousStatus)
+          toast.error(t("error.accept"))
+          return
+        }
+
+        // Delivery-to-table: accept is counter-style (no wave fire / KDS).
         const res = await fetchPos(`/api/orders/${encodeURIComponent(orderId)}/status`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1417,17 +1838,17 @@ function OrdersBoard({
         } | null
         if (!res.ok || payload?.ok === false) {
           rollbackOrderStatus(accepted.id, optimisticStatus, previousStatus)
-          toast.error(getPayloadErrorMessage(payload, "Failed to accept order. Please try again."))
+          toast.error(getPayloadErrorMessage(payload, t("error.accept")))
         }
       } catch {
         rollbackOrderStatus(accepted.id, optimisticStatus, previousStatus)
-        toast.error("Request failed. Please try again.")
+        toast.error(t("error.requestFailed"))
       } finally {
         endAction(actionKey)
         setIncomingAccepting(false)
       }
     })
-  }, [activeIncoming, beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus])
+  }, [activeIncoming, beginAction, endAction, enqueueOrderAction, patchOrderStatus, rollbackOrderStatus, t])
 
   const selectedOrder = useMemo(
     () => allOrders.find((order) => order.id === selectedOrderId) ?? null,
@@ -1448,12 +1869,7 @@ function OrdersBoard({
     const base = allOrders.filter((order) => {
       if (!isOrderVisibleInBoardMode(order, boardMode)) return false
       if (!q) return true
-      return (
-        order.label.toLowerCase().includes(q) ||
-        order.sectionLabel.toLowerCase().includes(q) ||
-        order.guestLabel.toLowerCase().includes(q) ||
-        order.items.some((item) => item.name.toLowerCase().includes(q))
-      )
+      return opsOrderMatchesQuery(order, query)
     })
 
     return {
@@ -1475,10 +1891,8 @@ function OrdersBoard({
     const channelFilters: SourceFilter[] = []
 
     const dineInMode = channels?.dineInMode
-    const tableLabel =
-      dineInMode === "self_service" ? "Dine-in" : "To table"
-    const tableShort =
-      dineInMode === "self_service" ? "Dine-in" : "Table"
+    const tableLabel = dineInMode === "self_service" ? t("source.dine") : t("source.table")
+    const tableShort = tableLabel
 
     // Table-session tickets: delivery-to-table OR self-service dine-in (same source, different label).
     if (
@@ -1497,8 +1911,8 @@ function OrdersBoard({
     if (channels?.pickup !== false || sourceCounts.pickup > 0) {
       channelFilters.push({
         id: "pickup",
-        label: `Pickup (${sourceCounts.pickup})`,
-        shortLabel: `Pickup (${sourceCounts.pickup})`,
+        label: `${t("source.pickup")} (${sourceCounts.pickup})`,
+        shortLabel: `${t("source.pickup")} (${sourceCounts.pickup})`,
         Icon: ShoppingBag,
       })
     }
@@ -1507,8 +1921,8 @@ function OrdersBoard({
     if (sourceCounts.dineIn > 0) {
       channelFilters.push({
         id: "dine_in_no_table",
-        label: `Dine-in (${sourceCounts.dineIn})`,
-        shortLabel: `Dine-in (${sourceCounts.dineIn})`,
+        label: `${t("source.dine")} (${sourceCounts.dineIn})`,
+        shortLabel: `${t("source.dine")} (${sourceCounts.dineIn})`,
         Icon: Store,
       })
     }
@@ -1519,12 +1933,12 @@ function OrdersBoard({
     return [
       {
         id: "all" as const,
-        label: `All (${sourceCounts.all})`,
-        shortLabel: `All (${sourceCounts.all})`,
+        label: `${t("filter.all")} (${sourceCounts.all})`,
+        shortLabel: `${t("filter.all")} (${sourceCounts.all})`,
       },
       ...channelFilters,
     ]
-  }, [channels, sourceCounts])
+  }, [channels, sourceCounts, t])
 
   useEffect(() => {
     if (sourceFilters.length === 0) {
@@ -1555,12 +1969,7 @@ function OrdersBoard({
       if (sourceFilter !== "all" && order.source !== sourceFilter) return false
       if (statusFilter !== "all" && order.status !== statusFilter) return false
       if (!q) return true
-      return (
-        order.label.toLowerCase().includes(q) ||
-        order.sectionLabel.toLowerCase().includes(q) ||
-        order.guestLabel.toLowerCase().includes(q) ||
-        order.items.some((item) => item.name.toLowerCase().includes(q))
-      )
+      return opsOrderMatchesQuery(order, query)
     })
     if (boardMode === "history") {
       next.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -1576,12 +1985,7 @@ function OrdersBoard({
       if (!isOrderVisibleInBoardMode(order, boardMode)) return false
       if (sourceFilter !== "all" && order.source !== sourceFilter) return false
       if (!q) return true
-      return (
-        order.label.toLowerCase().includes(q) ||
-        order.sectionLabel.toLowerCase().includes(q) ||
-        order.guestLabel.toLowerCase().includes(q) ||
-        order.items.some((item) => item.name.toLowerCase().includes(q))
-      )
+      return opsOrderMatchesQuery(order, query)
     })
 
     return base.reduce<Record<UnifiedStatus, number>>(
@@ -1614,17 +2018,9 @@ function OrdersBoard({
     })
   }, [])
 
-  const handleOpenOrder = useCallback(
-    (order: UnifiedOrder) => {
-      if (order.source === "table" && order.id.startsWith("table-")) {
-        const tableId = order.id.slice("table-".length)
-        router.push(`/table/${tableId}`)
-        return
-      }
-      setSelectedOrderId(order.id)
-    },
-    [router]
-  )
+  const handleOpenOrder = useCallback((order: UnifiedOrder) => {
+    setSelectedOrderId(order.id)
+  }, [])
 
   const handleFireTableWave = useCallback(
     (order: UnifiedOrder) => {
@@ -1634,7 +2030,7 @@ function OrdersBoard({
       const actionKey = `fire:${order.id}:${nextWave}`
       if (!beginAction(actionKey)) return
 
-      toast.success(`${order.label} — Wave ${nextWave} fired`)
+      toast.success(t("action.waveFired", { label: order.label, number: nextWave }))
 
       void (async () => {
         try {
@@ -1651,20 +2047,20 @@ function OrdersBoard({
             error?: { message?: string }
           } | null
           if (!res.ok || payload?.ok === false) {
-            toast.error(getPayloadErrorMessage(payload, "Failed to fire wave. Please try again."))
+            toast.error(getPayloadErrorMessage(payload, t("error.fireWave")))
           }
         } catch {
-          toast.error("Request failed. Please try again.")
+          toast.error(t("error.requestFailed"))
         } finally {
           endAction(actionKey)
         }
       })()
     },
-    [beginAction, endAction]
+    [beginAction, endAction, t]
   )
 
   const selectedIdentifier = selectedOrder ? getIdentifier(selectedOrder) : null
-  const selectedIsCounterOrder = selectedOrder?.source === "pickup" || selectedOrder?.source === "dine_in_no_table"
+  const selectedIsCounterOrder = !!selectedOrder && isCounterStyleOrder(selectedOrder)
   const canVoidSelected =
     !!selectedOrder &&
     selectedIsCounterOrder &&
@@ -1699,8 +2095,12 @@ function OrdersBoard({
   const selectedSourceLabel = !selectedOrder
     ? ""
     : selectedOrder.source === "table" && channels?.dineInMode === "self_service"
-      ? "Dine-in"
-      : sourceLabel[selectedOrder.source]
+      ? t("source.dine")
+      : sourceBadgeLabel(selectedOrder, t)
+  const selectedSeatGroups = useMemo(
+    () => (selectedOrder ? groupOrderItemsBySeat(groupOpsOrderItems(selectedOrder.items)) : []),
+    [selectedOrder],
+  )
   const selectedFlowIndex = selectedOrder ? getCounterFlowIndex(selectedOrder.status) : 0
   useEffect(() => {
     if (!selectedOrder || !selectedIsCounterOrder) return
@@ -1735,20 +2135,13 @@ function OrdersBoard({
           order={{
             id: activeIncoming.id,
             label: activeIncoming.label,
-            sourceLabel: sourceLabel[activeIncoming.source],
-            guestLabel: activeIncoming.guestLabel,
+            sourceLabel: sourceLabelFor(t, activeIncoming.source),
+            guestLabel: orderCardGuestLine(activeIncoming, t),
             itemCount: activeIncoming.itemCount,
             createdAt: activeIncoming.createdAt,
             note: activeIncoming.note,
             total: activeIncoming.total,
-            items: activeIncoming.items.map((item) => ({
-              id: item.id,
-              name: item.name,
-              qty: item.qty,
-              price: item.price,
-              customizations: item.customizations,
-              notes: item.notes,
-            })),
+            items: activeIncoming.items,
           }}
           waitingCount={incomingOrders.length}
           accepting={incomingAccepting}
@@ -1793,7 +2186,7 @@ function OrdersBoard({
                         : "text-muted-foreground hover:bg-white/[0.06]"
                     )}
                   >
-                    Live
+                    {t("board.live")}
                   </button>
                   <button
                     type="button"
@@ -1806,7 +2199,7 @@ function OrdersBoard({
                     )}
                   >
                     <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Scheduled
+                    {t("board.scheduled")}
                     {scheduledOrders.length > 0 ? ` (${scheduledOrders.length})` : ""}
                   </button>
                   <button
@@ -1819,16 +2212,16 @@ function OrdersBoard({
                         : "text-muted-foreground hover:bg-white/[0.06]"
                     )}
                   >
-                    History
+                    {t("board.history")}
                   </button>
                 </div>
                 <div className="relative min-w-0 flex-1">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search order"
-                    className="h-9 border-white/15 bg-black/20 pl-8"
+                    placeholder={t("board.searchPlaceholder")}
+                    className="h-9 border-white/15 bg-black/20 ps-8"
                   />
                 </div>
                 <div className="lg:hidden">
@@ -1885,9 +2278,9 @@ function OrdersBoard({
                   >
                     <span className="block truncate text-center">
                     {status === "all" ? (
-                      `All (${visibleStatusFilters.reduce((sum, key) => sum + statusCounts[key], 0)})`
+                      `${t("filter.all")} (${visibleStatusFilters.reduce((sum, key) => sum + statusCounts[key], 0)})`
                     ) : (
-                      `${boardMode === "history" && status === "served" ? "Completed" : statusFilterLabel[status]} (${statusCounts[status]})`
+                      `${statusChipLabel(status, t, boardMode === "history" && status === "served")} (${statusCounts[status]})`
                     )}
                     </span>
                   </button>
@@ -1900,14 +2293,24 @@ function OrdersBoard({
           </div>
         </header>
 
+        <div className="mt-3">
+          <ServiceRequestBanner
+            requests={serviceRequests}
+            pendingId={serviceAckPendingId}
+            onAcknowledge={(request) => {
+              void handleAcknowledgeServiceRequest(request)
+            }}
+          />
+        </div>
+
         <section className="mt-3">
           {boardMode === "scheduled" ? (
             scheduledOrders.length === 0 ? (
               <div className="flex min-h-52 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-black/20 p-6 text-center">
                 <CalendarClock className="h-6 w-6 text-muted-foreground/60" />
-                <div className="text-sm font-semibold text-foreground">No scheduled pickups</div>
+                <div className="text-sm font-semibold text-foreground">{t("board.noScheduled")}</div>
                 <div className="text-xs text-muted-foreground">
-                  Future pickup orders will show here until it’s time to prepare them.
+                  {t("board.noScheduledHint")}
                 </div>
               </div>
             ) : (
@@ -1919,37 +2322,37 @@ function OrdersBoard({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-base font-black tracking-wide text-foreground">{order.label}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{order.guestLabel}</p>
+                        <p className="text-base font-black tracking-wide text-foreground" dir="ltr">{order.label}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{orderCardGuestLine(order, t)}</p>
                       </div>
-                      <span className="rounded-md border border-amber-300/35 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100">
-                        Scheduled
+                      <span className={cn("rounded-md border border-amber-300/35 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-100", locale === "en" && "uppercase tracking-wide")}>
+                        {t("status.scheduled")}
                       </span>
                     </div>
                     <div className="mt-3 flex items-center gap-2 text-sm text-amber-100">
                       <CalendarClock className="h-4 w-4 shrink-0" />
-                      <span className="font-semibold">
-                        {formatScheduledPickupWhen(order.scheduledPickupAt)}
+                      <span className="font-semibold" dir="ltr">
+                        {formatScheduledPickupWhen(order.scheduledPickupAt, locale, t)}
                       </span>
                     </div>
                     <p className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                       <span>
-                        {order.itemCount} item{order.itemCount === 1 ? "" : "s"}
-                        {order.note ? ` · Instructions: ${order.note}` : ""}
+                        {opsItemsCountLabel(t, order.itemCount)}
+                        {order.note ? ` · ${t("common.instructions")} ${order.note}` : ""}
                       </span>
-                      <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                      <span className="shrink-0 font-semibold tabular-nums text-foreground" dir="ltr">
                         {formatMoney(order.total)}
                       </span>
                     </p>
                     {order.items.length > 0 ? (
                       <ul className="mt-3 space-y-1 border-t border-white/10 pt-2">
-                        {order.items.slice(0, 4).map((item) => (
-                          <li key={item.id} className="text-xs text-foreground/90">
+                        {groupOpsOrderItems(order.items).slice(0, 4).map((item, index) => (
+                          <li key={`${item.id}-${index}`} className="text-xs text-foreground/90">
                             <div className="flex justify-between gap-2">
                               <span className="truncate">
-                                {item.qty}× {item.name}
+                                <span dir="ltr">{item.qty}×</span> {resolveOpsCatalogName(locale, item.name, item.i18n)}
                               </span>
-                              <span className="shrink-0 tabular-nums text-muted-foreground">
+                              <span className="shrink-0 tabular-nums text-muted-foreground" dir="ltr">
                                 {formatMoney(item.price)}
                               </span>
                             </div>
@@ -1963,9 +2366,9 @@ function OrdersBoard({
                             ) : null}
                           </li>
                         ))}
-                        {order.items.length > 4 ? (
-                          <li className="text-[11px] text-muted-foreground">
-                            +{order.items.length - 4} more
+                        {groupOpsOrderItems(order.items).length > 4 ? (
+                          <li className="pt-0.5 text-xs font-semibold text-foreground/80">
+                            {t("card.more", { count: groupOpsOrderItems(order.items).length - 4 })}
                           </li>
                         ) : null}
                       </ul>
@@ -1977,11 +2380,11 @@ function OrdersBoard({
           ) : filtered.length === 0 ? (
             <div className="col-span-full flex min-h-52 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-black/20 p-6 text-center">
               <ShoppingBag className="h-6 w-6 text-muted-foreground/60" />
-              <div className="text-sm font-semibold text-foreground">No matching orders</div>
+              <div className="text-sm font-semibold text-foreground">{t("board.noMatching")}</div>
               <div className="text-xs text-muted-foreground">
                 {boardMode === "live"
-                  ? "Try changing search or status filters. Live board only includes New, Preparing, and Ready."
-                  : "Try changing search or status filters. History includes Completed, Closed, Voided, and Refunded."}
+                  ? t("board.noMatchingLiveHint")
+                  : t("board.noMatchingHistoryHint")}
               </div>
             </div>
           ) : (
@@ -1997,17 +2400,20 @@ function OrdersBoard({
                       type="button"
                       onClick={() => toggleGroup(status)}
                       className={cn(
-                        "sticky top-0 z-10 flex w-full items-center gap-2.5 border-b border-white/[0.04] bg-background/85 px-4 py-2.5 text-left backdrop-blur-md transition-colors hover:bg-white/[0.02]"
+                        "sticky top-0 z-10 flex w-full items-center gap-2.5 border-b border-white/[0.04] bg-background/85 px-4 py-2.5 text-start backdrop-blur-md transition-colors hover:bg-white/[0.02]"
                       )}
                       aria-expanded={!isCollapsed}
-                      aria-label={`${isHistoryCompleted ? "COMPLETED" : groupLabel[status]} group, ${orders.length} orders`}
+                      aria-label={t("group.aria", {
+                        label: statusGroupLabel(status, t, isHistoryCompleted),
+                        count: orders.length,
+                      })}
                     >
                       <span
                         className="h-2 w-2 rounded-full"
                         style={{ backgroundColor: isHistoryCompleted ? historyCompletedTone.accent : toneAccentColor[tone] }}
                       />
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80">
-                        {isHistoryCompleted ? "COMPLETED" : groupLabel[status]}
+                      <span className={cn("font-mono text-[10px] font-bold text-muted-foreground/80", locale === "en" && "uppercase tracking-[0.15em]")}>
+                        {statusGroupLabel(status, t, isHistoryCompleted)}
                       </span>
                       <span
                         className="flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 font-mono text-[9px] font-bold"
@@ -2051,16 +2457,16 @@ function OrdersBoard({
 
         <Sheet open={!!selectedOrderId} onOpenChange={(open) => !open && setSelectedOrderId(null)}>
           <SheetContent
-            side="right"
-            className="w-full border-l border-white/15 bg-[linear-gradient(180deg,rgba(8,13,24,0.98),rgba(12,19,34,0.97))] p-0 sm:max-w-[520px]"
+            side={dir === "rtl" ? "left" : "right"}
+            className="w-full border-s border-white/15 bg-[linear-gradient(180deg,rgba(8,13,24,0.98),rgba(12,19,34,0.97))] p-0 sm:max-w-[520px]"
           >
             {selectedOrder && selectedIdentifier ? (
               <div className="flex h-full flex-col">
                 <div className="border-b border-white/10 px-4 pb-4 pt-5">
-                  <SheetHeader className="space-y-1 text-left">
+                  <SheetHeader className="space-y-1 text-start">
                     <SheetTitle className="flex items-center gap-2 text-cyan-100">
                       <selectedIdentifier.Icon className="h-4 w-4" />
-                      <span>{selectedIdentifier.text}</span>
+                      <span dir="ltr">{selectedIdentifier.text}</span>
                       {selectedIsCounterOrder ? (
                         <>
                           <span
@@ -2070,7 +2476,7 @@ function OrdersBoard({
                             )}
                           >
                             {selectedOrder.paymentState === "paid" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}
-                            <span>{selectedOrder.paymentState === "paid" ? "Paid" : "Unpaid"}</span>
+                            <span>{selectedOrder.paymentState === "paid" ? t("payment.paid") : t("payment.unpaid")}</span>
                           </span>
                           {selectedOrder.paymentState === "paid" && selectedOrder.paymentMethod ? (
                             <span
@@ -2082,14 +2488,17 @@ function OrdersBoard({
                               {selectedOrder.paymentMethod === "card" ? <CreditCard className="h-3.5 w-3.5" /> : null}
                               {selectedOrder.paymentMethod === "cash" ? <Banknote className="h-3.5 w-3.5" /> : null}
                               {selectedOrder.paymentMethod === "other" ? <ShoppingBag className="h-3.5 w-3.5" /> : null}
-                              <span className="capitalize">{selectedOrder.paymentMethod}</span>
+                              <span>{paymentMethodLabel(selectedOrder.paymentMethod, t)}</span>
                             </span>
                           ) : null}
                         </>
                       ) : null}
                     </SheetTitle>
                     <SheetDescription className="text-xs text-muted-foreground">
-                      Opened {formatDateTime(selectedOrder.createdAt)} · {formatMinutesCompact(selectedOpenedMinutes)} ago
+                      {t("card.opened", {
+                        datetime: formatDateTime(selectedOrder.createdAt),
+                        ago: formatMinutesCompact(selectedOpenedMinutes),
+                      })}
                       {" · "}
                       <span className="font-semibold text-foreground">
                         {formatMoney(selectedOrder.total)}
@@ -2121,35 +2530,25 @@ function OrdersBoard({
                             : statusChipClass[selectedOrder.status]
                         )}
                       >
-                        {boardMode === "history" && selectedOrder.status === "served" ? "Completed" : statusChipLabel[selectedOrder.status]}
+                        {statusChipLabel(selectedOrder.status, t, boardMode === "history" && selectedOrder.status === "served")}
                       </span>
-                      {!selectedIsCounterOrder ? (
-                        <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/[0.05] px-2 text-[11px] text-muted-foreground">
-                          {selectedOrder.sectionLabel}
-                        </span>
-                      ) : null}
-                      {!selectedIsCounterOrder ? (
-                        <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/[0.05] px-2 text-[11px] text-muted-foreground">
-                          {selectedOrder.guestLabel}
-                        </span>
-                      ) : null}
                     </div>
                     {selectedIsCounterOrder && selectedOrder.status === "preparing" ? (
                       <button
                         type="button"
                         onClick={() => handleMarkReady(selectedOrder)}
-                        className="ml-auto inline-flex h-7 shrink-0 items-center rounded-md border border-red-300/50 bg-red-500/20 px-2.5 text-[11px] font-semibold text-red-100 transition-colors hover:bg-red-500/30"
+                        className="ms-auto inline-flex h-7 shrink-0 items-center rounded-md border border-red-300/50 bg-red-500/20 px-2.5 text-[11px] font-semibold text-red-100 transition-colors hover:bg-red-500/30"
                       >
-                        Mark Ready
+                        {t("action.markReady")}
                       </button>
                     ) : null}
                     {selectedIsCounterOrder && selectedOrder.status === "ready" ? (
                       <button
                         type="button"
                         onClick={() => handleMarkServed(selectedOrder)}
-                        className="ml-auto inline-flex h-7 shrink-0 items-center rounded-md border border-emerald-300/50 bg-emerald-500/20 px-2.5 text-[11px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
+                        className="ms-auto inline-flex h-7 shrink-0 items-center rounded-md border border-emerald-300/50 bg-emerald-500/20 px-2.5 text-[11px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/30"
                       >
-                        Mark Served
+                        {t("action.markServed")}
                       </button>
                     ) : null}
                   </div>
@@ -2158,8 +2557,8 @@ function OrdersBoard({
                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
                   {selectedIsCounterOrder ? (
                     <section className="rounded-xl border border-white/12 bg-white/[0.03] p-3">
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Meal Progress
+                      <h3 className={cn("mb-2 text-xs font-semibold text-muted-foreground", locale === "en" && "uppercase tracking-[0.12em]")}>
+                        {t("progress.meal")}
                       </h3>
                       <div className="grid grid-cols-4 gap-1.5">
                         {counterStatusFlow.map((stepStatus, index) => (
@@ -2172,7 +2571,7 @@ function OrdersBoard({
                                 : "border-white/10 bg-black/20 text-muted-foreground"
                             )}
                           >
-                            <p className="text-[10px] font-semibold">{statusChipLabel[stepStatus]}</p>
+                            <p className="text-[10px] font-semibold">{statusChipLabel(stepStatus, t)}</p>
                             <p className="mt-0.5 text-[9px] font-medium opacity-85">
                               {selectedStageMinutes[index] == null
                                 ? "—"
@@ -2183,18 +2582,18 @@ function OrdersBoard({
                       </div>
                       <div className="mt-3 grid grid-cols-3 gap-1.5 text-[11px]">
                         <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground">Target</p>
-                          <p className="font-semibold text-foreground">{selectedTargetEtaMinutes}m</p>
+                          <p className="text-[10px] text-muted-foreground">{t("progress.target")}</p>
+                          <p className="font-semibold text-foreground" dir="ltr">{selectedTargetEtaMinutes}m</p>
                         </div>
                         <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground">Elapsed</p>
-                          <p className="font-semibold text-foreground">
+                          <p className="text-[10px] text-muted-foreground">{t("progress.elapsed")}</p>
+                          <p className="font-semibold text-foreground" dir="ltr">
                             {formatMinutesCompact(selectedElapsedMinutes)}
                           </p>
                         </div>
                         <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                          <p className="text-[10px] text-muted-foreground">ETA</p>
-                          <p className={cn("font-semibold", selectedEtaLate ? "text-red-300" : "text-emerald-200")}>
+                          <p className="text-[10px] text-muted-foreground">{t("progress.eta")}</p>
+                          <p className={cn("font-semibold", selectedEtaLate ? "text-red-300" : "text-emerald-200")} dir="ltr">
                             {selectedEtaLate
                               ? `+${formatMinutesCompact(selectedElapsedMinutes - selectedTargetEtaMinutes)}`
                               : `${selectedEtaRemaining}m`}
@@ -2202,17 +2601,15 @@ function OrdersBoard({
                         </div>
                       </div>
                       <p className="mt-2 text-[11px] text-muted-foreground">
-                        {selectedEtaLate
-                          ? "Order is beyond target time."
-                          : "On track for pickup handoff."}
+                        {selectedEtaLate ? t("progress.late") : t("progress.onTrack")}
                       </p>
                     </section>
                   ) : null}
 
                   {selectedOrder.waves.length > 0 ? (
                     <section>
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Waves
+                      <h3 className={cn("mb-2 text-xs font-semibold text-muted-foreground", locale === "en" && "uppercase tracking-[0.12em]")}>
+                        {t("progress.waves")}
                       </h3>
                       <WaveStrip waves={selectedOrder.waves} />
                     </section>
@@ -2220,48 +2617,81 @@ function OrdersBoard({
 
                   <section>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Items
+                      <h3 className={cn("text-xs font-semibold text-muted-foreground", locale === "en" && "uppercase tracking-[0.12em]")}>
+                        {t("common.items")}
                       </h3>
-                      <span className="text-xs text-muted-foreground">{selectedOrder.itemCount} items</span>
+                      <span className="text-xs text-muted-foreground">{opsItemsCountLabel(t, selectedOrder.itemCount)}</span>
                     </div>
-                    <div className="space-y-2">
-                      {selectedOrder.items.map((item) => (
-                        <div key={item.id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-foreground">
-                                {item.qty}x {item.name}
-                              </p>
-                              {item.customizations && item.customizations.length > 0 ? (
-                                <OpsCustomizationDisplayLines
-                                  customizations={item.customizations}
-                                  textSizeClassName="text-xs"
-                                />
-                              ) : null}
-                              {item.notes ? (
-                                <p className="mt-1 truncate text-xs">
-                                  <span className="text-white/55">Instructions:</span>{" "}
-                                  <span className="italic text-amber-200/80">{item.notes}</span>
-                                </p>
-                              ) : null}
-                            </div>
-                            <div className="flex shrink-0 flex-col items-end gap-1">
-                              <span className="text-sm font-semibold tabular-nums text-foreground">
-                                {formatMoney(item.price)}
-                              </span>
-                              <span
-                                className={cn(
-                                  "inline-flex h-5 items-center rounded border px-1.5 text-[10px] font-semibold",
-                                  statusChipClass[itemStatusToUnified(item.status)],
-                                )}
-                              >
-                                {formatItemStatusLabel(item.status)}
-                              </span>
-                            </div>
+                    <div className="space-y-3">
+                      {selectedSeatGroups.map((group) => {
+                        const showSeatChrome = group.seatNumber != null || selectedSeatGroups.length > 1
+                        return (
+                          <div key={group.key} className="space-y-2">
+                            {group.items.map(({ item, index }) => (
+                              <div key={`${item.id}-${index}`} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-foreground">
+                                      <span dir="ltr">{item.qty}x</span> {resolveOpsCatalogName(locale, item.name, item.i18n)}
+                                    </p>
+                                    {item.customizations && item.customizations.length > 0 ? (
+                                      <OpsCustomizationDisplayLines
+                                        customizations={item.customizations}
+                                        textSizeClassName="text-xs"
+                                      />
+                                    ) : null}
+                                    {item.notes ? (
+                                      <p className="mt-1 truncate text-xs">
+                                        <span className="text-white/55">{t("common.instructions")}</span>{" "}
+                                        <span className="italic text-amber-200/80">{item.notes}</span>
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex shrink-0 flex-col items-end gap-1">
+                                    <span className="text-sm font-semibold tabular-nums text-foreground" dir="ltr">
+                                      {formatMoney(item.price)}
+                                    </span>
+                                    <div className="flex flex-wrap items-center justify-end gap-1">
+                                      {item.seatNumber != null && item.seatNumber > 0 ? (
+                                        <span className="inline-flex h-5 max-w-[9rem] items-center truncate rounded border border-sky-300/35 bg-sky-500/15 px-1.5 text-[10px] font-semibold text-sky-100">
+                                          {`S${item.seatNumber}`}
+                                        </span>
+                                      ) : null}
+                                      <span
+                                        className={cn(
+                                          "inline-flex h-5 items-center rounded border px-1.5 text-[10px] font-semibold",
+                                          statusChipClass[itemStatusToUnified(item.status)],
+                                        )}
+                                      >
+                                        {formatItemStatusLabel(item.status, t)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {showSeatChrome ? (
+                              <div className="flex items-center justify-between gap-2 rounded-md border border-sky-300/20 bg-sky-500/10 px-3 py-1.5 text-xs">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  {group.seatNumber != null ? (
+                                    <span className="inline-flex h-5 max-w-[9rem] shrink-0 items-center truncate rounded border border-sky-300/35 bg-sky-500/15 px-1.5 text-[10px] font-semibold text-sky-100">
+                                      {`S${group.seatNumber}${group.seatGuestName ? ` · ${group.seatGuestName}` : ""}`}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex h-5 items-center rounded border border-sky-300/35 bg-sky-500/15 px-1.5 text-[10px] font-semibold text-sky-100">
+                                      {t("common.noSeat")}
+                                    </span>
+                                  )}
+                                  <span className="font-medium text-sky-100/90">{t("common.seatTotal")}</span>
+                                </div>
+                                <span className="shrink-0 font-semibold tabular-nums text-sky-50">
+                                  {formatMoney(group.total)}
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                     {selectedOrder.note ? (
                       <div
@@ -2272,7 +2702,7 @@ function OrdersBoard({
                             : "border-white/10 bg-black/20 text-muted-foreground",
                         )}
                       >
-                        <span className="not-italic text-white/55">Instructions:</span>{" "}
+                        <span className="not-italic text-white/55">{t("common.instructions")}</span>{" "}
                         <span className="italic">{selectedOrder.note}</span>
                       </div>
                     ) : null}
@@ -2282,13 +2712,13 @@ function OrdersBoard({
                       typeof selectedOrder.subtotal === "number" ? (
                         <>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Subtotal</span>
+                            <span className="text-muted-foreground">{t("common.subtotal")}</span>
                             <span className="tabular-nums text-foreground">
                               {formatMoney(selectedOrder.subtotal)}
                             </span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Tax</span>
+                            <span className="text-muted-foreground">{t("common.tax")}</span>
                             <span className="tabular-nums text-foreground">
                               {formatMoney(selectedOrder.taxAmount)}
                             </span>
@@ -2296,7 +2726,7 @@ function OrdersBoard({
                         </>
                       ) : null}
                       <div className="flex items-center justify-between pt-1">
-                        <span className="text-sm font-semibold text-foreground">Total</span>
+                        <span className="text-sm font-semibold text-foreground">{t("common.total")}</span>
                         <span className="text-base font-bold tabular-nums text-foreground">
                           {formatMoney(selectedOrder.total)}
                         </span>
@@ -2317,13 +2747,13 @@ function OrdersBoard({
                         }}
                         className="inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-lg border border-emerald-300/40 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-500/15"
                       >
-                        Mark paid
+                        {t("action.markPaid")}
                       </button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            aria-label="Order actions"
+                            aria-label={t("action.orderActions")}
                             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.06] text-white/80 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
                           >
                             <MoreHorizontal className="h-4 w-4" />
@@ -2342,7 +2772,7 @@ function OrdersBoard({
                               setConfirmAction({ type: "void", order: selectedOrder })
                             }}
                           >
-                            Void order
+                            {t("action.voidOrder")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             disabled={!canRefundSelected}
@@ -2352,15 +2782,11 @@ function OrdersBoard({
                               setConfirmAction({ type: "refund", order: selectedOrder })
                             }}
                           >
-                            Refund order
+                            {t("action.refundOrder")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                  ) : selectedOrder.source === "table" ? (
-                    <p className="text-xs text-muted-foreground">
-                      Void individual items from the table screen.
-                    </p>
                   ) : null}
                 </div>
               </div>
@@ -2377,16 +2803,16 @@ function OrdersBoard({
           <AlertDialogContent className="border-white/15 bg-[hsl(224,18%,12%)] text-foreground">
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {confirmAction?.type === "refund" ? "Refund this order?" : "Void this order?"}
+                {confirmAction?.type === "refund" ? t("action.refundConfirmTitle") : t("action.voidConfirmTitle")}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {confirmAction?.type === "refund"
-                  ? `${confirmAction.order.label} will move to History as Refunded. This records a full refund on the order.`
-                  : `${confirmAction?.order.label ?? "This order"} will be cancelled and move to History as Voided.`}
+                  ? t("action.refundConfirmBody", { label: confirmAction.order.label })
+                  : t("action.voidConfirmBody", { label: confirmAction?.order.label ?? "" })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 className={
                   confirmAction?.type === "refund"
@@ -2401,7 +2827,7 @@ function OrdersBoard({
                   else handleVoidOrder(action.order)
                 }}
               >
-                {confirmAction?.type === "refund" ? "Refund" : "Void"}
+                {confirmAction?.type === "refund" ? t("action.refund") : t("action.void")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

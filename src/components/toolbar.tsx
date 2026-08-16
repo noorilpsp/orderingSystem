@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, ChevronDown, ChevronsUpDown, Plus, LayoutGrid, LayoutList, Upload } from "lucide-react"
+import { Search, ChevronDown, ChevronsUpDown, Plus, LayoutGrid, LayoutList, Upload, Download } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +28,7 @@ interface ToolbarProps {
   onTagsChange: (tags: string[]) => void
   onAddItem: () => void
   onImportCsv?: () => void
+  onExportCsv?: () => void
   isCollapsed?: boolean
   onToggleCollapse?: () => void
   totalItems?: number
@@ -60,6 +61,7 @@ export function Toolbar({
   onTagsChange,
   onAddItem,
   onImportCsv,
+  onExportCsv,
   isCollapsed,
   onToggleCollapse,
   totalItems = 127,
@@ -122,16 +124,16 @@ export function Toolbar({
       selectedTags.length +
       (searchQuery !== "" ? 1 : 0)
 
-    if (activeFilterCount === 0) return "280px"
-    if (activeFilterCount <= 2) return "240px"
-    if (activeFilterCount <= 4) return "200px"
-    return "180px"
+    if (activeFilterCount === 0) return "180px"
+    if (activeFilterCount <= 2) return "160px"
+    if (activeFilterCount <= 4) return "140px"
+    return "120px"
   }
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-x-hidden shadow-sm">
+    <div className="bg-card border border-border rounded-lg shadow-sm">
       {/* Desktop Layout */}
-      <div className="hidden lg:flex items-center gap-3 h-16 px-6 w-full">
+      <div className="hidden lg:flex items-center gap-3 min-h-16 px-6 py-2 w-full">
         {/* Left: Search - Dynamic width based on filters */}
         <div className="relative" style={{ width: getSearchWidth(), transition: "width 0.2s ease" }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -156,7 +158,7 @@ export function Toolbar({
         </div>
 
         {/* Center: Filters */}
-        <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto scrollbar-hide pr-2">
           {/* Status Filter */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -259,7 +261,7 @@ export function Toolbar({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="relative z-10 flex items-center gap-2 shrink-0 bg-card pl-1">
           {onViewChange && selectedView && (
             <div className="flex items-center gap-1 border rounded-md shrink-0">
               <Button
@@ -295,7 +297,7 @@ export function Toolbar({
             </Button>
           )}
 
-          <Button onClick={onAddItem} className="bg-orange-600 hover:bg-orange-700 px-6 w-40">
+          <Button onClick={onAddItem} className="bg-orange-600 hover:bg-orange-700 px-6">
             <Plus className="h-4 w-4 mr-2" />
             New Item
           </Button>
@@ -303,6 +305,12 @@ export function Toolbar({
             <Button variant="outline" onClick={onImportCsv} className="px-4">
               <Upload className="h-4 w-4 mr-2" />
               Import CSV
+            </Button>
+          )}
+          {onExportCsv && (
+            <Button variant="outline" onClick={onExportCsv} className="px-4">
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
             </Button>
           )}
         </div>
@@ -451,7 +459,7 @@ export function Toolbar({
             </Button>
           )}
 
-          <Button onClick={onAddItem} className="bg-orange-600 hover:bg-orange-700 px-6 w-40">
+          <Button onClick={onAddItem} className="bg-orange-600 hover:bg-orange-700 px-6">
             <Plus className="h-4 w-4 mr-2" />
             New Item
           </Button>
@@ -459,6 +467,12 @@ export function Toolbar({
             <Button variant="outline" onClick={onImportCsv} className="px-4">
               <Upload className="h-4 w-4 mr-2" />
               Import CSV
+            </Button>
+          )}
+          {onExportCsv && (
+            <Button variant="outline" onClick={onExportCsv} className="px-4">
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
             </Button>
           )}
         </div>
@@ -607,6 +621,12 @@ export function Toolbar({
             <Button variant="outline" onClick={onImportCsv} className="flex-1">
               <Upload className="h-4 w-4 mr-2" />
               Import CSV
+            </Button>
+          )}
+          {onExportCsv && (
+            <Button variant="outline" onClick={onExportCsv} className="flex-1">
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
             </Button>
           )}
         </div>

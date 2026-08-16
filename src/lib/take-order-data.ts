@@ -1,3 +1,5 @@
+import { formatMerchantMoney } from "@/lib/merchant-localization"
+
 export interface Seat {
   number: number
   dietary: string[]
@@ -17,6 +19,8 @@ export interface MenuItem {
   name: string
   description: string
   price: number
+  compareAtPrice?: number | null
+  promoKind?: "sale_price" | "bogo" | null
   category: string
   image: string
   dietary: string[]
@@ -275,8 +279,12 @@ export const takeOrderData = {
   },
 }
 
-export function formatCurrency(amount: number): string {
-  return `€${amount.toFixed(2)}`
+export function formatCurrency(
+  amount: number,
+  currency: string = "EUR",
+  numberFormat?: string | null,
+): string {
+  return formatMerchantMoney(amount, { currency, numberFormat })
 }
 
 export function hasAllergyConflict(

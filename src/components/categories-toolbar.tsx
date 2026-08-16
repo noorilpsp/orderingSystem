@@ -10,10 +10,18 @@ import { useState } from "react"
 interface CategoriesToolbarProps {
   onCreateCategory: () => void
   onSearch?: (query: string) => void
+  onImportCsv?: () => void
+  onExportCsv?: () => void
   totalCategories?: number
 }
 
-export function CategoriesToolbar({ onCreateCategory, onSearch, totalCategories = 0 }: CategoriesToolbarProps) {
+export function CategoriesToolbar({
+  onCreateCategory,
+  onSearch,
+  onImportCsv,
+  onExportCsv,
+  totalCategories = 0,
+}: CategoriesToolbarProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,11 +45,23 @@ export function CategoriesToolbar({ onCreateCategory, onSearch, totalCategories 
 
       {/* Action Buttons */}
       <div className="flex gap-2 flex-shrink-0">
-        <Button variant="outline" size="sm" className="gap-2 bg-transparent" title="Import categories">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 bg-transparent"
+          title="Import categories"
+          onClick={onImportCsv}
+        >
           <Upload className="w-4 h-4" />
           <span className="hidden sm:inline">Import</span>
         </Button>
-        <Button variant="outline" size="sm" className="gap-2 bg-transparent" title="Export categories">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 bg-transparent"
+          title="Export categories"
+          onClick={onExportCsv}
+        >
           <Download className="w-4 h-4" />
           <span className="hidden sm:inline">Export</span>
         </Button>

@@ -243,6 +243,14 @@ export async function PUT(
     if (body.defaultLanguage !== undefined) {
       updateData.defaultLanguage = body.defaultLanguage;
     }
+    if (body.availableLanguages !== undefined) {
+      const langs = Array.isArray(body.availableLanguages)
+        ? body.availableLanguages.filter(
+            (entry: unknown): entry is "en" | "ar" => entry === "en" || entry === "ar",
+          )
+        : [];
+      updateData.availableLanguages = langs.length > 0 ? langs : ["en", "ar"];
+    }
     if (body.dateFormat !== undefined) {
       updateData.dateFormat = body.dateFormat;
     }
@@ -333,7 +341,7 @@ export async function PUT(
       updateData.loyaltySettings = {
         ...existing,
         enabled: incoming.enabled !== false,
-        pointsScope: incoming.pointsScope === "location" ? "location" : "merchant",
+        pointsScope: "location",
         pointsPerDollar:
           typeof incoming.pointsPerDollar === "number" && incoming.pointsPerDollar > 0
             ? Math.floor(incoming.pointsPerDollar)

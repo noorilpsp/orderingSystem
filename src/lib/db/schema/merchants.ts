@@ -78,7 +78,7 @@ export type LoyaltySettings = {
 
 export const DEFAULT_LOYALTY_SETTINGS: Required<LoyaltySettings> = {
   enabled: true,
-  pointsScope: "merchant",
+  pointsScope: "location",
   pointsPerDollar: 10,
   redeemPointsPerDollarOff: 10,
   allowOpenWalletRedeem: true,
@@ -117,7 +117,7 @@ export function normalizeLoyaltySettings(
 ): Required<LoyaltySettings> {
   return {
     enabled: settings?.enabled !== false,
-    pointsScope: settings?.pointsScope === "location" ? "location" : "merchant",
+    pointsScope: "location",
     pointsPerDollar: clampPositiveInt(
       settings?.pointsPerDollar,
       DEFAULT_LOYALTY_SETTINGS.pointsPerDollar,
@@ -213,6 +213,10 @@ export const merchants = pgTable(
     defaultLanguage: varchar("default_language", { length: 5 })
       .default("nl-BE")
       .notNull(),
+    /** Guest menu languages offered (subset of en | ar). */
+    availableLanguages: jsonb("available_languages")
+      .$type<Array<"en" | "ar">>()
+      .default(["en", "ar"]),
     dateFormat: varchar("date_format", { length: 20 }),
     numberFormat: varchar("number_format", { length: 20 }),
     // Notifications

@@ -91,6 +91,24 @@ export function guestTrackStatusIndex(status: GuestOrderTrackStatus): number {
   }
 }
 
+export function isGuestOrderInProgress(status: GuestOrderTrackStatus): boolean {
+  switch (status) {
+    case "scheduled":
+    case "placed":
+    case "preparing":
+    case "ready":
+      return true;
+    case "served":
+    case "cancelled":
+    case "refunded":
+      return false;
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
 export function computeGuestEtaSecondsRemaining(input: {
   trackStatus: GuestOrderTrackStatus;
   firedAt: Date | null;

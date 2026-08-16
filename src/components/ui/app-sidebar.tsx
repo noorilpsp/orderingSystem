@@ -6,12 +6,9 @@ import { usePathname } from "next/navigation"
 import {
   Home,
   Store,
-  Grid3x3,
   ShoppingCart,
   Menu,
-  CreditCard,
   UserCircle,
-  Calendar,
   BarChart3,
   Settings,
   ChevronDown,
@@ -19,8 +16,6 @@ import {
   Search,
   X,
   Megaphone,
-  Layers,
-  Package,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -66,13 +61,10 @@ const operationsItems = [
     badge: "5",
     badgeVariant: "destructive" as const,
   },
-  { title: "Tables", href: "/tables", icon: Grid3x3 },
-  { title: "Reservations", href: "/reservations", icon: Calendar },
 ]
 
 const businessItems = [
   { title: "Menu", href: "/menu", icon: Menu },
-  { title: "Inventory", href: "/inventory", icon: Package },
 ]
 
 const businessCollapsible = [
@@ -99,53 +91,23 @@ const businessCollapsible = [
   },
 ]
 
-const systemCollapsible = [
-  {
-    title: "Stores",
-    icon: Store,
-    defaultOpen: false,
-    items: [
-      { title: "Store Info", href: "/stores" },
-      { title: "Floorplan & Tables", href: "/stores/floorplan" },
-      { title: "Cross-location Comparison", href: "/stores/comparison" },
-    ],
-  },
-]
-
-const paymentsCollapsible = [
-  {
-    title: "Payments",
-    icon: CreditCard,
-    defaultOpen: false,
-    items: [
-      { title: "Transactions", href: "/transactions" },
-      { title: "Payouts", href: "/payouts" },
-      { title: "Disputes", href: "/disputes" },
-      { title: "Invoices", href: "/payments/invoices" },
-      { title: "Banking", href: "/banking" },
-    ],
-  },
-]
+const systemCollapsible: Array<{
+  title: string
+  icon: typeof Store
+  defaultOpen: boolean
+  items: Array<{ title: string; href: string }>
+}> = []
 
 const systemItems = [
-  { title: "Users / Staff", href: "/staff", icon: UserCircle },
-  { title: "Demos", href: "/demos", icon: Layers },
+  { title: "Store", href: "/dashboard/stores", icon: Store },
 ]
 
-const systemSettingsCollapsible = [
-  {
-    title: "Settings",
-    icon: Settings,
-    defaultOpen: false,
-    items: [
-      { title: "Restaurant Info", href: "/settings/restaurant" },
-      { title: "Notification Settings", href: "/settings/notifications" },
-      { title: "Integrations", href: "/settings/integrations" },
-      { title: "Subscription / Billing", href: "/settings/subscription" },
-      { title: "Legal & Compliance", href: "/settings/legal" },
-    ],
-  },
-]
+const systemSettingsCollapsible: Array<{
+  title: string
+  icon: typeof Settings
+  defaultOpen: boolean
+  items: Array<{ title: string; href: string }>
+}> = []
 
 const locations = [
   { name: "Downtown Location", orders: 3, tables: "8/15", status: "online", address: "123 Main St, Downtown" },
@@ -593,68 +555,6 @@ export function AppSidebar() {
                         )}
                       </Tooltip>
                     </SidebarMenuItem>
-                  )
-                })}
-
-                {paymentsCollapsible.map((section) => {
-                  const Icon = section.icon
-                  const isAnyChildActive = section.items.some((item) => pathname === item.href)
-
-                  return (
-                    <Collapsible key={section.title} defaultOpen={section.defaultOpen} className="group/collapsible">
-                      <SidebarMenuItem>
-                        <Tooltip open={isCollapsed && openTooltips.has(section.title)}>
-                          <TooltipTrigger asChild>
-                            <CollapsibleTrigger asChild>
-                              <SidebarMenuButton
-                                isActive={isAnyChildActive}
-                                className={cn(
-                                  "px-4 py-2.5",
-                                  isAnyChildActive && "border-l-4 rounded-l-lg border-foreground dark:border-white",
-                                )}
-                                onMouseEnter={() => {
-                                  if (isCollapsed) {
-                                    setOpenTooltips((prev) => new Set(prev).add(section.title))
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  if (isCollapsed) {
-                                    setOpenTooltips((prev) => {
-                                      const next = new Set(prev)
-                                      next.delete(section.title)
-                                      return next
-                                    })
-                                  }
-                                }}
-                              >
-                                <Icon className="h-4 w-4" />
-                                <span>{section.title}</span>
-                                <ChevronDown className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
-                              </SidebarMenuButton>
-                            </CollapsibleTrigger>
-                          </TooltipTrigger>
-                          {isCollapsed && (
-                            <TooltipContent side="right">
-                              <p>{section.title}</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                        <CollapsibleContent>
-                          <SidebarMenuSub>
-                            {section.items.map((item) => {
-                              const isActive = pathname === item.href
-                              return (
-                                <SidebarMenuSubItem key={item.href}>
-                                  <SidebarMenuSubButton asChild isActive={isActive} className="pl-8 py-2">
-                                    <Link href={item.href}>{item.title}</Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )
-                            })}
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
-                      </SidebarMenuItem>
-                    </Collapsible>
                   )
                 })}
 

@@ -11,6 +11,41 @@ function seatStorageKey(storeSlug: string, tableNumber: string): string {
   return `guest-seat:${storeSlug.trim().toLowerCase()}:${tableNumber.trim()}`;
 }
 
+function tableLockStorageKey(storeSlug: string): string {
+  return `guest-table-lock:${storeSlug.trim().toLowerCase()}`;
+}
+
+/** Persist QR-locked table so guests cannot hop tables after scanning. */
+export function readGuestTableLock(storeSlug: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = sessionStorage.getItem(tableLockStorageKey(storeSlug));
+    return value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeGuestTableLock(storeSlug: string, tableNumber: string): void {
+  if (typeof window === "undefined") return;
+  const table = tableNumber.trim();
+  if (!table) return;
+  try {
+    sessionStorage.setItem(tableLockStorageKey(storeSlug), table);
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function clearGuestTableLock(storeSlug: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(tableLockStorageKey(storeSlug));
+  } catch {
+    // ignore
+  }
+}
+
 export function getOrCreateGuestDeviceId(): string {
   if (typeof window === "undefined") return "";
   try {

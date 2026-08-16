@@ -1,10 +1,11 @@
 "use client"
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import { useState, useEffect } from "react"
 import { ArrowRight, Clock, Plus, Star, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { TableDetail } from "@/lib/table-data"
-import { formatCurrency, minutesAgo } from "@/lib/table-data"
+import { minutesAgo } from "@/lib/table-data"
 
 interface InfoPanelProps {
   table: TableDetail
@@ -12,6 +13,7 @@ interface InfoPanelProps {
 }
 
 export function InfoPanel({ table, showTitle = true }: InfoPanelProps) {
+  const { formatMoney } = useMerchantLocalization()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -95,16 +97,16 @@ export function InfoPanel({ table, showTitle = true }: InfoPanelProps) {
         <div className="mt-2 space-y-1.5 rounded-lg bg-secondary/70 px-3 py-3">
           <div className="flex justify-between text-sm text-foreground">
             <span>Subtotal</span>
-            <span>{formatCurrency(table.bill.subtotal)}</span>
+            <span>{formatMoney(table.bill.subtotal)}</span>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Tax</span>
-            <span>{formatCurrency(table.bill.tax)}</span>
+            <span>{formatMoney(table.bill.tax)}</span>
           </div>
           <div className="my-1 h-px bg-border" />
           <div className="flex justify-between text-sm font-semibold text-foreground">
             <span>Total</span>
-            <span>{formatCurrency(table.bill.total)}</span>
+            <span>{formatMoney(table.bill.total)}</span>
           </div>
         </div>
       </section>

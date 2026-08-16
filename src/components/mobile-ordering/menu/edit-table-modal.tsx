@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,12 +9,18 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import type { PublicMenuTable } from "@/lib/public-menu/types";
 
 interface EditTableModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tableNumber: string;
   onConfirm: (tableNumber: string) => void;
+  /**
+   * When provided (including empty), guests pick from store-configured tables.
+   * When omitted, falls back to a 1–50 picker (demo / legacy).
+   */
+  tables?: PublicMenuTable[];
 }
 
 export function EditTableModal({
@@ -22,89 +28,94 @@ export function EditTableModal({
   onOpenChange,
   tableNumber,
   onConfirm,
+  tables,
 }: EditTableModalProps) {
-  const [selectedNumber, setSelectedNumber] = useState(tableNumber);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isScrollingRef = useRef(false);
+  const useConfiguredList = tables !== undefined;
+  const configuredTables = (tables ?? [])
+    .map((row) => ({
+      id: row.id,
+      tableNumber: row.tableNumber.trim(),
+    }))
+    .filter((row) => row.tableNumber.length > 0);
 
-  // Sync selectedNumber with tableNumber when modal opens
+  const [selectedNumber, setSelectedNumber] = useState(tableNumber);
+
   useEffect(() => {
-    if (open) {
-      setSelectedNumber(tableNumber);
-    }
+    if (!open) return;
+    setSelectedNumber(tableNumber);
   }, [open, tableNumber]);
 
-  useEffect(() => {
-    if (open && scrollContainerRef.current) {
-      const selectedNum = parseInt(selectedNumber);
-      const itemHeight = 40;
-      const containerHeight = 192; // h-48
-      const centerOffset = containerHeight / 2 - itemHeight / 2;
-      // scrollTop = (item position) - (offset to center)
-      const scrollTop = (selectedNum - 1) * itemHeight + 80 - centerOffset;
-      isScrollingRef.current = true;
-      scrollContainerRef.current.scrollTop = Math.max(0, scrollTop);
-      setTimeout(() => {
-        isScrollingRef.current = false;
-      }, 100);
-    }
-  }, [open, selectedNumber]);
-
-  const handleScroll = () => {
-    if (scrollContainerRef.current && !isScrollingRef.current) {
-      const container = scrollContainerRef.current;
-      const itemHeight = 40;
-      // scrollTop + center offset gives us the content pixel at the center of the highlight
-      const centerContentPixel = container.scrollTop + 96;
-      // Subtract padding (80px) and item height/2 (20px) to get to item start, then divide by itemHeight
-      const itemIndex = Math.round((centerContentPixel - 80 - 20) / itemHeight);
-      const tableNum = Math.max(1, Math.min(50, itemIndex + 1));
-      setSelectedNumber(String(tableNum));
-    }
-  };
-
   const handleConfirm = () => {
-    onConfirm(selectedNumber);
+    const next = selectedNumber.trim();
+    if (!next) return;
+    if (useConfiguredList && !configuredTables.some((t) => t.tableNumber === next)) {
+      return;
+    }
+    onConfirm(next);
     onOpenChange(false);
   };
 
-  const tableNumbers = Array.from({ length: 50 }, (_, i) => String(i + 1));
+  const fallbackNumbers = Array.from({ length: 50 }, (_, i) => String(i + 1));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xs" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Select Table Number</DialogTitle>
+          <DialogTitle>Select table</DialogTitle>
         </DialogHeader>
-        <div className="py-4">
-          {/* Scrollable Number Picker */}
-          <div className="relative h-48">
-            {/* Center highlight - positioned absolutely behind the numbers */}
-            <div className="absolute left-0 right-0 top-1/2 transform -translate-y-1/2 h-10 bg-blue-50 border-y border-blue-200 pointer-events-none z-0" />
-            
-            {/* Scrollable container */}
-            <div
-              ref={scrollContainerRef}
-              onScroll={handleScroll}
-              className="h-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative z-10"
-            >
-              <div className="pt-20 pb-20">
-                {tableNumbers.map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => setSelectedNumber(num)}
-                    className={`w-full h-10 flex items-center justify-center text-lg font-medium snap-center transition-colors relative z-20 ${
-                      selectedNumber === num
-                        ? "text-blue-600 font-semibold"
-                        : "text-gray-400 hover:text-gray-600"
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
+        <div className="py-2">
+          {useConfiguredList ? (
+            configuredTables.length === 0 ? (
+              <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+                No tables are set up for this store yet. Ask staff for help.
+              </p>
+            ) : (
+              <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                {configuredTables.map((table) => {
+                  const selected = selectedNumber === table.tableNumber;
+                  return (
+                    <button
+                      key={table.id}
+                      type="button"
+                      onClick={() => setSelectedNumber(table.tableNumber)}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${
+                        selected
+                          ? "border-primary bg-primary/10 font-semibold text-primary"
+                          : "border-border bg-background text-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <span>Table {table.tableNumber}</span>
+                      {selected ? (
+                        <span className="text-xs font-medium text-primary">Selected</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <div className="relative h-48">
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 z-0 h-10 -translate-y-1/2 border-y border-blue-200 bg-blue-50" />
+              <div className="relative z-10 h-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide">
+                <div className="py-20">
+                  {fallbackNumbers.map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setSelectedNumber(num)}
+                      className={`flex h-10 w-full snap-center items-center justify-center text-lg font-medium transition-colors ${
+                        selectedNumber === num
+                          ? "font-semibold text-blue-600"
+                          : "text-gray-400 hover:text-gray-600"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
         <DialogFooter className="flex-row gap-2">
           <Button
@@ -114,7 +125,15 @@ export function EditTableModal({
           >
             Cancel
           </Button>
-          <Button className="flex-1" onClick={handleConfirm}>
+          <Button
+            className="flex-1"
+            onClick={handleConfirm}
+            disabled={
+              useConfiguredList
+                ? !configuredTables.some((t) => t.tableNumber === selectedNumber.trim())
+                : !selectedNumber.trim()
+            }
+          >
             Confirm
           </Button>
         </DialogFooter>

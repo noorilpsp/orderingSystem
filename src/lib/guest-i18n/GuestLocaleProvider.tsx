@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -17,10 +18,15 @@ import {
   writeStoredGuestLocale,
 } from "./storage";
 import type { GuestLocale } from "./types";
+import {
+  ALL_GUEST_LOCALES,
+  resolveGuestLocaleFromAvailable,
+} from "@/lib/merchant-localization";
 
 type GuestLocaleContextValue = {
   locale: GuestLocale;
   dir: "ltr" | "rtl";
+  availableLocales: GuestLocale[];
   setLocale: (locale: GuestLocale) => void;
   t: (key: EnMessageKey, vars?: Record<string, string | number>) => string;
 };
@@ -31,21 +37,54 @@ function dirForLocale(locale: GuestLocale): "ltr" | "rtl" {
   return locale === "ar" ? "rtl" : "ltr";
 }
 
-export function GuestLocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<GuestLocale>("en");
+export function GuestLocaleProvider({
+  children,
+  defaultLocale,
+  availableLocales,
+  storeSlug,
+}: {
+  children: ReactNode;
+  /** Merchant Store → Localization default (en | ar). */
+  defaultLocale?: GuestLocale | null;
+  /** Languages this store offers on the guest menu. */
+  availableLocales?: GuestLocale[] | null;
+  /** Scopes guest language preference per public menu. */
+  storeSlug?: string | null;
+}) {
+  const enabledLocales = useMemo(() => {
+    const list = (availableLocales ?? []).filter(isGuestLocale);
+    return list.length > 0 ? list : [...ALL_GUEST_LOCALES];
+  }, [availableLocales]);
+
+  const merchantDefault = defaultLocale ?? "en";
+
+  const [locale, setLocaleState] = useState<GuestLocale>(() =>
+    resolveGuestLocaleFromAvailable(null, enabledLocales, merchantDefault),
+  );
   const [ready, setReady] = useState(false);
+  const hasUserChoiceRef = useRef(false);
 
   useEffect(() => {
-    const stored = readStoredGuestLocale();
-    if (stored) setLocaleState(stored);
-    setReady(true);
-  }, []);
-
-  const setLocale = useCallback((next: GuestLocale) => {
-    if (!isGuestLocale(next)) return;
+    const stored = readStoredGuestLocale(storeSlug);
+    const next = resolveGuestLocaleFromAvailable(
+      stored,
+      enabledLocales,
+      merchantDefault,
+    );
+    hasUserChoiceRef.current = Boolean(stored && enabledLocales.includes(stored));
     setLocaleState(next);
-    writeStoredGuestLocale(next);
-  }, []);
+    setReady(true);
+  }, [storeSlug, enabledLocales, merchantDefault]);
+
+  const setLocale = useCallback(
+    (next: GuestLocale) => {
+      if (!isGuestLocale(next) || !enabledLocales.includes(next)) return;
+      hasUserChoiceRef.current = true;
+      setLocaleState(next);
+      writeStoredGuestLocale(next, storeSlug);
+    },
+    [enabledLocales, storeSlug],
+  );
 
   const t = useCallback(
     (key: EnMessageKey, vars?: Record<string, string | number>) =>
@@ -57,24 +96,25 @@ export function GuestLocaleProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       dir: dirForLocale(locale),
+      availableLocales: enabledLocales,
       setLocale,
       t,
     }),
-    [locale, setLocale, t],
+    [locale, enabledLocales, setLocale, t],
   );
 
   useEffect(() => {
     if (!ready) return;
     const root = document.documentElement;
     const shell = document.querySelector(".mobile-ordering-root");
+    const dir = dirForLocale(locale);
     root.lang = locale;
-    root.dir = dirForLocale(locale);
+    root.dir = dir;
     if (shell instanceof HTMLElement) {
-      shell.dir = dirForLocale(locale);
+      shell.dir = dir;
       shell.lang = locale;
     }
     return () => {
-      // Leave dir alone if other menus might use it — reset to ltr when leaving guest.
       root.lang = "en";
       root.dir = "ltr";
     };

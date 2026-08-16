@@ -5,18 +5,30 @@ import { CategoriesContent } from "@/components/categories-content"
 import { CategoriesToolbar } from "@/components/categories-toolbar"
 import { CreateCategoryDrawer } from "@/components/drawers/create-category-drawer"
 import { EditCategoryDrawer } from "@/components/drawers/edit-category-drawer"
-// import { DeleteCategoryDialog } from "@/components/modals/delete-category-dialog"
+import { CategoryImportModal } from "@/components/modals/category-import-modal"
+import { downloadCategoriesCsv } from "@/lib/menu/export-categories"
+import { toast } from "sonner"
 import { useMenu } from "../menu-context"
 import type { Category } from "@/types/category"
 import type { CatalogI18n } from "@/lib/catalog-i18n"
 
 export default function MenuCategoriesPage() {
-  const { categories, items, menus = [], createCategory, updateCategory, deleteCategory, reorderCategories } = useMenu()
-  const [isLoading, setIsLoading] = useState(false)
+  const {
+    categories,
+    items,
+    menus = [],
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    reorderCategories,
+    importCategories,
+  } = useMenu()
+  const [isLoading] = useState(false)
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [importOpen, setImportOpen] = useState(false)
   // Removed complex dialog state - using simple browser confirm instead
 
   // Calculate uncategorized items count
@@ -135,6 +147,14 @@ export default function MenuCategoriesPage() {
     [mapMenuIdsToNames, reorderCategories],
   )
 
+  const handleExportCsv = useCallback(() => {
+    if (categoriesForDisplay.length === 0) {
+      toast.error("No categories to export")
+      return
+    }
+    downloadCategoriesCsv(categoriesForDisplay)
+  }, [categoriesForDisplay])
+
   const filteredCategories = useMemo(
     () =>
       categoriesForDisplay.filter(
@@ -157,6 +177,8 @@ export default function MenuCategoriesPage() {
           <CategoriesToolbar
             onCreateCategory={handleOpenCreateDrawer}
             onSearch={setSearchQuery}
+            onImportCsv={() => setImportOpen(true)}
+            onExportCsv={handleExportCsv}
             totalCategories={categories.length}
           />
 
@@ -190,6 +212,14 @@ export default function MenuCategoriesPage() {
         }}
         onSave={handleSaveCategory}
         onDelete={handleDeleteCategory}
+      />
+
+      <CategoryImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        existingCategoryNames={categories.map((category) => category.name)}
+        menus={menus}
+        onImport={importCategories}
       />
     </div>
   )

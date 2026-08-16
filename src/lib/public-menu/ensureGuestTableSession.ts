@@ -204,14 +204,8 @@ export async function ensureGuestTableSession(
     };
   }
 
-  if (input.guestSessionMode === "staff_seated") {
-    return {
-      ok: false,
-      code: "BAD_REQUEST",
-      message: "No active table session found. Please ask your server to seat you first.",
-    };
-  }
-
+  // Delivery-to-table and self-pickup both allow guests to open a session when they
+  // choose a table (checkout / QR). Staff do not need to seat first.
   const guestCount =
     typeof input.guestCount === "number" &&
     Number.isFinite(input.guestCount) &&

@@ -1,6 +1,7 @@
 "use client";
 
 import { useGuestT } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 
 interface PlaceOrderButtonProps {
   total: number;
@@ -14,6 +15,7 @@ export function PlaceOrderButton({
   onClick,
 }: PlaceOrderButtonProps) {
   const t = useGuestT();
+  const { formatMoney } = useGuestLocalization();
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4">
@@ -28,7 +30,7 @@ export function PlaceOrderButton({
           disabled={!isEnabled}
           onClick={onClick}
         >
-          {t("checkout.placeOrder")} • €{total.toFixed(2)}
+          {t("checkout.placeOrder")} • {formatMoney(total)}
         </button>
       </div>
     </div>

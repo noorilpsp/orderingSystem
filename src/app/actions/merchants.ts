@@ -8,7 +8,9 @@ import { put } from "@vercel/blob";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { merchants, merchantLocations } from "@/db/schema";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { isPlatformAdmin } from "@/lib/permissions";
+import { ADMIN_MERCHANTS_CACHE_TAG } from "@/lib/queries";
 import { normalizeMerchantFeatures } from "@/lib/db/schema/merchants";
 
 // Configure Neon to use WebSocket for transaction support
@@ -190,9 +192,44 @@ export async function createMerchant(data: unknown) {
   }
 }
 
-const updateMerchantSchema = merchantSchema.extend({
+const optionalText = z.string().optional().nullable();
+const optionalEmail = z
+  .union([z.string().email(), z.literal(""), z.null()])
+  .optional();
+
+const updateMerchantSchema = z.object({
   id: z.string().min(1, "Merchant ID is required"),
   locationId: z.string().optional().nullable(),
+  name: optionalText,
+  legalName: optionalText,
+  kboNumber: optionalText,
+  contactEmail: optionalEmail,
+  businessType: z
+    .enum([
+      "restaurant",
+      "cafe",
+      "bar",
+      "bakery",
+      "food_truck",
+      "fine_dining",
+      "fast_food",
+      "other",
+    ])
+    .optional(),
+  status: z.enum(["onboarding", "active", "suspended", "inactive"]).optional(),
+  storeType: optionalText,
+  phone: optionalText,
+  address: optionalText,
+  addressLine2: optionalText,
+  postalCode: optionalText,
+  city: optionalText,
+  country: optionalText,
+  publicEmail: optionalEmail,
+  subscriptionTier: z.enum(["trial", "basic", "pro", "enterprise"]).optional(),
+  subscriptionExpiresAt: z.string().optional().nullable(),
+  logoUrl: z.string().optional().nullable(),
+  bannerUrl: z.string().optional().nullable(),
+  kdsEnabled: z.boolean().optional(),
 });
 
 export async function updateMerchant(data: unknown) {
@@ -225,64 +262,87 @@ export async function updateMerchant(data: unknown) {
       return { error: "Merchant not found" };
     }
 
-    // Update merchant
+    const storeName = validated.name?.trim() || existingMerchant.name || "Untitled store";
+    const legalName =
+      validated.legalName?.trim() || existingMerchant.legalName || storeName;
+    const contactEmail =
+      validated.contactEmail === undefined || validated.contactEmail === null
+        ? existingMerchant.contactEmail
+        : validated.contactEmail.trim();
+    const phone =
+      validated.phone === undefined || validated.phone === null
+        ? existingMerchant.contactPhone
+        : validated.phone.trim();
+    const address = validated.address?.trim() || "";
+    const city = validated.city?.trim() || "";
+    const country = validated.country?.trim() || "Belgium";
+    const postalCode = validated.postalCode?.trim() || "";
+    const publicEmail = validated.publicEmail?.trim() || null;
+    const subscriptionTier = validated.subscriptionTier ?? existingMerchant.subscriptionTier;
+
+    let subscriptionExpiresAt = existingMerchant.subscriptionExpiresAt;
+    if (subscriptionTier === "trial") {
+      subscriptionExpiresAt = validated.subscriptionExpiresAt
+        ? new Date(validated.subscriptionExpiresAt)
+        : null;
+    }
+
     await db
       .update(merchants)
       .set({
-        name: validated.name,
-        legalName: validated.legalName,
-        contactEmail: validated.contactEmail,
-        contactPhone: validated.phone,
-        registeredAddressLine1: validated.address,
-        registeredCity: validated.city,
-        registeredCountry: validated.country,
-        businessType: validated.businessType,
-        status: validated.status,
-        subscriptionTier: validated.subscriptionTier,
-        subscriptionExpiresAt: validated.subscriptionExpiresAt
-          ? new Date(validated.subscriptionExpiresAt)
-          : null,
-        defaultTimezone: validated.timezone,
-        features: normalizeMerchantFeatures({
-          ...normalizeMerchantFeatures(existingMerchant.features),
-          kds: validated.kdsEnabled === true,
-        }),
+        name: storeName,
+        legalName,
+        contactEmail,
+        contactPhone: phone,
+        registeredAddressLine1: address,
+        registeredCity: city,
+        registeredCountry: country,
+        kboNumber: validated.kboNumber?.trim() || null,
+        businessType: validated.businessType ?? existingMerchant.businessType,
+        status: validated.status ?? existingMerchant.status,
+        subscriptionTier,
+        subscriptionExpiresAt,
+        features:
+          validated.kdsEnabled === undefined
+            ? existingMerchant.features
+            : normalizeMerchantFeatures({
+                ...normalizeMerchantFeatures(existingMerchant.features),
+                kds: validated.kdsEnabled === true,
+              }),
         updatedAt: new Date(),
       })
       .where(eq(merchants.id, validated.id));
 
-    // Update or create first location
+    const locationValues = {
+      name: storeName,
+      storeType: validated.storeType?.trim() || null,
+      address,
+      addressLine2: validated.addressLine2?.trim() || null,
+      postalCode,
+      city,
+      country,
+      phone,
+      email: publicEmail,
+      updatedAt: new Date(),
+      ...(validated.logoUrl !== undefined
+        ? { logoUrl: validated.logoUrl?.trimEnd() || null }
+        : {}),
+      ...(validated.bannerUrl !== undefined
+        ? { bannerUrl: validated.bannerUrl?.trimEnd() || null }
+        : {}),
+    };
+
     if (validated.locationId) {
-      // Update existing location
       await db
         .update(merchantLocations)
-        .set({
-          name: validated.locationName,
-          address: validated.address,
-          city: validated.city,
-          phone: validated.phone,
-          email: validated.contactEmail,
-          logoUrl: validated.logoUrl || null,
-          bannerUrl: validated.bannerUrl || null,
-          updatedAt: new Date(),
-        })
+        .set(locationValues)
         .where(eq(merchantLocations.id, validated.locationId));
     } else {
-      // Create new location if none exists
       await db.insert(merchantLocations).values({
         merchantId: validated.id,
-        name: validated.locationName,
-        address: validated.address,
-        postalCode: "",
-        city: validated.city,
-        country: validated.country,
-        phone: validated.phone,
-        email: validated.contactEmail,
-        logoUrl: validated.logoUrl?.trimEnd() || null,
-        bannerUrl: validated.bannerUrl?.trimEnd() || null,
+        ...locationValues,
         status: "active",
         openingHours: {},
-        timezone: validated.timezone,
       });
     }
 
@@ -300,6 +360,11 @@ export async function updateMerchant(data: unknown) {
       .where(eq(merchantLocations.merchantId, validated.id))
       .limit(1)
       .then((rows) => rows[0]);
+
+    revalidateTag(ADMIN_MERCHANTS_CACHE_TAG, "max");
+    revalidatePath("/admin/merchants");
+    revalidatePath(`/admin/merchants/${validated.id}`);
+    revalidatePath(`/admin/merchants/${validated.id}/edit`);
 
     return {
       success: true,

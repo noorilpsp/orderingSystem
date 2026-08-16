@@ -10,8 +10,16 @@ import type {
 } from "@/types/customization"
 import type { Menu } from "@/types/menu"
 import type { ImportRow, ImportOptions } from "@/lib/menu/import-items"
+import type {
+  CustomizationImportGroup,
+  CustomizationImportOptions,
+} from "@/lib/menu/import-customizations"
+import type {
+  CategoryImportRow,
+  CategoryImportOptions,
+} from "@/lib/menu/import-categories"
 import { toast } from "sonner"
-import { useLocations } from "@/lib/hooks/useLocations"
+import { useLocation } from "@/lib/contexts/LocationContext"
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 
 function formatMenuMutationError(message: string): string {
@@ -55,6 +63,22 @@ interface MenuContextType {
     created: number
     skipped: number
     categoriesCreated: string[]
+    errors: Array<{ row: number; field?: string; message: string }>
+  }>
+  importCustomizationGroups: (
+    groups: CustomizationImportGroup[],
+    options: CustomizationImportOptions,
+  ) => Promise<{
+    created: number
+    skipped: number
+    errors: Array<{ row: number; field?: string; message: string }>
+  }>
+  importCategories: (
+    rows: CategoryImportRow[],
+    options: CategoryImportOptions,
+  ) => Promise<{
+    created: number
+    skipped: number
     errors: Array<{ row: number; field?: string; message: string }>
   }>
 
@@ -250,10 +274,14 @@ function transformItem(dbItem: any): MenuItem {
     dietaryTags: dietaryTags,
     customizationGroups: dbItem.itemCustomizations?.map((ic: any) => ic.group.id) || [],
     availabilityMode: dbItem.useCustomHours ? "custom" : "menu-hours",
-    // Always provide a default customSchedule so switching to custom mode works
-    customSchedule: dbItem.customSchedule
-      ? dbScheduleToUISchedule(dbItem.customSchedule)
-      : [{ days: [], startTime: "7:00 AM", endTime: "11:00 PM" }],
+    customSchedule: (() => {
+      const converted = dbItem.customSchedule
+        ? dbScheduleToUISchedule(dbItem.customSchedule)
+        : []
+      return converted.length > 0
+        ? converted
+        : [{ days: [], startTime: "7:00 AM", endTime: "11:00 PM" }]
+    })(),
     nutrition: {
       calories: dbItem.calories || undefined,
       // Normalize allergens to lowercase to match UI expected values
@@ -424,8 +452,14 @@ function transformCustomizationGroup(dbGroup: any): CustomizationGroup & {
 }
 
 export function MenuProvider({ children }: { children: React.ReactNode }) {
-  const { locations, loading: locationsLoading } = useLocations()
-  const [locationId, setLocationId] = useState<string | null>(null)
+  const {
+    currentLocationId,
+    setCurrentLocation,
+    locations,
+    loading: locationsLoading,
+  } = useLocation()
+  const locationId = currentLocationId
+  const setLocationId = setCurrentLocation
   const [items, setItems] = useState<MenuItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [customizationGroups, setCustomizationGroups] = useState<CustomizationGroup[]>([])
@@ -434,13 +468,6 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [allergens, setAllergens] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // Set locationId from first available location
-  useEffect(() => {
-    if (!locationsLoading && locations.length > 0 && !locationId) {
-      setLocationId(locations[0].id)
-    }
-  }, [locations, locationsLoading, locationId])
 
   // Helper to map tag names to IDs (returns existing IDs only)
   const getTagIdsFromNames = useCallback((tagNames: string[]): string[] => {
@@ -758,8 +785,10 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           calories: updates.nutrition?.calories,
           status: updates.status,
           featured: updates.featured,
-          useCustomHours: updates.availabilityMode === "custom",
-          customSchedule: schedule,
+          ...(updates.availabilityMode !== undefined
+            ? { useCustomHours: updates.availabilityMode === "custom" }
+            : {}),
+          ...(updates.customSchedule !== undefined ? { customSchedule: schedule } : {}),
           categoryIds: updates.categories,
           tagIds,
           allergenIds,
@@ -1250,6 +1279,130 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     }
   }, [customizationGroups, fetchData])
 
+  const importCustomizationGroups = useCallback(
+    async (groups: CustomizationImportGroup[], options: CustomizationImportOptions) => {
+      if (!locationId) {
+        toast.error("No location selected")
+        return {
+          created: 0,
+          skipped: groups.length,
+          errors: [{ row: 0, message: "No location selected" }],
+        }
+      }
+
+      try {
+        const response = await retryFetch("/api/customizations/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ locationId, groups, options }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          const message =
+            (typeof error?.error === "string" ? error.error : null) ??
+            "Failed to import customization groups"
+          throw new Error(message)
+        }
+
+        const result = await response.json()
+        const created = result.created ?? 0
+        const skipped = result.skipped ?? 0
+        if (created > 0) {
+          toast.success(
+            `Imported ${created} group${created === 1 ? "" : "s"}${
+              skipped > 0 ? ` (${skipped} skipped)` : ""
+            }`,
+          )
+        } else if (skipped > 0) {
+          toast.error(
+            `No groups imported (${skipped} group${skipped === 1 ? "" : "s"} skipped)`,
+          )
+        }
+        await fetchData()
+        return {
+          created,
+          skipped,
+          errors: result.errors ?? [],
+        }
+      } catch (err) {
+        const errorMessage = formatMenuMutationError(
+          err instanceof Error ? err.message : "Failed to import customization groups",
+        )
+        toast.error(errorMessage)
+        return {
+          created: 0,
+          skipped: groups.length,
+          errors: [{ row: 0, message: errorMessage }],
+        }
+      }
+    },
+    [locationId, retryFetch, fetchData],
+  )
+
+  const importCategories = useCallback(
+    async (rows: CategoryImportRow[], options: CategoryImportOptions) => {
+      if (!locationId) {
+        toast.error("No location selected")
+        return {
+          created: 0,
+          skipped: rows.length,
+          errors: [{ row: 0, message: "No location selected" }],
+        }
+      }
+
+      try {
+        const response = await retryFetch("/api/categories/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ locationId, rows, options }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          const message =
+            (typeof error?.error === "string" ? error.error : null) ??
+            "Failed to import categories"
+          throw new Error(message)
+        }
+
+        const result = await response.json()
+        const created = result.created ?? 0
+        const skipped = result.skipped ?? 0
+        if (created > 0) {
+          toast.success(
+            `Imported ${created} categor${created === 1 ? "y" : "ies"}${
+              skipped > 0 ? ` (${skipped} skipped)` : ""
+            }`,
+          )
+        } else if (skipped > 0) {
+          toast.error(
+            `No categories imported (${skipped} row${skipped === 1 ? "" : "s"} skipped)`,
+          )
+        }
+        await fetchData()
+        return {
+          created,
+          skipped,
+          errors: result.errors ?? [],
+        }
+      } catch (err) {
+        const errorMessage = formatMenuMutationError(
+          err instanceof Error ? err.message : "Failed to import categories",
+        )
+        toast.error(errorMessage)
+        return {
+          created: 0,
+          skipped: rows.length,
+          errors: [{ row: 0, message: errorMessage }],
+        }
+      }
+    },
+    [locationId, retryFetch, fetchData],
+  )
+
   const duplicateCustomizationGroup = useCallback(async (id: string) => {
     const group = customizationGroups.find((g) => g.id === id)
     if (group) {
@@ -1406,10 +1559,12 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     updateCategory,
     deleteCategory,
     reorderCategories,
+    importCategories,
     createCustomizationGroup,
     updateCustomizationGroup,
     deleteCustomizationGroup,
     duplicateCustomizationGroup,
+    importCustomizationGroups,
     createMenu,
     updateMenu,
     deleteMenu,

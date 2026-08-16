@@ -2,9 +2,10 @@
  * Past orders for the signed-in diner at one store.
  * Anonymous guests get an empty list — their only order is the device-local active one.
  */
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  orderItemCustomizations as orderItemCustomizationsTable,
   orderItems as orderItemsTable,
   orders as ordersTable,
 } from "@/lib/db/schema/orders";
@@ -12,9 +13,26 @@ import { resolvePublicLocationBySlug } from "@/lib/public-menu/buildPublicMenuVi
 import { deriveGuestOrderTrackStatus } from "@/lib/public-menu/deriveGuestOrderTrackStatus";
 import { formatCounterOrderLabel } from "@/lib/orders/formatCounterOrderLabel";
 import { getLoggedInCustomer } from "@/lib/public-menu/getLoggedInCustomer";
+import { groupIdenticalGuestLines } from "@/lib/public-menu/groupGuestConfirmationItems";
 import type { GuestOrderTrackStatus } from "@/lib/public-menu/deriveGuestOrderTrackStatus";
 
-const HISTORY_LIMIT = 20;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 50;
+
+export type GuestOrderHistoryQuery = {
+  limit?: number;
+  offset?: number;
+};
+
+function clampLimit(value: number | undefined): number {
+  if (value == null || !Number.isFinite(value)) return DEFAULT_LIMIT;
+  return Math.min(MAX_LIMIT, Math.max(1, Math.floor(value)));
+}
+
+function clampOffset(value: number | undefined): number {
+  if (value == null || !Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
 
 export type GuestOrderHistoryItem = {
   itemId: string | null;
@@ -22,6 +40,14 @@ export type GuestOrderHistoryItem = {
   quantity: number;
   lineTotal: number;
   notes: string | null;
+  customizations?: Array<{
+    groupId: string | null;
+    optionId: string | null;
+    groupName: string;
+    optionName: string;
+    optionPrice: number;
+    quantity: number;
+  }>;
 };
 
 export type GuestOrderHistoryEntry = {
@@ -36,11 +62,17 @@ export type GuestOrderHistoryEntry = {
 };
 
 export type GetGuestOrderHistoryResult =
-  | { ok: true; signedIn: boolean; orders: GuestOrderHistoryEntry[] }
+  | {
+      ok: true;
+      signedIn: boolean;
+      orders: GuestOrderHistoryEntry[];
+      total: number;
+    }
   | { ok: false; code: "NOT_FOUND" | "BAD_REQUEST"; message: string };
 
 export async function getGuestOrderHistory(
   storeSlug: string,
+  query: GuestOrderHistoryQuery = {},
 ): Promise<GetGuestOrderHistoryResult> {
   const normalizedSlug = storeSlug.trim().toLowerCase();
   if (!normalizedSlug) {
@@ -54,16 +86,26 @@ export async function getGuestOrderHistory(
 
   const customer = await getLoggedInCustomer(normalizedSlug);
   if (!customer?.customerId) {
-    return { ok: true, signedIn: !!customer, orders: [] };
+    return { ok: true, signedIn: !!customer, orders: [], total: 0 };
   }
 
+  const limit = clampLimit(query.limit);
+  const offset = clampOffset(query.offset);
+  const where = and(
+    eq(ordersTable.locationId, location.id),
+    eq(ordersTable.customerId, customer.customerId),
+  );
+
+  const [countRow] = await db
+    .select({ total: count() })
+    .from(ordersTable)
+    .where(where);
+
   const orderRows = await db.query.orders.findMany({
-    where: and(
-      eq(ordersTable.locationId, location.id),
-      eq(ordersTable.customerId, customer.customerId),
-    ),
+    where,
     orderBy: [desc(ordersTable.createdAt)],
-    limit: HISTORY_LIMIT,
+    limit,
+    offset,
     columns: {
       id: true,
       orderNumber: true,
@@ -85,6 +127,7 @@ export async function getGuestOrderHistory(
         isNull(orderItemsTable.voidedAt),
       ),
       columns: {
+        id: true,
         itemId: true,
         itemName: true,
         quantity: true,
@@ -94,6 +137,50 @@ export async function getGuestOrderHistory(
         voidedAt: true,
       },
     });
+
+    const itemIds = itemRows.map((item) => item.id).filter(Boolean);
+    const customizationRows =
+      itemIds.length > 0
+        ? await db.query.orderItemCustomizations.findMany({
+            where: inArray(orderItemCustomizationsTable.orderItemId, itemIds),
+            columns: {
+              orderItemId: true,
+              groupId: true,
+              optionId: true,
+              groupName: true,
+              optionName: true,
+              optionPrice: true,
+              quantity: true,
+            },
+          })
+        : [];
+    const customizationsByItemId = new Map<
+      string,
+      GuestOrderHistoryItem["customizations"]
+    >();
+    for (const row of customizationRows) {
+      const list = customizationsByItemId.get(row.orderItemId) ?? [];
+      list.push({
+        groupId: row.groupId,
+        optionId: row.optionId,
+        groupName: row.groupName,
+        optionName: row.optionName,
+        optionPrice: Number(row.optionPrice) || 0,
+        quantity: row.quantity ?? 1,
+      });
+      customizationsByItemId.set(row.orderItemId, list);
+    }
+
+    const groupedItems = groupIdenticalGuestLines(
+      itemRows.map((item) => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        lineTotal: Number(item.lineTotal),
+        notes: item.notes,
+        customizations: customizationsByItemId.get(item.id) ?? [],
+      })),
+    );
 
     orders.push({
       orderId: order.id,
@@ -114,15 +201,16 @@ export async function getGuestOrderHistory(
       createdAt: order.createdAt.toISOString(),
       total: Number(order.total),
       discountAmount: Number(order.discountAmount),
-      items: itemRows.map((item) => ({
+      items: groupedItems.map((item) => ({
         itemId: item.itemId,
         itemName: item.itemName,
         quantity: item.quantity,
-        lineTotal: Number(item.lineTotal),
+        lineTotal: item.lineTotal,
         notes: item.notes,
+        customizations: item.customizations ?? [],
       })),
     });
   }
 
-  return { ok: true, signedIn: true, orders };
+  return { ok: true, signedIn: true, orders, total: Number(countRow?.total ?? 0) };
 }

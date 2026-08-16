@@ -15,6 +15,7 @@ import {
 } from "@/db/schema"
 import { merchantLocations, merchantUsers } from "@/lib/db/schema"
 import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry"
+import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 import {
   buildImportPlan,
   normalizeNameKey,
@@ -142,6 +143,8 @@ export async function POST(request: NextRequest) {
       price: String(row.price),
       category: row.category ?? "",
       description: row.description ?? "",
+      name_ar: row.i18n?.ar?.name ?? "",
+      description_ar: row.i18n?.ar?.description ?? "",
       photo_url: row.photoUrl ?? "",
       prep_station: row.defaultStation ?? "",
       kitchen_lane: row.defaultSubstation ?? "",
@@ -363,6 +366,7 @@ export async function POST(request: NextRequest) {
             useCustomHours: false,
             defaultStation: kdsEnabled ? (row.defaultStation ?? null) : null,
             defaultSubstation: kdsEnabled ? (row.defaultSubstation ?? null) : null,
+            i18n: normalizeCatalogI18n(row.i18n),
           })),
         )
         .returning({ id: items.id }),

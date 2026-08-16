@@ -2,11 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { ArrowLeft, Clock3, Minus, Plus, Volume2, VolumeX } from "lucide-react";
-import { cn } from "@/lib/utils";
-import {
-  createIncomingOrderAlertSound,
-} from "@/lib/orders/incoming-order-alert-sound";
+import type { CatalogI18n } from "@/lib/catalog-i18n";
 import { OpsCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization";
+import {
+  opsItemsCountLabel,
+  resolveOpsCatalogName,
+  useStaffLocale,
+} from "@/lib/ops-i18n";
+import { groupOpsOrderItems } from "@/lib/orders/groupOpsOrderItems";
+import { createIncomingOrderAlertSound } from "@/lib/orders/incoming-order-alert-sound";
+import { cn } from "@/lib/utils";
 
 export type IncomingOrderOverlayOrder = {
   id: string;
@@ -20,6 +26,8 @@ export type IncomingOrderOverlayOrder = {
   items?: Array<{
     id: string;
     name: string;
+    itemId?: string | null;
+    i18n?: CatalogI18n | null;
     qty: number;
     price?: number;
     notes?: string | null;
@@ -28,6 +36,8 @@ export type IncomingOrderOverlayOrder = {
       optionName: string;
       optionPrice: number;
       quantity: number;
+      groupI18n?: CatalogI18n | null;
+      optionI18n?: CatalogI18n | null;
     }>;
   }>;
 };
@@ -60,11 +70,6 @@ function formatElapsed(createdAt: number, now: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function formatMoney(total: number | undefined): string | null {
-  if (total == null || !Number.isFinite(total)) return null;
-  return `€${total.toFixed(2)}`;
-}
-
 export function IncomingOrderOverlay({
   order,
   waitingCount,
@@ -75,10 +80,13 @@ export function IncomingOrderOverlay({
   onMuteToggle,
   onSnooze,
 }: IncomingOrderOverlayProps) {
+  const { formatMoney } = useMerchantLocalization();
+  const { locale, t, dir } = useStaffLocale();
   const [now, setNow] = useState(() => Date.now());
   const [mode, setMode] = useState<"prompt" | "review">("prompt");
   const [etaMinutes, setEtaMinutes] = useState(() => clampEtaMinutes(defaultEtaMinutes));
   const busy = accepting;
+  const trackingClass = locale === "en" ? "uppercase tracking-[0.16em]" : "";
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -92,8 +100,9 @@ export function IncomingOrderOverlay({
 
   const elapsed = formatElapsed(order.createdAt, now);
   const extraWaiting = Math.max(0, waitingCount - 1);
-  const money = formatMoney(order.total);
-  const items = order.items ?? [];
+  const money =
+    order.total != null && Number.isFinite(order.total) ? formatMoney(order.total) : null;
+  const items = groupOpsOrderItems(order.items ?? []);
 
   const acceptWithEta = () => {
     createIncomingOrderAlertSound().stop();
@@ -114,11 +123,11 @@ export function IncomingOrderOverlay({
       <div className="relative z-10 flex w-full max-w-md flex-col items-center text-center">
         <p
           id="incoming-order-title"
-          className="text-[11px] font-bold uppercase tracking-[0.22em] text-amber-200/90"
+          className={cn("text-[11px] font-bold text-amber-200/90", locale === "en" && "uppercase tracking-[0.22em]")}
         >
-          {mode === "review" ? "Review order" : "New order"}
+          {mode === "review" ? t("incoming.reviewOrder") : t("incoming.newOrder")}
         </p>
-        <p className="mt-2 font-mono text-4xl font-black tracking-wide text-white md:text-5xl">
+        <p className="mt-2 font-mono text-4xl font-black tracking-wide text-white md:text-5xl" dir="ltr">
           {order.label}
         </p>
         <p id="incoming-order-desc" className="mt-2 text-sm text-white/70">
@@ -126,21 +135,21 @@ export function IncomingOrderOverlay({
           <span className="mx-1.5 text-white/30">·</span>
           {order.guestLabel}
           <span className="mx-1.5 text-white/30">·</span>
-          {order.itemCount} {order.itemCount === 1 ? "item" : "items"}
+          {opsItemsCountLabel(t, order.itemCount)}
           {money ? (
             <>
               <span className="mx-1.5 text-white/30">·</span>
-              {money}
+              <span dir="ltr">{money}</span>
             </>
           ) : null}
         </p>
-        <p className="mt-1.5 inline-flex items-center gap-1 font-mono text-xs text-amber-200/80">
+        <p className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-200/80">
           <Clock3 className="h-3.5 w-3.5" />
-          waiting {elapsed}
+          {t("incoming.waiting", { elapsed })}
         </p>
         {extraWaiting > 0 ? (
           <p className="mt-3 text-xs font-semibold text-white/55">
-            +{extraWaiting} more waiting after this
+            {t("incoming.moreWaiting", { count: extraWaiting })}
           </p>
         ) : null}
 
@@ -163,11 +172,16 @@ export function IncomingOrderOverlay({
                   busy && "opacity-70",
                 )}
               >
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-950/70">
-                  Tap to
+                <span
+                  className={cn(
+                    "text-[11px] font-bold text-slate-950/70",
+                    locale === "en" && "uppercase tracking-[0.18em]",
+                  )}
+                >
+                  {t("incoming.tapTo")}
                 </span>
                 <span className="text-2xl font-black tracking-wide md:text-3xl">
-                  {accepting ? "…" : "Accept"}
+                  {accepting ? "…" : t("incoming.accept")}
                 </span>
               </button>
             </div>
@@ -181,11 +195,11 @@ export function IncomingOrderOverlay({
               }}
               className="mt-6 inline-flex h-11 items-center justify-center rounded-full border border-white/20 bg-white/[0.08] px-5 text-sm font-semibold text-white hover:bg-white/12 disabled:opacity-50"
             >
-              Tap to review
+              {t("incoming.tapToReview")}
             </button>
           </>
         ) : (
-          <div className="mt-6 w-full rounded-2xl border border-white/15 bg-black/35 p-4 text-left shadow-xl backdrop-blur-md">
+          <div className="mt-6 w-full rounded-2xl border border-white/15 bg-black/35 p-4 text-start shadow-xl backdrop-blur-md">
             <div className="mb-3 flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -193,27 +207,27 @@ export function IncomingOrderOverlay({
                 onClick={() => setMode("prompt")}
                 className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back
+                <ArrowLeft className={cn("h-3.5 w-3.5", dir === "rtl" && "rotate-180")} />
+                {t("common.back")}
               </button>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
-                Items
+              <p className={cn("text-[11px] font-bold text-white/45", trackingClass)}>
+                {t("common.items")}
               </p>
             </div>
 
-            <ul className="max-h-[32vh] space-y-2 overflow-y-auto pr-1">
+            <ul className="max-h-[32vh] space-y-2 overflow-y-auto pe-1">
               {items.length > 0 ? (
                 items.map((item) => (
                   <li
                     key={item.id}
                     className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
                   >
-                    <span className="w-8 shrink-0 font-mono text-sm font-semibold text-amber-200/90">
+                    <span className="w-8 shrink-0 font-mono text-sm font-semibold text-amber-200/90" dir="ltr">
                       {item.qty}×
                     </span>
                     <div className="min-w-0 flex-1">
                       <span className="text-sm font-medium text-white">
-                        {item.name}
+                        {resolveOpsCatalogName(locale, item.name, item.i18n)}
                       </span>
                       {item.customizations && item.customizations.length > 0 ? (
                         <OpsCustomizationDisplayLines
@@ -223,21 +237,21 @@ export function IncomingOrderOverlay({
                       ) : null}
                       {item.notes ? (
                         <p className="mt-1 text-xs">
-                          <span className="text-white/55">Instructions:</span>{" "}
+                          <span className="text-white/55">{t("common.instructions")}</span>{" "}
                           <span className="italic text-amber-200/70">{item.notes}</span>
                         </p>
                       ) : null}
                     </div>
-                    <span className="shrink-0 font-mono text-sm font-semibold text-white/85">
+                    <span className="shrink-0 font-mono text-sm font-semibold text-white/85" dir="ltr">
                       {typeof item.price === "number" && Number.isFinite(item.price)
-                        ? `€${item.price.toFixed(2)}`
+                        ? formatMoney(item.price)
                         : "—"}
                     </span>
                   </li>
                 ))
               ) : (
                 <li className="rounded-xl border border-dashed border-white/15 px-3 py-4 text-center text-sm text-white/50">
-                  No item details available
+                  {t("incoming.noItems")}
                 </li>
               )}
             </ul>
@@ -251,40 +265,40 @@ export function IncomingOrderOverlay({
                     : "border-white/10 bg-white/[0.04] text-white/75",
                 )}
               >
-                <span className="not-italic text-white/55">Instructions:</span>{" "}
+                <span className="not-italic text-white/55">{t("common.instructions")}</span>{" "}
                 <span className="italic">{order.note}</span>
               </div>
             ) : null}
 
             {money ? (
               <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-sm">
-                <span className="text-white/60">Total</span>
-                <span className="font-semibold text-white">{money}</span>
+                <span className="text-white/60">{t("common.total")}</span>
+                <span className="font-semibold text-white" dir="ltr">{money}</span>
               </div>
             ) : null}
 
             <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
-                Prep time
+              <p className={cn("text-[11px] font-bold text-white/45", trackingClass)}>
+                {t("incoming.prepTime")}
               </p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <button
                   type="button"
                   disabled={busy || etaMinutes <= ETA_MIN}
-                  aria-label="Decrease prep time"
+                  aria-label={t("incoming.decreaseEta")}
                   onClick={() => setEtaMinutes((prev) => clampEtaMinutes(prev - ETA_STEP))}
                   className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white hover:bg-white/10 disabled:opacity-40"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
                 <div className="text-center">
-                  <p className="font-mono text-3xl font-black text-amber-200">{etaMinutes}</p>
-                  <p className="text-xs font-semibold text-white/55">minutes</p>
+                  <p className="font-mono text-3xl font-black text-amber-200" dir="ltr">{etaMinutes}</p>
+                  <p className="text-xs font-semibold text-white/55">{t("incoming.minutes")}</p>
                 </div>
                 <button
                   type="button"
                   disabled={busy || etaMinutes >= ETA_MAX}
-                  aria-label="Increase prep time"
+                  aria-label={t("incoming.increaseEta")}
                   onClick={() => setEtaMinutes((prev) => clampEtaMinutes(prev + ETA_STEP))}
                   className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white hover:bg-white/10 disabled:opacity-40"
                 >
@@ -292,7 +306,7 @@ export function IncomingOrderOverlay({
                 </button>
               </div>
               <p className="mt-2 text-center text-[11px] text-white/45">
-                Guest live ETA uses this time
+                {t("incoming.guestEtaHint")}
               </p>
             </div>
 
@@ -303,7 +317,7 @@ export function IncomingOrderOverlay({
                 onClick={acceptWithEta}
                 className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-amber-300/60 bg-amber-500 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
               >
-                {accepting ? "…" : `Accept · ${etaMinutes}m`}
+                {accepting ? "…" : t("incoming.acceptEta", { minutes: etaMinutes })}
               </button>
             </div>
           </div>
@@ -316,7 +330,7 @@ export function IncomingOrderOverlay({
             className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3 text-xs font-semibold text-white/80 hover:bg-white/10"
           >
             {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-            {muted ? "Unmute" : "Mute"}
+            {muted ? t("incoming.unmute") : t("incoming.mute")}
           </button>
           <button
             type="button"
@@ -324,7 +338,7 @@ export function IncomingOrderOverlay({
             disabled={busy}
             className="inline-flex h-9 items-center rounded-full border border-white/15 bg-white/[0.06] px-3 text-xs font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50"
           >
-            Snooze 30s
+            {t("incoming.snooze")}
           </button>
         </div>
       </div>
@@ -338,18 +352,19 @@ type IncomingWaitingBadgeProps = {
 };
 
 export function IncomingWaitingBadge({ count, onResume }: IncomingWaitingBadgeProps) {
+  const { t } = useStaffLocale();
   if (count <= 0) return null;
   return (
     <button
       type="button"
       onClick={onResume}
-      className="incoming-order-overlay__badge fixed bottom-5 right-5 z-[70] inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/30"
+      className="incoming-order-overlay__badge fixed bottom-5 end-5 z-[70] inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/30"
     >
       <span className="relative flex h-2.5 w-2.5">
         <span className="absolute inset-0 animate-ping rounded-full bg-slate-950/40" />
         <span className="relative h-2.5 w-2.5 rounded-full bg-slate-950" />
       </span>
-      {count} waiting — resume
+      {t("incoming.resume", { count })}
     </button>
   );
 }

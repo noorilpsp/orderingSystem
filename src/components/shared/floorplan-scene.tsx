@@ -11,6 +11,7 @@ import type { Wave, DetailAlert } from "@/lib/table-detail-data"
 import { TABLE_COLOR_STATES, getFloorTableColorState, isOccupiedColorState } from "@/lib/table-color-state"
 import { WaveBadge } from "@/components/shared/wave-badges"
 import { Users, Flame } from "lucide-react"
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 
 // ── Status overlay visuals for tables in view mode ──────────────────────────
 
@@ -370,6 +371,7 @@ function RichTableOverlay({
   statusInfo: TableStatusInfo
   currentServerId: string
 }) {
+  const { formatMoney } = useMerchantLocalization()
   const { width: w, height: h, rotation, shape } = element
   const colorState = getFloorTableColorState({
     status: statusInfo.status,
@@ -513,7 +515,7 @@ function RichTableOverlay({
                 className="font-mono leading-none text-white/70"
                 style={{ fontSize: microFont }}
               >
-                €{billTotal.toFixed(2)}
+                {formatMoney(billTotal)}
               </span>
             )}
           </div>

@@ -72,6 +72,8 @@ export function formatCustomizationOptionLabel(input: {
   quantity?: number;
   optionPrice?: number;
   showPrice?: boolean;
+  /** When provided, used instead of a hardcoded currency symbol. */
+  formatMoney?: (amount: number) => string;
 }): string {
   const qty =
     typeof input.quantity === "number" && input.quantity > 1
@@ -80,7 +82,9 @@ export function formatCustomizationOptionLabel(input: {
   const priceValue = Number(input.optionPrice ?? 0);
   const price =
     input.showPrice && Number.isFinite(priceValue) && priceValue > 0
-      ? ` (+€${priceValue.toFixed(2)})`
+      ? input.formatMoney
+        ? ` (+${input.formatMoney(priceValue)})`
+        : ` (+${priceValue.toFixed(2)})`
       : "";
   return `${qty}${input.optionName}${price}`;
 }

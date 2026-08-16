@@ -21,7 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import type { OrderItem as TableOrderItem } from "@/lib/table-data"
 import { cn } from "@/lib/utils"
-import { formatCurrency } from "@/lib/take-order-data"
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import {
   createTrackingToken,
   upsertTrackingSnapshot,
@@ -33,6 +33,7 @@ import { useCounterMenu } from "@/lib/counter/useCounterMenu"
 import type { CounterView } from "@/lib/counter/counterView"
 import { submitCounterOrder } from "@/lib/counter/submitCounterOrder"
 import { useCounterRecentOrders } from "@/lib/counter/useCounterRecentOrders"
+import { uniqueById } from "@/lib/promotions/promotions-category"
 
 type ServiceType = "pickup" | "dine_in_no_table"
 type PaymentMethod = "card" | "cash" | "other"
@@ -119,6 +120,7 @@ type CounterClientProps = {
 }
 
 export function CounterClient({ initialCounterView }: CounterClientProps) {
+  const { formatMoney } = useMerchantLocalization()
   const { menuItems, categories, customizations, loading: menuLoading, error: menuError, hasLocation, locationId, refetch } = useCounterMenu({
     initialCounterView,
   })
@@ -168,6 +170,7 @@ export function CounterClient({ initialCounterView }: CounterClientProps) {
     let items = menuItems
     if (selectedCategory && !searchQuery.trim()) {
       items = items.filter((item) => item.category === selectedCategory)
+      return items
     }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
@@ -178,7 +181,7 @@ export function CounterClient({ initialCounterView }: CounterClientProps) {
           item.category.toLowerCase().includes(q)
       )
     }
-    return items
+    return uniqueById(items)
   }, [menuItems, searchQuery, selectedCategory])
   const matchedCategoryIds = useMemo(
     () => Array.from(new Set(visibleMenu.map((item) => item.category))),
@@ -725,7 +728,7 @@ export function CounterClient({ initialCounterView }: CounterClientProps) {
                                 )}
                               </div>
                               <span className="shrink-0 text-sm font-bold">
-                                {formatCurrency(line.qty * line.unitPrice)}
+                                {formatMoney(line.qty * line.unitPrice)}
                               </span>
                             </div>
 
@@ -788,19 +791,19 @@ export function CounterClient({ initialCounterView }: CounterClientProps) {
                           <span className="text-muted-foreground">
                             Subtotal
                           </span>
-                          <span>{formatCurrency(draftTotals.subtotal)}</span>
+                          <span>{formatMoney(draftTotals.subtotal)}</span>
                         </div>
                         <div className="mt-1 flex items-center justify-between">
                           <span className="text-muted-foreground">
                             Tax + Pack
                           </span>
                           <span>
-                            {formatCurrency(draftTotals.tax + draftTotals.packing)}
+                            {formatMoney(draftTotals.tax + draftTotals.packing)}
                           </span>
                         </div>
                         <div className="mt-1.5 flex items-center justify-between border-t border-border pt-1.5 text-sm font-semibold">
                           <span>Total</span>
-                          <span>{formatCurrency(draftTotals.total)}</span>
+                          <span>{formatMoney(draftTotals.total)}</span>
                         </div>
                       </div>
 
@@ -810,7 +813,7 @@ export function CounterClient({ initialCounterView }: CounterClientProps) {
                         onClick={openPayment}
                       >
                         <Flame className="h-4 w-4" />
-                        Charge & Send {formatCurrency(draftTotals.total)}
+                        Charge & Send {formatMoney(draftTotals.total)}
                       </Button>
 
                       <div className="mt-3 border-t border-border pt-2">
@@ -839,7 +842,7 @@ export function CounterClient({ initialCounterView }: CounterClientProps) {
                               {recentOrders.slice(0, 8).map((o) => (
                                 <li key={o.id} className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
                                   <span className="truncate font-medium">{o.orderNumber}</span>
-                                  <span className="shrink-0">{formatCurrency(o.total)}</span>
+                                  <span className="shrink-0">{formatMoney(o.total)}</span>
                                 </li>
                               ))}
                             </ul>

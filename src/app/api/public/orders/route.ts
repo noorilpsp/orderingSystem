@@ -5,8 +5,8 @@ import {
   IDEMPOTENCY_CONFLICT,
   saveIdempotentResponse,
 } from "@/domain/idempotency";
-import { posFailure, posSuccess, requireIdempotencyKey, toErrorMessage } from "@/app/api/_lib/pos-envelope";
-import { withDbRetry } from "@/lib/db/withDbRetry";
+import { posFailure, requireIdempotencyKey } from "@/app/api/_lib/pos-envelope";
+import { toUserFacingDbError, withDbRetry } from "@/lib/db/withDbRetry";
 import {
   createPublicOrder,
   getPublicGuestIdempotencyUserId,
@@ -91,26 +91,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(replayBody, { status: saved.status ?? 201 });
     }
 
-    const result = await createPublicOrder({
-      storeSlug,
-      orderType: body.orderType,
-      paymentTiming: body.paymentTiming ?? "pay_later",
-      tableNumber: body.tableNumber ?? null,
-      seatId: body.seatId ?? null,
-      deviceId: body.deviceId ?? null,
-      guestCount: body.guestCount,
-      notes: body.notes ?? null,
-      scheduledPickupAt: body.scheduledPickupAt ?? null,
-      pointsToRedeem:
-        typeof body.pointsToRedeem === "number" && body.pointsToRedeem > 0
-          ? Math.floor(body.pointsToRedeem)
-          : undefined,
-      rewardId:
-        typeof body.rewardId === "string" && body.rewardId.trim().length > 0
-          ? body.rewardId.trim()
-          : undefined,
-      items: body.items ?? [],
-    });
+    const result = await withDbRetry(() =>
+      createPublicOrder({
+        storeSlug,
+        orderType: body.orderType,
+        paymentTiming: body.paymentTiming ?? "pay_later",
+        tableNumber: body.tableNumber ?? null,
+        seatId: body.seatId ?? null,
+        deviceId: body.deviceId ?? null,
+        guestCount: body.guestCount,
+        notes: body.notes ?? null,
+        scheduledPickupAt: body.scheduledPickupAt ?? null,
+        pointsToRedeem:
+          typeof body.pointsToRedeem === "number" && body.pointsToRedeem > 0
+            ? Math.floor(body.pointsToRedeem)
+            : undefined,
+        rewardId:
+          typeof body.rewardId === "string" && body.rewardId.trim().length > 0
+            ? body.rewardId.trim()
+            : undefined,
+        items: body.items ?? [],
+      }),
+    );
 
     if (!result.ok) {
       const status =
@@ -120,7 +122,9 @@ export async function POST(request: NextRequest) {
             ? 403
             : result.code === "TOO_MANY_REQUESTS"
               ? 429
-              : 400;
+              : result.code === "INTERNAL_ERROR"
+                ? 500
+                : 400;
       return posFailure(result.code, result.message, {
         status,
         correlationId: idempotencyKey,
@@ -148,9 +152,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(responseBody, { status: 201 });
   } catch (error) {
+    console.error("[POST /api/public/orders]", error);
     return posFailure(
       "INTERNAL_ERROR",
-      toErrorMessage(error, "Failed to create order"),
+      toUserFacingDbError(error, "Failed to create order. Please try again."),
       { status: 500, correlationId: idempotencyKey },
     );
   }

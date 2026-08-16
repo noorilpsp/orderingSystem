@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Gift, Receipt, User, UtensilsCrossed } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
-import { readGuestActiveOrder } from "@/lib/public-menu/guest-active-order-storage";
+import { readGuestActiveOrders } from "@/lib/public-menu/guest-active-order-storage";
 import { cn } from "@/lib/utils";
 import { useGuestT } from "@/lib/guest-i18n";
 import type { EnMessageKey } from "@/lib/guest-i18n";
@@ -49,7 +49,7 @@ export function GuestTabBar() {
 
   useEffect(() => {
     if (hidden) return;
-    setHasActiveOrder(!!readGuestActiveOrder(storeSlug));
+    setHasActiveOrder(readGuestActiveOrders(storeSlug).length > 0);
   }, [hidden, pathname, storeSlug]);
 
   // Lets fixed elements (cart CTA, toasts) sit above the bar instead of under it.

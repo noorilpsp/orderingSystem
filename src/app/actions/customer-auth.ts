@@ -6,7 +6,9 @@ import { eq } from "drizzle-orm";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { customers } from "@/lib/db/schema/orders";
 import { getLoggedInCustomer } from "@/lib/public-menu/getLoggedInCustomer";
+import { ensureCustomerForUser } from "@/lib/public-menu/ensureCustomerForUser";
 
 const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -255,5 +257,113 @@ export async function fetchLoggedInCustomerAction(storeSlug?: string | null) {
   } catch (error) {
     console.error("[fetchLoggedInCustomerAction]", error);
     return { ok: false as const, customer: null, error: "Failed to load account" };
+  }
+}
+
+const updateProfileSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  storeSlug: z.string().trim().optional(),
+});
+
+const updatePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export async function updateCustomerProfile(data: {
+  name: string;
+  storeSlug?: string | null;
+}) {
+  const validation = updateProfileSchema.safeParse({
+    name: data.name,
+    storeSlug: data.storeSlug?.trim() || undefined,
+  });
+  if (!validation.success) {
+    return { ok: false as const, error: validation.error.issues[0]?.message || "Invalid input" };
+  }
+
+  try {
+    const supabase = await supabaseServer();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return { ok: false as const, error: "Please sign in again." };
+    }
+
+    const name = validation.data.name;
+    const { error: metaError } = await supabase.auth.updateUser({
+      data: { full_name: name },
+    });
+    if (metaError) {
+      return { ok: false as const, error: metaError.message || "Unable to update profile." };
+    }
+
+    const now = new Date();
+    await db
+      .update(users)
+      .set({ fullName: name, updatedAt: now })
+      .where(eq(users.id, user.id));
+
+    await db
+      .update(customers)
+      .set({ name })
+      .where(eq(customers.userId, user.id));
+
+    if (validation.data.storeSlug) {
+      await ensureCustomerForUser({
+        userId: user.id,
+        storeSlug: validation.data.storeSlug,
+        name,
+        email: user.email ?? null,
+      });
+    }
+
+    return { ok: true as const, name };
+  } catch (error) {
+    console.error("[updateCustomerProfile]", error);
+    return { ok: false as const, error: "Unable to update profile. Please try again." };
+  }
+}
+
+export async function updateCustomerPassword(data: {
+  currentPassword: string;
+  newPassword: string;
+}) {
+  const validation = updatePasswordSchema.safeParse(data);
+  if (!validation.success) {
+    return { ok: false as const, error: validation.error.issues[0]?.message || "Invalid input" };
+  }
+
+  try {
+    const supabase = await supabaseServer();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user?.email) {
+      return { ok: false as const, error: "Please sign in again." };
+    }
+
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: validation.data.currentPassword,
+    });
+    if (reauthError) {
+      return { ok: false as const, error: "Current password is incorrect." };
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: validation.data.newPassword,
+    });
+    if (updateError) {
+      return { ok: false as const, error: updateError.message || "Unable to update password." };
+    }
+
+    return { ok: true as const };
+  } catch (error) {
+    console.error("[updateCustomerPassword]", error);
+    return { ok: false as const, error: "Unable to update password. Please try again." };
   }
 }

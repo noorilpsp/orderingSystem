@@ -10,6 +10,7 @@ export type GuestActiveOrder = {
 const STORAGE_PREFIX = "guest-active-order:";
 const DISMISSED_PREFIX = "guest-active-order-dismissed:";
 const MAX_DISMISSED = 30;
+const MAX_ACTIVE = 12;
 
 function storageKey(storeSlug: string): string {
   return `${STORAGE_PREFIX}${storeSlug.trim().toLowerCase()}`;
@@ -70,74 +71,113 @@ function clearSessionPlacementsForOrder(storeSlug: string, orderId: string): voi
   }
 }
 
-export function readGuestActiveOrder(storeSlug: string): GuestActiveOrder | null {
-  if (typeof window === "undefined") return null;
+function coerceActiveOrder(value: unknown): GuestActiveOrder | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<GuestActiveOrder>;
+  if (!parsed.orderId || typeof parsed.orderId !== "string") return null;
+  return {
+    orderId: parsed.orderId,
+    orderNumber:
+      typeof parsed.orderNumber === "string" && parsed.orderNumber
+        ? parsed.orderNumber
+        : parsed.orderId,
+    mode: parsed.mode === "pickup" ? "pickup" : "on_site",
+    tableNumber:
+      typeof parsed.tableNumber === "string" && parsed.tableNumber.trim()
+        ? parsed.tableNumber.trim()
+        : null,
+    etaMinutes:
+      typeof parsed.etaMinutes === "number" && parsed.etaMinutes > 0
+        ? parsed.etaMinutes
+        : 15,
+    savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : Date.now(),
+  };
+}
+
+function readStoredActiveOrders(storeSlug: string): GuestActiveOrder[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(storageKey(storeSlug));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<GuestActiveOrder>;
-    if (!parsed.orderId || typeof parsed.orderId !== "string") return null;
-    if (readDismissedOrderIds(storeSlug).includes(parsed.orderId)) {
-      window.localStorage.removeItem(storageKey(storeSlug));
-      return null;
-    }
-    return {
-      orderId: parsed.orderId,
-      orderNumber:
-        typeof parsed.orderNumber === "string" && parsed.orderNumber
-          ? parsed.orderNumber
-          : parsed.orderId,
-      mode: parsed.mode === "pickup" ? "pickup" : "on_site",
-      tableNumber:
-        typeof parsed.tableNumber === "string" && parsed.tableNumber.trim()
-          ? parsed.tableNumber.trim()
-          : null,
-      etaMinutes:
-        typeof parsed.etaMinutes === "number" && parsed.etaMinutes > 0
-          ? parsed.etaMinutes
-          : 15,
-      savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : Date.now(),
-    };
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    return list
+      .map(coerceActiveOrder)
+      .filter((order): order is GuestActiveOrder => order != null);
   } catch {
-    return null;
+    return [];
   }
 }
 
-export function writeGuestActiveOrder(storeSlug: string, order: GuestActiveOrder): void {
+function writeStoredActiveOrders(storeSlug: string, orders: GuestActiveOrder[]): void {
   if (typeof window === "undefined") return;
   try {
+    if (orders.length === 0) {
+      window.localStorage.removeItem(storageKey(storeSlug));
+      return;
+    }
     window.localStorage.setItem(
       storageKey(storeSlug),
-      JSON.stringify({
-        ...order,
-        savedAt: Date.now(),
-      }),
+      JSON.stringify(orders.slice(0, MAX_ACTIVE)),
     );
   } catch {
     // ignore quota / private mode
   }
 }
 
+export function readGuestActiveOrders(storeSlug: string): GuestActiveOrder[] {
+  const dismissed = new Set(readDismissedOrderIds(storeSlug));
+  const stored = readStoredActiveOrders(storeSlug);
+  const kept = stored.filter((order) => !dismissed.has(order.orderId));
+  if (kept.length !== stored.length) {
+    writeStoredActiveOrders(storeSlug, kept);
+  }
+  return [...kept].sort((a, b) => b.savedAt - a.savedAt);
+}
+
+export function readGuestActiveOrder(storeSlug: string): GuestActiveOrder | null {
+  return readGuestActiveOrders(storeSlug)[0] ?? null;
+}
+
+export function writeGuestActiveOrder(storeSlug: string, order: GuestActiveOrder): void {
+  if (typeof window === "undefined") return;
+  const dismissed = new Set(readDismissedOrderIds(storeSlug));
+  if (dismissed.has(order.orderId)) return;
+  const next: GuestActiveOrder = {
+    ...order,
+    savedAt: Date.now(),
+  };
+  const others = readStoredActiveOrders(storeSlug).filter(
+    (entry) => entry.orderId !== order.orderId && !dismissed.has(entry.orderId),
+  );
+  writeStoredActiveOrders(storeSlug, [next, ...others]);
+}
+
 export function clearGuestActiveOrder(storeSlug: string, orderId?: string): void {
   if (typeof window === "undefined") return;
   try {
     const knownOrderId = orderId ?? readGuestActiveOrder(storeSlug)?.orderId;
-    window.localStorage.removeItem(storageKey(storeSlug));
-    if (knownOrderId) {
-      markGuestActiveOrderDismissed(storeSlug, knownOrderId);
-      clearSessionPlacementsForOrder(storeSlug, knownOrderId);
+    if (!knownOrderId) {
+      writeStoredActiveOrders(storeSlug, []);
+      return;
     }
+    markGuestActiveOrderDismissed(storeSlug, knownOrderId);
+    clearSessionPlacementsForOrder(storeSlug, knownOrderId);
+    writeStoredActiveOrders(
+      storeSlug,
+      readStoredActiveOrders(storeSlug).filter((entry) => entry.orderId !== knownOrderId),
+    );
   } catch {
     // ignore
   }
 }
 
-/** Recover an in-progress order from session placement keys (same browser tab session). */
-export function recoverGuestActiveOrderFromSession(storeSlug: string): GuestActiveOrder | null {
-  if (typeof window === "undefined") return null;
+/** Recover in-progress orders from session placement keys (same browser tab session). */
+export function recoverGuestActiveOrdersFromSession(storeSlug: string): GuestActiveOrder[] {
+  if (typeof window === "undefined") return readGuestActiveOrders(storeSlug);
   const normalized = storeSlug.trim().toLowerCase();
   const dismissed = new Set(readDismissedOrderIds(storeSlug));
-  let best: GuestActiveOrder | null = null;
+  const recovered: GuestActiveOrder[] = [];
 
   try {
     for (let i = 0; i < window.sessionStorage.length; i += 1) {
@@ -157,24 +197,34 @@ export function recoverGuestActiveOrderFromSession(storeSlug: string): GuestActi
       };
       if (parsed.status !== "success" || !parsed.orderId) continue;
       if (dismissed.has(parsed.orderId)) continue;
-      const candidate: GuestActiveOrder = {
+      recovered.push({
         orderId: parsed.orderId,
         orderNumber: parsed.orderNumber || parsed.orderId,
         mode: parsed.request?.orderType === "pickup" ? "pickup" : "on_site",
         tableNumber: parsed.request?.tableNumber?.trim() || null,
         etaMinutes: 15,
         savedAt: Date.now(),
-      };
-      best = candidate;
+      });
     }
   } catch {
-    return best;
+    // fall through to stored list
   }
 
-  if (best) {
-    writeGuestActiveOrder(storeSlug, best);
+  const stored = readStoredActiveOrders(storeSlug);
+  const byId = new Map(stored.map((order) => [order.orderId, order]));
+  for (const order of recovered) {
+    if (!byId.has(order.orderId)) byId.set(order.orderId, order);
   }
-  return best;
+  writeStoredActiveOrders(
+    storeSlug,
+    [...byId.values()].filter((order) => !dismissed.has(order.orderId)),
+  );
+  return readGuestActiveOrders(storeSlug);
+}
+
+/** Recover an in-progress order from session placement keys (same browser tab session). */
+export function recoverGuestActiveOrderFromSession(storeSlug: string): GuestActiveOrder | null {
+  return recoverGuestActiveOrdersFromSession(storeSlug)[0] ?? null;
 }
 
 export function buildGuestActiveOrderConfirmationPath(

@@ -79,6 +79,25 @@ function testNormalizeNameKey() {
   assert.equal(normalizeNameKey("  Pizzas "), "pizzas")
 }
 
+function testArabicFields() {
+  const plan = buildImportPlan(
+    [
+      {
+        name: "Margherita Pizza",
+        name_ar: "بيتزا مارغريتا",
+        price: "14.50",
+        category: "Pizzas",
+        description: "Classic",
+        description_ar: "كلاسيكية",
+      },
+    ],
+    { createMissingCategories: true, defaultStatus: "draft" },
+    [{ id: "cat-1", name: "Pizzas" }],
+  )
+  assert.equal(plan.validRows[0]?.i18n?.ar?.name, "بيتزا مارغريتا")
+  assert.equal(plan.validRows[0]?.i18n?.ar?.description, "كلاسيكية")
+}
+
 function testNormalizePhotoUrl() {
   assert.equal(
     normalizePhotoUrl("https://example.com/pizza.jpg"),
@@ -206,5 +225,6 @@ testUnknownCategoryWithoutAutoCreate()
 testAutoCreateCategory()
 testInvalidRowSkipped()
 testNormalizeNameKey()
+testArabicFields()
 
 console.log("check-import-items: all tests passed")

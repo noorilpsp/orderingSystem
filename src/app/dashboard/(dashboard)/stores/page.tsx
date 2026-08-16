@@ -3,8 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
-import Link from "next/link"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { coerceTaxRatePercent } from "@/lib/tax-rate"
@@ -14,21 +13,19 @@ import {
   MapPin,
   Clock,
   Globe,
+  Globe2,
+  ExternalLink,
   Settings,
-  Eye,
-  Zap,
   StoreIcon,
   Palette,
   Upload,
   AlertCircle,
   Check,
   Copy,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Phone,
   Mail,
-  Menu,
   Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -42,15 +39,21 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useTenant } from "@/lib/contexts/TenantContext"
 import { useLocations } from "@/lib/hooks/useLocations"
+import { useCurrentMerchant } from "@/lib/hooks/useCurrentMerchant"
 import { buildPublicMenuUrl } from "@/lib/public-menu/buildPublicMenuUrl";
+import type { Merchant } from "@/lib/db/schema/merchants"
 import type { MerchantLocation, OpeningHours, OrderModes } from "@/lib/db/schema/merchant-locations"
 import { DEFAULT_PICKUP_INSTRUCTIONS } from "@/lib/guest-menu/types"
+import {
+  mapMerchantLanguageToGuestLocale,
+  normalizeAvailableGuestLocales,
+} from "@/lib/merchant-localization"
+import { StoreTablesManager } from "@/components/dashboard/store-tables-manager"
 
 // Zod Schema
 const storeInfoSchema = z.object({
@@ -62,13 +65,13 @@ const storeInfoSchema = z.object({
     .min(1, "Store URL is required")
     .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens"),
   address: z.object({
-    street: z.string().min(1, "Street address is required"),
+    street: z.string().optional().or(z.literal("")),
     apartment: z.string().optional(),
-    postalCode: z.string().min(1, "Postal code is required"),
-    city: z.string().min(1, "City is required"),
-    country: z.string().min(1, "Country is required"),
+    postalCode: z.string().optional().or(z.literal("")),
+    city: z.string().optional().or(z.literal("")),
+    country: z.string().optional().or(z.literal("")),
   }),
-  phoneNumber: z.string().min(1, "Phone number is required"),
+  phoneNumber: z.string().optional().or(z.literal("")),
   publicEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   useBusinessEmail: z.boolean(),
   website: z.string().url("Invalid URL").optional().or(z.literal("")),
@@ -108,10 +111,23 @@ const storeInfoSchema = z.object({
   publicListing: z.boolean(),
   timezone: z.string(),
   useBusinessTimezone: z.boolean(),
-  useCustomLogo: z.boolean(),
-  useCustomBanner: z.boolean(),
-  useCustomAccentColor: z.boolean(),
+  primaryBrandColor: z.string().default("#0F172A"),
   accentColor: z.string().optional(),
+  defaultCurrency: z.string().min(1),
+  availableLanguages: z
+    .array(z.enum(["en", "ar"]))
+    .min(1, "Select at least one language"),
+  defaultLanguage: z.enum(["en", "ar"]),
+  dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]),
+  numberFormat: z.enum(["1,234.56", "1.234,56"]),
+}).superRefine((data, ctx) => {
+  if (!data.availableLanguages.includes(data.defaultLanguage)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["defaultLanguage"],
+      message: "Default language must be one of the selected languages",
+    })
+  }
 })
 
 type StoreInfoFormData = z.infer<typeof storeInfoSchema>
@@ -131,17 +147,6 @@ const timeSlots = Array.from({ length: 48 }, (_, i) => {
   return `${hour.toString().padStart(2, "0")}:${minute}`
 })
 
-const timezones = [
-  { value: "Europe/Brussels", label: "Brussels (CET)" },
-  { value: "Europe/London", label: "London (GMT)" },
-  { value: "Europe/Paris", label: "Paris (CET)" },
-  { value: "America/New_York", label: "Eastern Time (ET)" },
-  { value: "America/Chicago", label: "Central Time (CT)" },
-  { value: "America/Denver", label: "Mountain Time (MT)" },
-  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
-  { value: "Asia/Tokyo", label: "Tokyo (JST)" },
-]
-
 const countries = [
   { value: "US", label: "United States" },
   { value: "CA", label: "Canada" },
@@ -150,6 +155,7 @@ const countries = [
   { value: "DE", label: "Germany" },
   { value: "ES", label: "Spain" },
   { value: "IT", label: "Italy" },
+  { value: "LB", label: "Lebanon" },
   { value: "NL", label: "Netherlands" },
   { value: "BE", label: "Belgium" },
 ]
@@ -293,20 +299,78 @@ function formStatusToDb(formStatus: "active" | "inactive" | "coming-soon"): "act
   }
 }
 
+type MerchantFormFields = Pick<
+  StoreInfoFormData,
+  | "primaryBrandColor"
+  | "accentColor"
+  | "defaultCurrency"
+  | "availableLanguages"
+  | "defaultLanguage"
+  | "dateFormat"
+  | "numberFormat"
+>
+
+function merchantFieldsForForm(
+  merchant: Merchant | null | undefined,
+  locationAccent?: string | null,
+): MerchantFormFields {
+  const dateFormatRaw = merchant?.dateFormat
+  const dateFormat: MerchantFormFields["dateFormat"] =
+    dateFormatRaw === "MM/DD/YYYY" || dateFormatRaw === "YYYY-MM-DD" || dateFormatRaw === "DD/MM/YYYY"
+      ? dateFormatRaw
+      : "DD/MM/YYYY"
+  const numberFormatRaw = merchant?.numberFormat
+  const numberFormat: MerchantFormFields["numberFormat"] =
+    numberFormatRaw === "1.234,56" || numberFormatRaw === "1,234.56" ? numberFormatRaw : "1.234,56"
+
+  const availableLanguages = normalizeAvailableGuestLocales(
+    merchant?.availableLanguages,
+    merchant?.defaultLanguage,
+  )
+  const mappedDefault =
+    mapMerchantLanguageToGuestLocale(merchant?.defaultLanguage ?? "en")
+  const defaultLanguage = availableLanguages.includes(mappedDefault)
+    ? mappedDefault
+    : (availableLanguages[0] ?? "en")
+
+  const allowedCurrencies = new Set(["USD", "EUR", "GBP", "LBP", "CAD"])
+  const rawCurrency = (merchant?.defaultCurrency ?? "EUR").trim().toUpperCase()
+  const defaultCurrency = allowedCurrencies.has(rawCurrency) ? rawCurrency : "EUR"
+
+  return {
+    primaryBrandColor: merchant?.primaryBrandColor ?? "#0F172A",
+    accentColor: locationAccent ?? merchant?.accentColor ?? "#f97316",
+    defaultCurrency,
+    availableLanguages,
+    defaultLanguage,
+    dateFormat,
+    numberFormat,
+  }
+}
+
+const emptyMerchantFields: MerchantFormFields = {
+  primaryBrandColor: "#0F172A",
+  accentColor: "#f97316",
+  defaultCurrency: "EUR",
+  availableLanguages: ["en", "ar"],
+  defaultLanguage: "en",
+  dateFormat: "DD/MM/YYYY",
+  numberFormat: "1.234,56",
+}
+
 export default function StoresPage() {
   // Tenant and locations hooks
   const { currentMerchantId, loading: tenantLoading } = useTenant()
   const { locations, loading: locationsLoading, error: locationsError } = useLocations()
+  const { merchant, loading: merchantLoading, refetch: refetchMerchant } = useCurrentMerchant()
   
   // Current location state (for editing)
   const [currentLocationId, setCurrentLocationId] = useState<string | null>(null)
   const [currentLocation, setCurrentLocation] = useState<MerchantLocation | null>(null)
   
   // UI state
-  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [urlCopied, setUrlCopied] = useState(false)
   const [selectedPreset, setSelectedPreset] = useState<string>("")
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [formKey, setFormKey] = useState(0) // Key to force Select remount on form reset
   const [error, setError] = useState<string | null>(null)
@@ -320,6 +384,7 @@ export default function StoresPage() {
   const [bannerPreview, setBannerPreview] = useState<string>("/placeholder.svg")
   const [bannerUploading, setBannerUploading] = useState(false)
   const [bannerUrl, setBannerUrl] = useState<string | null | undefined>(undefined)
+  const [imagesDirty, setImagesDirty] = useState(false)
 
   const form = useForm<StoreInfoFormData>({
     resolver: zodResolver(storeInfoSchema),
@@ -368,10 +433,7 @@ export default function StoresPage() {
       publicListing: true,
       timezone: "Europe/Brussels",
       useBusinessTimezone: true,
-      useCustomLogo: false,
-      useCustomBanner: false,
-      useCustomAccentColor: false,
-      accentColor: "#f97316",
+      ...emptyMerchantFields,
     },
   })
 
@@ -380,8 +442,11 @@ export default function StoresPage() {
     handleSubmit,
     watch,
     setValue,
+    control,
     formState: { errors, isDirty },
   } = form
+
+  const hasUnsavedChanges = isDirty || imagesDirty
 
   const storeName = watch("storeName")
   const storeType = watch("storeType")
@@ -391,12 +456,6 @@ export default function StoresPage() {
   const enableOnlineOrders = watch("enableOnlineOrders")
   const orderModes = watch("orderModes")
   const storeStatus = watch("storeStatus")
-  const enableReservations = watch("enableReservations")
-  const enableTables = watch("enableTables")
-  const useBusinessTimezone = watch("useBusinessTimezone")
-  const useCustomLogo = watch("useCustomLogo")
-  const useCustomBanner = watch("useCustomBanner")
-  const useCustomAccentColor = watch("useCustomAccentColor")
   const deliveryRadius = watch("deliveryRadius")
   const deliveryFee = watch("deliveryFee")
   const minimumOrder = watch("minimumOrder")
@@ -408,7 +467,7 @@ export default function StoresPage() {
     }
   }, [locations, currentLocationId])
 
-  // Load location data into form when current location changes
+  // Load location + merchant data into form when current location (or merchant) changes
   useEffect(() => {
     if (!currentLocationId) {
       setCurrentLocation(null)
@@ -426,9 +485,11 @@ export default function StoresPage() {
     // Map location data to form fields
     const orderModesData = dbOrderModesToForm(location.orderModes)
     const openingHoursData = dbOpeningHoursToForm(location.openingHours)
+    const storeNameValue = location.name ?? ""
+    const merchantFields = merchantFieldsForForm(merchant, location.accentColor)
 
     form.reset({
-      storeName: location.name ?? "",
+      storeName: storeNameValue,
       storeType: (location.storeType as "restaurant" | "bar" | "cafe" | "grocery" | "other") ?? "restaurant",
       shortDescription: location.description ?? "",
       storeSlug: location.storeSlug ?? "",
@@ -462,39 +523,76 @@ export default function StoresPage() {
       publicListing: location.visibleInDirectory ?? true,
       timezone: location.timezone ?? "Europe/Brussels",
       useBusinessTimezone: !location.timezone,
-      useCustomLogo: !!location.logoUrl,
-      useCustomBanner: !!location.bannerUrl,
-      useCustomAccentColor: !!location.accentColor,
-      accentColor: location.accentColor ?? "#f97316",
+      ...merchantFields,
     })
 
     // Force Select components to remount by updating key
     setFormKey((prev) => prev + 1)
 
-    // Set last saved from updatedAt
-    if (location.updatedAt) {
-      setLastSaved(new Date(location.updatedAt))
-    }
+    // Effective images: location override, else merchant branding
+    const effectiveLogo = location.logoUrl ?? merchant?.logoUrl ?? null
+    const effectiveBanner = location.bannerUrl ?? merchant?.bannerUrl ?? null
 
-    // Set image previews and URLs from database
-    if (location.logoUrl) {
-      setLogoUrl(location.logoUrl)
-      setLogoPreview(location.logoUrl)
+    if (effectiveLogo) {
+      setLogoUrl(effectiveLogo)
+      setLogoPreview(effectiveLogo)
     } else {
       setLogoUrl(undefined)
       setLogoPreview("/placeholder.svg")
     }
     setLogoFile(null)
 
-    if (location.bannerUrl) {
-      setBannerUrl(location.bannerUrl)
-      setBannerPreview(location.bannerUrl)
+    if (effectiveBanner) {
+      setBannerUrl(effectiveBanner)
+      setBannerPreview(effectiveBanner)
     } else {
       setBannerUrl(undefined)
       setBannerPreview("/placeholder.svg")
     }
     setBannerFile(null)
-  }, [currentLocationId, locations, form])
+    setImagesDirty(false)
+  }, [currentLocationId, locations, form]) // merchant synced separately below to avoid wiping currency on refetch
+
+  // When merchant loads after location, fill merchant-only fields if not dirty
+  useEffect(() => {
+    if (!merchant || merchantLoading) return
+    if (isSaving) return
+
+    const dirty = form.formState.dirtyFields
+    const fields = merchantFieldsForForm(merchant, form.getValues("accentColor"))
+
+    if (!dirty.primaryBrandColor) {
+      setValue("primaryBrandColor", fields.primaryBrandColor, { shouldDirty: false })
+    }
+    if (!dirty.defaultCurrency) {
+      setValue("defaultCurrency", fields.defaultCurrency || "EUR", { shouldDirty: false })
+    }
+    if (!dirty.availableLanguages) {
+      setValue("availableLanguages", fields.availableLanguages, { shouldDirty: false })
+    }
+    if (!dirty.defaultLanguage) {
+      setValue("defaultLanguage", fields.defaultLanguage, { shouldDirty: false })
+    }
+    if (!dirty.dateFormat) {
+      setValue("dateFormat", fields.dateFormat, { shouldDirty: false })
+    }
+    if (!dirty.numberFormat) {
+      setValue("numberFormat", fields.numberFormat, { shouldDirty: false })
+    }
+    if (!dirty.accentColor && !currentLocation?.accentColor) {
+      setValue("accentColor", fields.accentColor, { shouldDirty: false })
+    }
+
+    // Backfill images from merchant when location has none and no image chosen yet
+    if (!currentLocation?.logoUrl && merchant.logoUrl) {
+      setLogoUrl((prev) => (prev === undefined ? merchant.logoUrl! : prev))
+      setLogoPreview((prev) => (prev === "/placeholder.svg" ? merchant.logoUrl! : prev))
+    }
+    if (!currentLocation?.bannerUrl && merchant.bannerUrl) {
+      setBannerUrl((prev) => (prev === undefined ? merchant.bannerUrl! : prev))
+      setBannerPreview((prev) => (prev === "/placeholder.svg" ? merchant.bannerUrl! : prev))
+    }
+  }, [merchant, merchantLoading, currentLocation, form, setValue, isSaving])
 
   // Auto-generate slug from name
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -505,7 +603,7 @@ export default function StoresPage() {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .trim()
-    setValue("storeSlug", slug, { shouldValidate: true })
+    setValue("storeSlug", slug, { shouldValidate: true, shouldDirty: true })
   }
 
   const copyStoreUrl = () => {
@@ -526,7 +624,7 @@ export default function StoresPage() {
     setError(null)
 
     try {
-      // Get current image URLs
+      // Get current image URLs — null clears; undefined leaves unchanged
       const currentLogoUrl = logoUrl
       const currentBannerUrl = bannerUrl
 
@@ -563,34 +661,25 @@ export default function StoresPage() {
         storeStatus: formStatusToDb(data.storeStatus),
         publicListing: data.publicListing,
         timezone: data.useBusinessTimezone ? null : data.timezone,
-        accentColor: data.useCustomAccentColor ? data.accentColor : null,
+        accentColor: data.accentColor || null,
       }
 
-      // Include image URLs if they've been set (including null to clear them)
-      if (data.useCustomLogo) {
-        if (currentLogoUrl !== undefined) {
-          apiData.logoUrl = currentLogoUrl
-        }
-      } else {
-        // Clear logo when not using custom logo
-        apiData.logoUrl = null
+      if (currentLogoUrl !== undefined) {
+        apiData.logoUrl = currentLogoUrl
+      } else if (logoPreview && logoPreview !== "/placeholder.svg") {
+        apiData.logoUrl = logoPreview
       }
 
-      if (data.useCustomBanner) {
-        if (currentBannerUrl !== undefined) {
-          apiData.bannerUrl = currentBannerUrl
-        }
-      } else {
-        // Clear banner when not using custom banner
-        apiData.bannerUrl = null
+      if (currentBannerUrl !== undefined) {
+        apiData.bannerUrl = currentBannerUrl
+      } else if (bannerPreview && bannerPreview !== "/placeholder.svg") {
+        apiData.bannerUrl = bannerPreview
       }
 
       let response: Response
-      let method: string
 
       if (currentLocationId) {
         // Update existing location
-        method = "PUT"
         response = await fetch(`/api/locations/${encodeURIComponent(currentLocationId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -599,7 +688,6 @@ export default function StoresPage() {
         })
       } else {
         // Create new location
-        method = "POST"
         response = await fetch("/api/locations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -616,6 +704,49 @@ export default function StoresPage() {
       const savedLocation: MerchantLocation = await response.json()
       console.log("[StoresPage] Saved location:", savedLocation)
 
+      // Sync merchant (business) fields — fail whole save if this fails (before success toast)
+      const resolvedLogoUrl =
+        currentLogoUrl === null
+          ? null
+          : currentLogoUrl !== undefined
+            ? currentLogoUrl
+            : (savedLocation.logoUrl ?? null)
+      const resolvedBannerUrl =
+        currentBannerUrl === null
+          ? null
+          : currentBannerUrl !== undefined
+            ? currentBannerUrl
+            : (savedLocation.bannerUrl ?? null)
+
+      const merchantResponse = await fetch(`/api/merchants/${encodeURIComponent(currentMerchantId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          businessName: data.storeName,
+          primaryEmail: data.publicEmail || merchant?.contactEmail,
+          primaryPhone: data.phoneNumber,
+          primaryBrandColor: data.primaryBrandColor,
+          accentColor: data.accentColor,
+          logoUrl: resolvedLogoUrl,
+          bannerUrl: resolvedBannerUrl,
+          defaultCurrency: data.defaultCurrency,
+          defaultTimezone: data.timezone,
+          defaultLanguage: data.defaultLanguage,
+          availableLanguages: data.availableLanguages,
+          dateFormat: data.dateFormat,
+          numberFormat: data.numberFormat,
+        }),
+      })
+
+      if (!merchantResponse.ok) {
+        const errorData = await merchantResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed to save business info: ${merchantResponse.status}`)
+      }
+
+      const savedMerchant = (await merchantResponse.json().catch(() => null)) as Merchant | null
+      await refetchMerchant().catch(() => null)
+
       // Update current location ID if this was a new location
       if (!currentLocationId) {
         setCurrentLocationId(savedLocation.id)
@@ -624,6 +755,17 @@ export default function StoresPage() {
       // Reset form with saved data to clear isDirty state
       const savedOrderModes = dbOrderModesToForm(savedLocation.orderModes)
       const savedOpeningHours = dbOpeningHoursToForm(savedLocation.openingHours)
+      const savedMerchantFields: MerchantFormFields = savedMerchant
+        ? merchantFieldsForForm(savedMerchant, savedLocation.accentColor)
+        : {
+            primaryBrandColor: data.primaryBrandColor,
+            accentColor: data.accentColor ?? savedLocation.accentColor ?? "#f97316",
+            defaultCurrency: data.defaultCurrency || "EUR",
+            availableLanguages: data.availableLanguages,
+            defaultLanguage: data.defaultLanguage,
+            dateFormat: data.dateFormat,
+            numberFormat: data.numberFormat,
+          }
 
       form.reset({
         storeName: savedLocation.name ?? "",
@@ -660,26 +802,29 @@ export default function StoresPage() {
         publicListing: savedLocation.visibleInDirectory ?? true,
         timezone: savedLocation.timezone ?? "Europe/Brussels",
         useBusinessTimezone: !savedLocation.timezone,
-        useCustomLogo: !!savedLocation.logoUrl,
-        useCustomBanner: !!savedLocation.bannerUrl,
-        useCustomAccentColor: !!savedLocation.accentColor,
-        accentColor: savedLocation.accentColor ?? "#f97316",
+        ...savedMerchantFields,
       })
 
       // Update image states with saved values
-      if (savedLocation.logoUrl) {
-        setLogoUrl(savedLocation.logoUrl)
-        setLogoPreview(savedLocation.logoUrl)
+      if (resolvedLogoUrl) {
+        setLogoUrl(resolvedLogoUrl)
+        setLogoPreview(resolvedLogoUrl)
+      } else if (resolvedLogoUrl === null) {
+        setLogoUrl(null)
+        setLogoPreview("/placeholder.svg")
       }
-      if (savedLocation.bannerUrl) {
-        setBannerUrl(savedLocation.bannerUrl)
-        setBannerPreview(savedLocation.bannerUrl)
+      if (resolvedBannerUrl) {
+        setBannerUrl(resolvedBannerUrl)
+        setBannerPreview(resolvedBannerUrl)
+      } else if (resolvedBannerUrl === null) {
+        setBannerUrl(null)
+        setBannerPreview("/placeholder.svg")
       }
 
       // Update currentLocation with saved data so discard works correctly
       setCurrentLocation(savedLocation)
 
-      setLastSaved(new Date())
+      setImagesDirty(false)
       setFormKey((prev) => prev + 1)
       toast.success("Store information saved successfully!")
     } catch (err) {
@@ -690,16 +835,18 @@ export default function StoresPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [currentMerchantId, currentLocationId, currentLocation, logoUrl, bannerUrl, form])
+  }, [currentMerchantId, currentLocationId, currentLocation, logoUrl, bannerUrl, logoPreview, bannerPreview, merchant, form, refetchMerchant])
 
   const handleDiscard = useCallback(() => {
     // Re-load current location data
     if (currentLocation) {
       const orderModesData = dbOrderModesToForm(currentLocation.orderModes)
       const openingHoursData = dbOpeningHoursToForm(currentLocation.openingHours)
+      const storeNameValue = currentLocation.name ?? ""
+      const merchantFields = merchantFieldsForForm(merchant, currentLocation.accentColor)
 
       form.reset({
-        storeName: currentLocation.name ?? "",
+        storeName: storeNameValue,
         storeType: (currentLocation.storeType as "restaurant" | "bar" | "cafe" | "grocery" | "other") ?? "restaurant",
         shortDescription: currentLocation.description ?? "",
         storeSlug: currentLocation.storeSlug ?? "",
@@ -733,31 +880,32 @@ export default function StoresPage() {
         publicListing: currentLocation.visibleInDirectory ?? true,
         timezone: currentLocation.timezone ?? "Europe/Brussels",
         useBusinessTimezone: !currentLocation.timezone,
-        useCustomLogo: !!currentLocation.logoUrl,
-        useCustomBanner: !!currentLocation.bannerUrl,
-        useCustomAccentColor: !!currentLocation.accentColor,
-        accentColor: currentLocation.accentColor ?? "#f97316",
+        ...merchantFields,
       })
       setFormKey((prev) => prev + 1)
 
-      // Reset image states
-      if (currentLocation.logoUrl) {
-        setLogoUrl(currentLocation.logoUrl)
-        setLogoPreview(currentLocation.logoUrl)
+      // Reset image states (location first, else merchant)
+      const effectiveLogo = currentLocation.logoUrl ?? merchant?.logoUrl ?? null
+      const effectiveBanner = currentLocation.bannerUrl ?? merchant?.bannerUrl ?? null
+
+      if (effectiveLogo) {
+        setLogoUrl(effectiveLogo)
+        setLogoPreview(effectiveLogo)
       } else {
         setLogoUrl(undefined)
         setLogoPreview("/placeholder.svg")
       }
       setLogoFile(null)
 
-      if (currentLocation.bannerUrl) {
-        setBannerUrl(currentLocation.bannerUrl)
-        setBannerPreview(currentLocation.bannerUrl)
+      if (effectiveBanner) {
+        setBannerUrl(effectiveBanner)
+        setBannerPreview(effectiveBanner)
       } else {
         setBannerUrl(undefined)
         setBannerPreview("/placeholder.svg")
       }
       setBannerFile(null)
+      setImagesDirty(false)
     } else {
       form.reset()
       // Reset image states
@@ -767,10 +915,11 @@ export default function StoresPage() {
       setBannerFile(null)
       setBannerPreview("/placeholder.svg")
       setBannerUrl(undefined)
+      setImagesDirty(false)
     }
 
     toast.info("Changes discarded")
-  }, [currentLocation, form])
+  }, [currentLocation, merchant, form])
 
   // Image upload handlers
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -823,6 +972,7 @@ export default function StoresPage() {
 
       const data = await response.json()
       setLogoUrl(data.url)
+      setImagesDirty(true)
       toast.success("Logo uploaded successfully")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to upload logo")
@@ -884,6 +1034,7 @@ export default function StoresPage() {
 
       const data = await response.json()
       setBannerUrl(data.url)
+      setImagesDirty(true)
       toast.success("Banner uploaded successfully")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to upload banner")
@@ -1026,17 +1177,56 @@ export default function StoresPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-20 bg-background border-b">
+      {/* Fixed top save bar — always in view when there are unsaved changes */}
+      {hasUnsavedChanges ? (
+        <div className="fixed inset-x-0 top-14 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 shadow-sm">
+          <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <div className="flex items-center gap-2 text-sm">
+              <div className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+              <span className="font-medium text-foreground">You have unsaved changes</span>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleDiscard}
+                disabled={isSaving}
+                className="flex-1 sm:flex-none"
+              >
+                Discard
+              </Button>
+              <Button
+                onClick={handleSubmit(onSubmit)}
+                disabled={isSaving}
+                className="flex-1 gap-2 sm:flex-none"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Save changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Page header — scrolls with content (not sticky) to avoid overlapping the save bar */}
+      <div className={cn("border-b bg-background", hasUnsavedChanges && "pt-16 sm:pt-14")}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-foreground">Store Info</h1>
+              <h1 className="text-2xl font-bold text-foreground">Store</h1>
               <p className="text-sm text-muted-foreground mt-1 hidden sm:block">
-                Configure this store's details and what customers see
+                Configure your store details and what customers see
               </p>
 
-              {/* Mobile: Status pill, View button, and Tips button below title */}
+              {/* Mobile: Status pill below title */}
               <div className="flex flex-wrap items-center gap-2 mt-3 md:hidden">
                 <Badge variant={storeStatus === "active" ? "default" : "secondary"} className="capitalize">
                   {storeStatus === "active" ? (
@@ -1056,130 +1246,11 @@ export default function StoresPage() {
                     </>
                   )}
                 </Badge>
-                <Button variant="outline" size="sm">
-                  <Eye className="w-4 h-4 mr-2" />
-                  View
-                </Button>
-
-                <Sheet open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
-                  <SheetTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Menu className="w-4 h-4 mr-2" />
-                      Tips
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-full p-0 flex flex-col h-full">
-                    {/* Sticky Header */}
-                    <div className="sticky top-0 z-10 border-b bg-background">
-                      <SheetHeader className="px-6 py-4">
-                        <SheetTitle>Store Info Helper</SheetTitle>
-                        <SheetDescription>Quick tips and preview</SheetDescription>
-                      </SheetHeader>
-                    </div>
-
-                    {/* Scrollable Content */}
-                    <div className="flex-1 overflow-y-auto">
-                      <div className="px-6 py-4 space-y-6">
-                        {/* Quick Tips */}
-                        <div>
-                          <h3 className="font-semibold mb-3">Quick Tips</h3>
-                          <div className="space-y-3 text-sm">
-                            <div className="flex gap-3">
-                              <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                                <span className="text-orange-600 dark:text-orange-400 font-bold">1</span>
-                              </div>
-                              <div>
-                                <p className="font-medium">Complete your profile</p>
-                                <p className="text-muted-foreground text-xs">
-                                  Add all contact details and opening hours
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex gap-3">
-                              <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                                <span className="text-orange-600 dark:text-orange-400 font-bold">2</span>
-                              </div>
-                              <div>
-                                <p className="font-medium">Set up operational features</p>
-                                <p className="text-muted-foreground text-xs">
-                                  Enable tables, reservations, and order modes
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex gap-3">
-                              <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                                <span className="text-orange-600 dark:text-orange-400 font-bold">3</span>
-                              </div>
-                              <div>
-                                <p className="font-medium">Customize branding</p>
-                                <p className="text-muted-foreground text-xs">
-                                  Make your store stand out with custom colors and images
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* Preview */}
-                        <div>
-                          <h3 className="font-semibold mb-3">Store Preview</h3>
-                          <div className="space-y-3">
-                            {/* Banner */}
-                            <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                              {bannerPreview && bannerPreview !== "/placeholder.svg" ? (
-                                <img
-                                  src={bannerPreview}
-                                  alt="Store banner"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <StoreIcon className="w-12 h-12 text-muted-foreground" />
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-start gap-3">
-                              {/* Logo */}
-                              <div className="h-12 w-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-                                {logoPreview && logoPreview !== "/placeholder.svg" ? (
-                                  <img
-                                    src={logoPreview}
-                                    alt="Store logo"
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <StoreIcon className="w-6 h-6 text-muted-foreground" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="space-y-1 flex-1 min-w-0">
-                                <h4 className="font-semibold truncate">{storeName || "Store Name"}</h4>
-                                <p className="text-sm text-muted-foreground line-clamp-2">{shortDescription || "Store description"}</p>
-                                <Badge
-                                  variant={storeStatus === "active" ? "default" : "secondary"}
-                                  className="capitalize text-xs"
-                                >
-                                  {storeStatus}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </SheetContent>
-                </Sheet>
               </div>
             </div>
 
-            {/* Desktop: Status pill and View button on the right */}
+            {/* Desktop: Status pill on the right */}
             <div className="hidden md:flex items-center gap-4">
-              {lastSaved && (
-                <div className="text-sm text-muted-foreground">Last saved: {lastSaved.toLocaleTimeString()}</div>
-              )}
               <Badge variant={storeStatus === "active" ? "default" : "secondary"} className="capitalize">
                 {storeStatus === "active" ? (
                   <>
@@ -1198,71 +1269,7 @@ export default function StoresPage() {
                   </>
                 )}
               </Badge>
-              <Button variant="outline" size="sm">
-                <Eye className="w-4 h-4 mr-2" />
-                View Public Page
-              </Button>
             </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Sticky Action Bar */}
-      <div className="sticky top-0 z-10 px-4 sm:px-6 lg:px-8 py-4 bg-background/95 backdrop-blur border-b border-border">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              {isDirty ? (
-
-                <>
-                  <div className="h-2 w-2 rounded-full bg-amber-500" />
-                  <span className="text-muted-foreground">Unsaved changes</span>
-                </>
-              ) : (
-                <>
-                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <span className="text-muted-foreground">All changes saved</span>
-                </>
-              )}
-            </div>
-
-            {lastSaved && (
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                Last saved {lastSaved.toLocaleTimeString()}
-              </span>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleDiscard}
-              disabled={!isDirty || isSaving}
-            >
-              Discard
-            </Button>
-            <Button variant="outline" disabled={isSaving}>
-              <Eye className="w-4 h-4 mr-2" />
-              Preview
-            </Button>
-            <Button 
-              onClick={handleSubmit(onSubmit)} 
-              disabled={!isDirty || isSaving} 
-              className="gap-2"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  Save changes
-                </>
-              )}
-            </Button>
           </div>
         </div>
       </div>
@@ -1393,9 +1400,7 @@ export default function StoresPage() {
                 {/* Address */}
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="street">
-                      Street Address <span className="text-red-500">*</span>
-                    </Label>
+                    <Label htmlFor="street">Street Address</Label>
                     <Input
                       id="street"
                       {...register("address.street")}
@@ -1412,9 +1417,7 @@ export default function StoresPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="postalCode">
-                        Postal Code <span className="text-red-500">*</span>
-                      </Label>
+                      <Label htmlFor="postalCode">Postal Code</Label>
                       <Input
                         id="postalCode"
                         {...register("address.postalCode")}
@@ -1426,9 +1429,7 @@ export default function StoresPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="city">
-                        City <span className="text-red-500">*</span>
-                      </Label>
+                      <Label htmlFor="city">City</Label>
                       <Input
                         id="city"
                         {...register("address.city")}
@@ -1439,10 +1440,12 @@ export default function StoresPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="country">
-                      Country <span className="text-red-500">*</span>
-                    </Label>
-                    <Select key={`country-${formKey}`} value={watch("address.country")} onValueChange={(val) => setValue("address.country", val)}>
+                    <Label htmlFor="country">Country</Label>
+                    <Select
+                      key={`country-${formKey}`}
+                      value={watch("address.country") || undefined}
+                      onValueChange={(val) => setValue("address.country", val, { shouldDirty: true })}
+                    >
                       <SelectTrigger className={cn(errors.address?.country && "border-red-500")}>
                         <SelectValue />
                       </SelectTrigger>
@@ -1466,7 +1469,7 @@ export default function StoresPage() {
                 <div className="space-y-2">
                   <Label htmlFor="phoneNumber">
                     <Phone className="w-4 h-4 inline mr-2" />
-                    Phone Number <span className="text-red-500">*</span>
+                    Phone Number
                   </Label>
                   <Input
                     id="phoneNumber"
@@ -1491,16 +1494,6 @@ export default function StoresPage() {
                     placeholder="hello@store.com"
                     className={cn(errors.publicEmail && "border-red-500")}
                   />
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="useBusinessEmail"
-                      checked={watch("useBusinessEmail")}
-                      onCheckedChange={(checked) => setValue("useBusinessEmail", !!checked, { shouldDirty: true })}
-                    />
-                    <Label htmlFor="useBusinessEmail" className="text-sm font-normal cursor-pointer">
-                      Use business email
-                    </Label>
-                  </div>
                   {errors.publicEmail && <p className="text-xs text-red-500">{errors.publicEmail.message}</p>}
                 </div>
 
@@ -1758,198 +1751,325 @@ export default function StoresPage() {
               </CardContent>
             </Card>
 
-            {/* Store Branding */}
+            {/* Branding */}
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Palette className="w-5 h-5 text-orange-600" />
                   <div>
-                    <CardTitle>Store Branding (Overrides)</CardTitle>
-                    <CardDescription>Customize branding for this specific store</CardDescription>
+                    <CardTitle>Branding</CardTitle>
+                    <CardDescription>Visual identity for your store</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Logo Override */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label>Store Logo</Label>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={useCustomLogo}
-                        onCheckedChange={(checked) => setValue("useCustomLogo", checked, { shouldDirty: true })}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {useCustomLogo ? "Custom logo" : "Using business default"}
-                      </span>
-                    </div>
+                {/* Logo */}
+                <div className="space-y-3">
+                  <Label>Store Logo</Label>
+                  <div className="relative h-24 w-24 rounded-lg border-2 border-dashed border-border overflow-hidden bg-muted">
+                    <img
+                      src={logoPreview || "/placeholder.svg"}
+                      alt="Logo preview"
+                      className="h-full w-full object-cover"
+                    />
                   </div>
-
-                  {useCustomLogo && (
-                    <div className="space-y-3">
-                      <div className="relative h-24 w-24 rounded-lg border-2 border-dashed border-border overflow-hidden bg-muted">
-                        <img
-                          src={logoPreview || "/placeholder.svg"}
-                          alt="Logo preview"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => document.getElementById("store-logo-upload")?.click()}
-                          disabled={logoUploading}
-                        >
-                          {logoUploading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="h-4 w-4 mr-2" />
-                              {logoFile || logoUrl ? "Replace" : "Upload"}
-                            </>
-                          )}
-                        </Button>
-                        {(logoFile || logoUrl || currentLocation?.logoUrl) && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setLogoFile(null)
-                              setLogoPreview("/placeholder.svg")
-                              setLogoUrl(null)
-                            }}
-                            disabled={logoUploading}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Recommended: 200x200px, square format</p>
-                      <input
-                        id="store-logo-upload"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={handleLogoUpload}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => document.getElementById("store-logo-upload")?.click()}
+                      disabled={logoUploading}
+                    >
+                      {logoUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          {logoFile || logoUrl ? "Replace" : "Upload"}
+                        </>
+                      )}
+                    </Button>
+                    {(logoFile || logoUrl || currentLocation?.logoUrl || merchant?.logoUrl) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setLogoFile(null)
+                          setLogoPreview("/placeholder.svg")
+                          setLogoUrl(null)
+                          setImagesDirty(true)
+                        }}
                         disabled={logoUploading}
-                      />
-                    </div>
-                  )}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Recommended: 200x200px, square format</p>
+                  <input
+                    id="store-logo-upload"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                    disabled={logoUploading}
+                  />
                 </div>
 
                 <Separator />
 
-                {/* Banner Override */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label>Store Banner</Label>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={useCustomBanner}
-                        onCheckedChange={(checked) => setValue("useCustomBanner", checked, { shouldDirty: true })}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {useCustomBanner ? "Custom banner" : "Using business default"}
-                      </span>
-                    </div>
+                {/* Banner */}
+                <div className="space-y-3">
+                  <Label>Store Banner</Label>
+                  <div className="relative h-32 w-full rounded-lg border-2 border-dashed border-border overflow-hidden bg-muted">
+                    <img
+                      src={bannerPreview || "/placeholder.svg"}
+                      alt="Banner preview"
+                      className="h-full w-full object-cover"
+                    />
                   </div>
-
-                  {useCustomBanner && (
-                    <div className="space-y-3">
-                      <div className="relative h-32 w-full rounded-lg border-2 border-dashed border-border overflow-hidden bg-muted">
-                        <img
-                          src={bannerPreview || "/placeholder.svg"}
-                          alt="Banner preview"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => document.getElementById("store-banner-upload")?.click()}
-                          disabled={bannerUploading}
-                        >
-                          {bannerUploading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="h-4 w-4 mr-2" />
-                              {bannerFile || bannerUrl ? "Replace" : "Upload"}
-                            </>
-                          )}
-                        </Button>
-                        {(bannerFile || bannerUrl || currentLocation?.bannerUrl) && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setBannerFile(null)
-                              setBannerPreview("/placeholder.svg")
-                              setBannerUrl(null)
-                            }}
-                            disabled={bannerUploading}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Recommended: 1920x1080px, 16:9 aspect ratio</p>
-                      <input
-                        id="store-banner-upload"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={handleBannerUpload}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => document.getElementById("store-banner-upload")?.click()}
+                      disabled={bannerUploading}
+                    >
+                      {bannerUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          {bannerFile || bannerUrl ? "Replace" : "Upload"}
+                        </>
+                      )}
+                    </Button>
+                    {(bannerFile || bannerUrl || currentLocation?.bannerUrl || merchant?.bannerUrl) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setBannerFile(null)
+                          setBannerPreview("/placeholder.svg")
+                          setBannerUrl(null)
+                          setImagesDirty(true)
+                        }}
                         disabled={bannerUploading}
-                      />
-                    </div>
-                  )}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Recommended: 1920x1080px, 16:9 aspect ratio</p>
+                  <input
+                    id="store-banner-upload"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleBannerUpload}
+                    disabled={bannerUploading}
+                  />
                 </div>
+              </CardContent>
+            </Card>
 
-                <Separator />
-
-                {/* Accent Color Override */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label>Accent Color</Label>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={useCustomAccentColor}
-                        onCheckedChange={(checked) => setValue("useCustomAccentColor", checked, { shouldDirty: true })}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {useCustomAccentColor ? "Custom color" : "Using business default"}
-                      </span>
-                    </div>
+            {/* Localization */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Globe2 className="w-5 h-5 text-orange-600" />
+                  <div>
+                    <CardTitle>Localization</CardTitle>
+                    <CardDescription>Currency, language, and display formats</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="defaultCurrency">
+                      Default Currency <span className="text-red-500">*</span>
+                    </Label>
+                    <Controller
+                      name="defaultCurrency"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value || "EUR"}
+                          onValueChange={(val) => field.onChange(val)}
+                        >
+                          <SelectTrigger
+                            id="defaultCurrency"
+                            className={cn(errors.defaultCurrency && "border-red-500")}
+                          >
+                            <SelectValue placeholder="Select currency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="USD">USD - US Dollar</SelectItem>
+                            <SelectItem value="EUR">EUR - Euro</SelectItem>
+                            <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                            <SelectItem value="LBP">LBP - Lebanese Pound</SelectItem>
+                            <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.defaultCurrency && (
+                      <p className="text-xs text-red-500">{errors.defaultCurrency.message}</p>
+                    )}
                   </div>
 
-                  {useCustomAccentColor && (
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="color"
-                        {...register("accentColor")}
-                        className="w-16 h-16 rounded-lg border-2 cursor-pointer"
-                      />
-                      <div>
-                        <p className="text-sm font-medium">{watch("accentColor")}</p>
-                        <p className="text-xs text-muted-foreground">Used for buttons and highlights</p>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>
+                        Available languages <span className="text-red-500">*</span>
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Choose which languages appear on your public guest menu. If only one is selected, guests cannot switch.
+                      </p>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
+                        {([
+                          { id: "en", label: "English" },
+                          { id: "ar", label: "Arabic" },
+                        ] as const).map((lang) => {
+                          const selected = watch("availableLanguages") ?? []
+                          const checked = selected.includes(lang.id)
+                          return (
+                            <label
+                              key={lang.id}
+                              htmlFor={`available-lang-${lang.id}`}
+                              className="flex items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                id={`available-lang-${lang.id}`}
+                                checked={checked}
+                                onCheckedChange={(value) => {
+                                  const isOn = value === true
+                                  const next = (["en", "ar"] as const).filter((code) => {
+                                    if (code === lang.id) return isOn
+                                    return selected.includes(code)
+                                  })
+                                  if (next.length === 0) {
+                                    toast.error("Select at least one language")
+                                    return
+                                  }
+                                  setValue("availableLanguages", [...next], {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  })
+                                  const currentDefault = watch("defaultLanguage")
+                                  if (!next.includes(currentDefault)) {
+                                    setValue("defaultLanguage", next[0]!, {
+                                      shouldDirty: true,
+                                      shouldValidate: true,
+                                    })
+                                  }
+                                }}
+                              />
+                              {lang.label}
+                            </label>
+                          )
+                        })}
                       </div>
+                      {errors.availableLanguages && (
+                        <p className="text-xs text-red-500">{errors.availableLanguages.message}</p>
+                      )}
                     </div>
-                  )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="defaultLanguage">
+                        Default language <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        key={`language-${formKey}-${(watch("availableLanguages") ?? []).join("-")}`}
+                        value={watch("defaultLanguage")}
+                        onValueChange={(val) =>
+                          setValue("defaultLanguage", val as "en" | "ar", { shouldDirty: true, shouldValidate: true })
+                        }
+                      >
+                        <SelectTrigger className={cn(errors.defaultLanguage && "border-red-500")}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(watch("availableLanguages") ?? []).includes("en") ? (
+                            <SelectItem value="en">English</SelectItem>
+                          ) : null}
+                          {(watch("availableLanguages") ?? []).includes("ar") ? (
+                            <SelectItem value="ar">Arabic</SelectItem>
+                          ) : null}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Used when a guest first opens your menu.
+                      </p>
+                      {errors.defaultLanguage && (
+                        <p className="text-xs text-red-500">{errors.defaultLanguage.message}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dateFormat">
+                      Date Format <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      key={`date-format-${formKey}`}
+                      value={watch("dateFormat")}
+                      onValueChange={(val) =>
+                        setValue("dateFormat", val as StoreInfoFormData["dateFormat"], { shouldDirty: true })
+                      }
+                    >
+                      <SelectTrigger className={cn(errors.dateFormat && "border-red-500")}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                        <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                        <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {errors.dateFormat && (
+                      <p className="text-xs text-red-500">{errors.dateFormat.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="numberFormat">
+                      Number Format <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      key={`number-format-${formKey}`}
+                      value={watch("numberFormat")}
+                      onValueChange={(val) =>
+                        setValue("numberFormat", val as StoreInfoFormData["numberFormat"], { shouldDirty: true })
+                      }
+                    >
+                      <SelectTrigger className={cn(errors.numberFormat && "border-red-500")}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1,234.56">1,234.56</SelectItem>
+                        <SelectItem value="1.234,56">1.234,56</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {errors.numberFormat && (
+                      <p className="text-xs text-red-500">{errors.numberFormat.message}</p>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1964,87 +2084,6 @@ export default function StoresPage() {
                 <CardDescription>Configure what features are enabled for this store</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Enable Tables */}
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="enableTables" className="text-base">
-                      Enable Tables
-                    </Label>
-                    <p className="text-sm text-muted-foreground">Allow customers to book specific tables</p>
-                    {!enableTables && (
-                      <p className="text-xs text-amber-600 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        If disabled, Tables page will be hidden
-                      </p>
-                    )}
-                  </div>
-                  <Switch
-                    id="enableTables"
-                    checked={enableTables}
-                    onCheckedChange={(checked) => setValue("enableTables", checked, { shouldDirty: true })}
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Enable Reservations */}
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="enableReservations" className="text-base">
-                        Enable Reservations
-                      </Label>
-                      <p className="text-sm text-muted-foreground">Allow customers to book tables in advance</p>
-                    </div>
-                    <Switch
-                      id="enableReservations"
-                      checked={enableReservations}
-                      onCheckedChange={(checked) => setValue("enableReservations", checked, { shouldDirty: true })}
-                    />
-                  </div>
-
-                  {enableReservations && (
-                    <div className="pl-6 space-y-4 border-l-2 border-orange-200 dark:border-orange-800">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="requirePrepayment"
-                          checked={watch("requirePrepayment")}
-                          onCheckedChange={(checked) => setValue("requirePrepayment", !!checked, { shouldDirty: true })}
-                        />
-                        <Label htmlFor="requirePrepayment" className="text-sm font-normal cursor-pointer">
-                          Require prepayment for reservations
-                        </Label>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="maxPartySize">Maximum Party Size</Label>
-                          <Input
-                            id="maxPartySize"
-                            type="number"
-                            min="1"
-                            max="50"
-                            {...register("maxPartySize", { valueAsNumber: true })}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="bookingWindow">Booking Window (days)</Label>
-                          <Input
-                            id="bookingWindow"
-                            type="number"
-                            min="1"
-                            max="90"
-                            {...register("bookingWindow", { valueAsNumber: true })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
                 {/* Enable Online Orders */}
                 <div className="space-y-4">
                   <div className="flex items-start justify-between">
@@ -2142,6 +2181,13 @@ export default function StoresPage() {
                               </RadioGroup>
                             </div>
                           )}
+
+                          {orderModes.dineIn &&
+                          orderModes.dineInGuestSessionMode === "staff_seated" ? (
+                            <div className="ml-7">
+                              <StoreTablesManager locationId={currentLocationId} />
+                            </div>
+                          ) : null}
 
                           <div className="flex items-start gap-3">
                             <Checkbox
@@ -2260,167 +2306,11 @@ export default function StoresPage() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Status & Visibility */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-orange-600" />
-                  <CardTitle>Status & Visibility</CardTitle>
-                </div>
-                <CardDescription>Control store availability and public visibility</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Store Status */}
-                <div className="space-y-3">
-                  <Label>Store Status</Label>
-                  <RadioGroup
-                    key={`storeStatus-${formKey}`}
-                    value={storeStatus}
-                    onValueChange={(value) => setValue("storeStatus", value as any, { shouldDirty: true })}
-                    className="space-y-3"
-                  >
-                    <div className="flex items-center space-x-3 border rounded-lg p-4">
-                      <RadioGroupItem value="active" id="active" />
-                      <Label htmlFor="active" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-green-500" />
-                          <span className="font-medium">Active</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">Visible and fully operational</p>
-                      </Label>
-                    </div>
-
-                    <div className="flex items-center space-x-3 border rounded-lg p-4">
-                      <RadioGroupItem value="inactive" id="inactive" />
-                      <Label htmlFor="inactive" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-muted-foreground" />
-                          <span className="font-medium">Inactive</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">Hidden from customers; admin only</p>
-                      </Label>
-                    </div>
-
-                    <div className="flex items-center space-x-3 border rounded-lg p-4">
-                      <RadioGroupItem value="coming-soon" id="coming-soon" />
-                      <Label htmlFor="coming-soon" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-blue-500" />
-                          <span className="font-medium">Coming Soon</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">Visible but can't take orders</p>
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <Separator />
-
-                {/* Public Listing */}
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="publicListing" className="text-base">
-                      Visible in Public Directory
-                    </Label>
-                    <p className="text-sm text-muted-foreground">List this store in the public BerryTap directory</p>
-                    <p className="text-xs text-muted-foreground">
-                      Guest menu URL: /menu/{storeSlug} — use Dashboard → Tables for per-table QR links
-                      (?table=12)
-                    </p>
-                  </div>
-                  <Switch
-                    id="publicListing"
-                    checked={watch("publicListing")}
-                    onCheckedChange={(checked) => setValue("publicListing", checked, { shouldDirty: true })}
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Timezone */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label>Store Timezone</Label>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={useBusinessTimezone}
-                        onCheckedChange={(checked) => setValue("useBusinessTimezone", checked, { shouldDirty: true })}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {useBusinessTimezone ? "Using business timezone" : "Custom timezone"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {!useBusinessTimezone && (
-                    <Select key={`timezone-${formKey}`} value={watch("timezone")} onValueChange={(val) => setValue("timezone", val)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timezones.map((tz) => (
-                          <SelectItem key={tz.value} value={tz.value}>
-                            {tz.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Current time: {new Date().toLocaleTimeString()} ({watch("timezone")})
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Right Column - Helper Panel */}
           <div className="hidden lg:block lg:col-span-1">
             <div className="sticky top-24 space-y-6">
-              {/* Quick Tips */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Quick Tips</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <p className="text-muted-foreground">
-                    <Link href="/dashboard/loyalty" className="font-medium text-primary underline">
-                      Manage loyalty program →
-                    </Link>
-                  </p>
-                  <div className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                      <span className="text-orange-600 dark:text-orange-400 font-bold">1</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Complete your profile</p>
-                      <p className="text-muted-foreground text-xs">Add all contact details and opening hours</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                      <span className="text-orange-600 dark:text-orange-400 font-bold">2</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Set up operational features</p>
-                      <p className="text-muted-foreground text-xs">Enable tables, reservations, and order modes</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                      <span className="text-orange-600 dark:text-orange-400 font-bold">3</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Customize branding</p>
-                      <p className="text-muted-foreground text-xs">
-                        Make your store stand out with custom colors and images
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Preview */}
               <Card>
                 <CardHeader>
@@ -2463,18 +2353,6 @@ export default function StoresPage() {
                         {storeStatus}
                       </Badge>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hidden lg:block">
-                <CardHeader>
-                  <CardTitle className="text-base">Keyboard Shortcuts</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Save changes</span>
-                    <kbd className="px-2 py-1 bg-muted rounded text-xs">⌘ S</kbd>
                   </div>
                 </CardContent>
               </Card>

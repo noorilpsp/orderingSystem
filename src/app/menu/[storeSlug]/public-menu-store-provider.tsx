@@ -1,39 +1,73 @@
 "use client";
 
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useEffect, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { PublicMenuProvider } from "@/lib/contexts/PublicMenuContext";
+import { PublicMenuProvider, usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { GuestLocaleProvider } from "@/lib/guest-i18n";
+import { mapMerchantLanguageToGuestLocale } from "@/lib/merchant-localization";
 
-function PublicMenuProviderInner({
-  storeSlug,
-  children,
-}: {
-  storeSlug: string;
-  children: ReactNode;
-}) {
-  const searchParams = useSearchParams();
-  const tableNumber = searchParams.get("table") ?? "";
-  const mode = searchParams.get("mode");
-  const initialOrderType =
-    mode === "pickup"
-      ? "pickup"
-      : mode === "dine-in" || mode === "on_site"
-        ? "dine-in"
-        : tableNumber.trim()
-          ? "dine-in"
-          : "pickup";
+function GuestLocaleFromMerchant({ children }: { children: ReactNode }) {
+  const publicMenu = usePublicMenuOptional();
+  const restaurant = publicMenu?.restaurant ?? null;
+  const storeSlug = publicMenu?.storeSlug ?? null;
+  const defaultLocale = restaurant
+    ? mapMerchantLanguageToGuestLocale(restaurant.defaultLanguage)
+    : null;
+  const availableLocales = restaurant?.availableLanguages ?? null;
 
   return (
-    <PublicMenuProvider
+    <GuestLocaleProvider
+      defaultLocale={defaultLocale}
+      availableLocales={availableLocales}
       storeSlug={storeSlug}
-      initialTableNumber={tableNumber}
-      initialOrderType={initialOrderType}
     >
       {children}
-    </PublicMenuProvider>
+    </GuestLocaleProvider>
   );
+}
+
+/** Reads ?table=&mode= after mount — kept in a tiny Suspense boundary so the shell hydrates cleanly. */
+function GuestMenuSearchParamsSync() {
+  const searchParams = useSearchParams();
+  const publicMenu = usePublicMenuOptional();
+  const setTableNumber = publicMenu?.setTableNumber;
+  const lockTableFromQr = publicMenu?.lockTableFromQr;
+  const setOrderType = publicMenu?.setOrderType;
+  const tableLocked = publicMenu?.tableLocked ?? false;
+  const currentTable = publicMenu?.tableNumber ?? "";
+
+  useEffect(() => {
+    if (!setTableNumber || !setOrderType) return;
+
+    const tableNumber = searchParams.get("table") ?? "";
+    const mode = searchParams.get("mode");
+    const orderType =
+      mode === "pickup"
+        ? "pickup"
+        : mode === "dine-in" || mode === "on_site"
+          ? "dine-in"
+          : tableNumber.trim() || (tableLocked && currentTable.trim())
+            ? "dine-in"
+            : "pickup";
+
+    if (tableNumber.trim() && lockTableFromQr) {
+      lockTableFromQr(tableNumber);
+    } else if (tableNumber.trim()) {
+      setTableNumber(tableNumber);
+    } else if (!tableLocked) {
+      setTableNumber("");
+    }
+    setOrderType(orderType);
+  }, [
+    searchParams,
+    setTableNumber,
+    lockTableFromQr,
+    setOrderType,
+    tableLocked,
+    currentTable,
+  ]);
+
+  return null;
 }
 
 export function PublicMenuStoreProvider({
@@ -44,16 +78,17 @@ export function PublicMenuStoreProvider({
   children: ReactNode;
 }) {
   return (
-    <GuestLocaleProvider>
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        }
-      >
-        <PublicMenuProviderInner storeSlug={storeSlug}>{children}</PublicMenuProviderInner>
-      </Suspense>
-    </GuestLocaleProvider>
+    <PublicMenuProvider
+      storeSlug={storeSlug}
+      initialTableNumber=""
+      initialOrderType="pickup"
+    >
+      <GuestLocaleFromMerchant>
+        <Suspense fallback={null}>
+          <GuestMenuSearchParamsSync />
+        </Suspense>
+        {children}
+      </GuestLocaleFromMerchant>
+    </PublicMenuProvider>
   );
 }

@@ -21,7 +21,7 @@ function buildNotificationBody(input: IncomingOrderPushPayload): string {
       ? "Pickup"
       : input.orderType === "delivery"
         ? "Delivery"
-        : "Counter";
+        : "Table";
   return `${typeLabel} · ${input.itemCount} ${input.itemCount === 1 ? "item" : "items"}`;
 }
 

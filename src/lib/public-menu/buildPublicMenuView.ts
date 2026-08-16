@@ -9,17 +9,21 @@ import {
   items,
   categories,
   customizationGroups,
+  itemCustomizations,
   menus,
   conditionalPrices,
   secondaryGroupRules,
 } from "@/db/schema";
-import { merchantLocations, merchants, normalizeLoyaltySettings } from "@/lib/db/schema";
+import { merchantLocations, merchants, normalizeLoyaltySettings, tables as tablesTable } from "@/lib/db/schema";
 import type { PublicMenuView } from "@/lib/public-menu/types";
 import { listActivePublicLoyaltyRewards } from "@/lib/loyalty/listActivePublicLoyaltyRewards";
+import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
+import { attachGuestPromotionsCategory } from "@/lib/promotions/promotions-category";
 import { coerceTaxRatePercent } from "@/lib/tax-rate";
 import {
   openingHoursToGuestHours,
   resolveActiveMenu,
+  isItemAvailableNow,
 } from "@/lib/public-menu/resolveActiveMenu";
 import {
   facebookProfileUrl,
@@ -33,6 +37,34 @@ import type {
   GuestRestaurant,
 } from "@/lib/guest-menu/types";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { normalizeAvailableGuestLocales } from "@/lib/merchant-localization";
+import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
+import { withDbRetry } from "@/lib/db/withDbRetry";
+
+function isLebanonCountry(country: string | null | undefined): boolean {
+  const normalized = (country ?? "").trim().toLowerCase();
+  return normalized === "lb" || normalized === "lebanon";
+}
+
+/** Guest-visible address line; Lebanon omits postal code. */
+function formatGuestAddress(location: {
+  address: string | null;
+  addressLine2: string | null;
+  postalCode: string | null;
+  city: string | null;
+  country: string | null;
+}): string {
+  const street = location.address?.trim() || "";
+  const apartment = location.addressLine2?.trim() || "";
+  const city = location.city?.trim() || "";
+
+  if (isLebanonCountry(location.country)) {
+    return [street, apartment, city].filter(Boolean).join(", ");
+  }
+
+  const cityLine = `${location.postalCode?.trim() ?? ""} ${city}`.trim();
+  return [street, apartment, cityLine].filter(Boolean).join(", ");
+}
 
 function mapCategory(row: {
   id: string;
@@ -68,6 +100,8 @@ type RawItem = {
   status: string | null;
   featured?: boolean | null;
   displayOrder?: number | null;
+  useCustomHours?: boolean | null;
+  customSchedule?: unknown;
   categoryItems?: Array<{ category: { id: string } }>;
   itemTags?: Array<{ tag: { name: string; i18n?: unknown } }>;
   itemCustomizations?: Array<{ group: { id: string } }>;
@@ -89,7 +123,8 @@ function buildGuestMenuItems(
 
   // rawItems are already ordered by displayOrder desc, createdAt desc
   for (const item of rawItems) {
-    if (item.status === "draft" || item.status === "hidden") continue;
+    if (item.status === "draft" || item.status === "hidden") continue
+    if (!isItemAvailableNow(item.useCustomHours, item.customSchedule)) continue;
 
     const categoryIds =
       item.categoryItems?.map((ci) => ci.category.id).filter(Boolean) ?? [];
@@ -147,6 +182,12 @@ function buildGuestMenuItems(
 export async function buildPublicMenuView(
   storeSlug: string,
 ): Promise<PublicMenuView | null> {
+  return withDbRetry(() => buildPublicMenuViewOnce(storeSlug));
+}
+
+async function buildPublicMenuViewOnce(
+  storeSlug: string,
+): Promise<PublicMenuView | null> {
   const location = await db.query.merchantLocations.findFirst({
     where: eq(merchantLocations.storeSlug, storeSlug),
     columns: {
@@ -158,6 +199,7 @@ export async function buildPublicMenuView(
       addressLine2: true,
       postalCode: true,
       city: true,
+      country: true,
       phone: true,
       websiteUrl: true,
       instagramHandle: true,
@@ -183,29 +225,9 @@ export async function buildPublicMenuView(
         ? ("location_inactive" as const)
         : null;
 
-  const addressParts = [
-    location.address,
-    location.addressLine2,
-    `${location.postalCode} ${location.city}`.trim(),
-  ].filter(Boolean);
+  const guestAddress = formatGuestAddress(location);
 
-  const restaurant: GuestRestaurant = {
-    name: location.name,
-    description: location.description ?? "",
-    bannerUrl: location.bannerUrl ?? "/banner.jpg",
-    logoUrl: location.logoUrl ?? "/logo.jpg",
-    address: addressParts.join(", "),
-    phone: location.phone,
-    website: location.websiteUrl?.replace(/^https?:\/\//, "") ?? "",
-    hours: openingHoursToGuestHours(location.openingHours),
-    social: {
-      instagramUrl: instagramProfileUrl(location.instagramHandle),
-      facebookUrl: facebookProfileUrl(location.facebookUrl),
-      tiktokUrl: tiktokProfileUrl(location.tiktokHandle),
-    },
-  };
-
-  const [menuRows, rawCategories, rawGroups, merchantRow] = await Promise.all([
+  const [menuRows, rawCategories, rawGroups, merchantRow, locationTables] = await Promise.all([
     db.query.menus.findMany({
       where: and(eq(menus.locationId, location.id), eq(menus.status, "active")),
       orderBy: [asc(menus.displayOrder), desc(menus.createdAt)],
@@ -258,9 +280,47 @@ export async function buildPublicMenuView(
     }),
     db.query.merchants.findFirst({
       where: eq(merchants.id, location.merchantId),
-      columns: { loyaltySettings: true },
+      columns: {
+        loyaltySettings: true,
+        logoUrl: true,
+        bannerUrl: true,
+        defaultCurrency: true,
+        defaultLanguage: true,
+        availableLanguages: true,
+        dateFormat: true,
+        numberFormat: true,
+      },
+    }),
+    db.query.tables.findMany({
+      where: eq(tablesTable.locationId, location.id),
+      orderBy: [asc(tablesTable.tableNumber)],
+      columns: { id: true, tableNumber: true },
     }),
   ]);
+
+  const restaurant: GuestRestaurant = {
+    name: location.name,
+    description: location.description ?? "",
+    bannerUrl: location.bannerUrl ?? merchantRow?.bannerUrl ?? null,
+    logoUrl: location.logoUrl ?? merchantRow?.logoUrl ?? null,
+    address: guestAddress,
+    phone: location.phone,
+    website: location.websiteUrl?.replace(/^https?:\/\//, "") ?? "",
+    hours: openingHoursToGuestHours(location.openingHours),
+    social: {
+      instagramUrl: instagramProfileUrl(location.instagramHandle),
+      facebookUrl: facebookProfileUrl(location.facebookUrl),
+      tiktokUrl: tiktokProfileUrl(location.tiktokHandle),
+    },
+    currency: (merchantRow?.defaultCurrency ?? "").trim().toUpperCase(),
+    defaultLanguage: merchantRow?.defaultLanguage?.trim() || "en-US",
+    availableLanguages: normalizeAvailableGuestLocales(
+      merchantRow?.availableLanguages,
+      merchantRow?.defaultLanguage,
+    ),
+    dateFormat: merchantRow?.dateFormat ?? "DD/MM/YYYY",
+    numberFormat: merchantRow?.numberFormat ?? "1.234,56",
+  };
 
   const loyalty = normalizeLoyaltySettings(merchantRow?.loyaltySettings);
   const rewards =
@@ -289,6 +349,8 @@ export async function buildPublicMenuView(
       status: true,
       featured: true,
       displayOrder: true,
+      useCustomHours: true,
+      customSchedule: true,
     },
     with: {
       categoryItems: {
@@ -296,6 +358,7 @@ export async function buildPublicMenuView(
       },
       itemTags: { with: { tag: { columns: { name: true, i18n: true } } } },
       itemCustomizations: {
+        orderBy: [asc(itemCustomizations.displayOrder), asc(itemCustomizations.createdAt)],
         with: { group: { columns: { id: true } } },
       },
     },
@@ -319,6 +382,24 @@ export async function buildPublicMenuView(
       null,
     ));
   }
+
+  const promoByItem = await resolveItemPromos(
+    location.id,
+    new Map(guestItems.map((item) => [item.id, item.price])),
+  );
+  guestItems = guestItems.map((item) => {
+    const promo = promoByItem.get(item.id);
+    if (!promo) return item;
+    return {
+      ...item,
+      price: promo.price,
+      compareAtPrice: promo.compareAtPrice,
+      promoKind: promo.kind,
+    };
+  });
+
+  ({ categories: visibleCategories, items: guestItems } =
+    attachGuestPromotionsCategory(visibleCategories, guestItems));
 
   const optionIds = rawGroups.flatMap((group) =>
     group.options.map((option) => option.id),
@@ -454,6 +535,21 @@ export async function buildPublicMenuView(
       pickup: { enabled: true },
       delivery: { enabled: false },
     },
+    tables:
+      resolveGuestSessionMode(location.orderModes) === "staff_seated"
+        ? locationTables
+            .map((row) => ({
+              id: row.id,
+              tableNumber: row.tableNumber.trim(),
+            }))
+            .filter((row) => row.tableNumber.length > 0)
+            .sort((a, b) =>
+              a.tableNumber.localeCompare(b.tableNumber, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              }),
+            )
+        : [],
     activeMenuId: activeMenu?.id ?? null,
     activeMenuName: activeMenu?.name ?? null,
     loyaltySettings: {
@@ -468,16 +564,18 @@ export async function buildPublicMenuView(
 }
 
 export async function resolvePublicLocationBySlug(storeSlug: string) {
-  return db.query.merchantLocations.findFirst({
-    where: eq(merchantLocations.storeSlug, storeSlug),
-    columns: {
-      id: true,
-      storeSlug: true,
-      enableOnlineOrders: true,
-      status: true,
-      orderModes: true,
-      taxRate: true,
-      serviceChargePercentage: true,
-    },
-  });
+  return withDbRetry(() =>
+    db.query.merchantLocations.findFirst({
+      where: eq(merchantLocations.storeSlug, storeSlug),
+      columns: {
+        id: true,
+        storeSlug: true,
+        enableOnlineOrders: true,
+        status: true,
+        orderModes: true,
+        taxRate: true,
+        serviceChargePercentage: true,
+      },
+    }),
+  );
 }

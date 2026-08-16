@@ -44,43 +44,55 @@ import { useStationSettingsView } from "@/lib/hooks/useStationSettingsView"
 import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
 
-const menuItemSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1, "Name is required").max(50),
-  description: z.string().max(260).optional().nullable(),
-  nameAr: z.string().max(50).optional(),
-  descriptionAr: z.string().max(260).optional().nullable(),
-  price: z.number().min(0),
-  currency: z.string(),
-  image: z.string().optional().nullable(),
-  status: z.enum(["live", "draft", "hidden", "soldout"]),
-  featured: z.boolean().optional().default(false),
-  categories: z.array(z.string()).min(1, "At least one category is required"),
-  tags: z.array(z.string()).optional().default([]),
-  dietaryTags: z.array(z.enum(["vegetarian", "vegan", "gluten-free"])).optional().default([]),
-  customizationGroups: z.array(z.string()).optional().default([]),
-  availabilityMode: z.enum(["menu-hours", "custom"]),
-  customSchedule: z
-    .array(
-      z.object({
-        days: z.array(z.number()),
-        startTime: z.string(),
-        endTime: z.string(),
-      }),
-    )
-    .optional()
-    .nullable(),
-  soldOutUntil: z.date().nullable().optional(),
-  nutrition: z
-    .object({
-      calories: z.number().optional().nullable(),
-      allergens: z.array(z.string()).optional().default([]),
-    })
-    .optional()
-    .nullable(),
-  defaultStation: z.string().max(50).optional().nullable(),
-  defaultSubstation: z.string().max(50).optional().nullable(),
-})
+const menuItemSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1, "Name is required").max(50),
+    description: z.string().max(260).optional().nullable(),
+    nameAr: z.string().max(50).optional(),
+    descriptionAr: z.string().max(260).optional().nullable(),
+    price: z.number().min(0),
+    currency: z.string(),
+    image: z.string().optional().nullable(),
+    status: z.enum(["live", "draft", "hidden", "soldout"]),
+    featured: z.boolean().optional().default(false),
+    categories: z.array(z.string()).min(1, "At least one category is required"),
+    tags: z.array(z.string()).optional().default([]),
+    dietaryTags: z.array(z.enum(["vegetarian", "vegan", "gluten-free"])).optional().default([]),
+    customizationGroups: z.array(z.string()).optional().default([]),
+    availabilityMode: z.enum(["menu-hours", "custom"]),
+    customSchedule: z
+      .array(
+        z.object({
+          days: z.array(z.number()),
+          startTime: z.string(),
+          endTime: z.string(),
+        }),
+      )
+      .optional()
+      .nullable(),
+    soldOutUntil: z.date().nullable().optional(),
+    nutrition: z
+      .object({
+        calories: z.number().optional().nullable(),
+        allergens: z.array(z.string()).optional().default([]),
+      })
+      .optional()
+      .nullable(),
+    defaultStation: z.string().max(50).optional().nullable(),
+    defaultSubstation: z.string().max(50).optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.availabilityMode !== "custom") return
+    const hasDays = (data.customSchedule ?? []).some((block) => (block.days ?? []).length > 0)
+    if (!hasDays) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["customSchedule"],
+        message: "Select at least one day for custom hours",
+      })
+    }
+  })
 
 type MenuItemFormValues = z.infer<typeof menuItemSchema>
 
@@ -114,8 +126,25 @@ const getOrderedTimeSlots = (selectedTime: string) => {
   return [...timesAfterSelected, ...timesBeforeSelected]
 }
 
+function formatMenuSchedulePreview(
+  schedule: Array<{ days: number[]; startTime: string; endTime: string }> | undefined,
+): string {
+  if (!schedule || schedule.length === 0) return "All day"
+  return schedule
+    .map((block) => {
+      const days = [...(block.days ?? [])]
+        .sort((a, b) => a - b)
+        .map((day) => dayNames[day])
+        .filter(Boolean)
+        .join(", ")
+      const hours = `${block.startTime} – ${block.endTime}`
+      return days ? `${days}: ${hours}` : hours
+    })
+    .join(" · ")
+}
+
 export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories }: ItemDrawerProps) {
-  const { locationId, customizationGroups, createCustomizationGroup, updateCustomizationGroup, deleteCustomizationGroup } = useMenu()
+  const { locationId, customizationGroups, menus, categories: locationCategories, createCustomizationGroup, updateCustomizationGroup, deleteCustomizationGroup } = useMenu()
   const { kdsEnabled } = useMerchantKdsEnabled()
   const { view: stationView } = useStationSettingsView(kdsEnabled ? locationId : null)
   const activeStations = stationView?.stations?.filter((s) => s.isActive) ?? []
@@ -487,6 +516,19 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
   const dietaryTagsValue = form.watch("dietaryTags")
   const tagsValue = form.watch("tags")
   const customScheduleValue = form.watch("customSchedule")
+  const selectedCategoryIds = form.watch("categories") ?? []
+
+  const linkedMenus = React.useMemo(() => {
+    const selected = new Set(selectedCategoryIds)
+    const menuIds = new Set<string>()
+    for (const category of locationCategories) {
+      if (!selected.has(category.id)) continue
+      for (const menuId of category.menuIds ?? []) {
+        menuIds.add(menuId)
+      }
+    }
+    return menus.filter((menu) => menuIds.has(menu.id))
+  }, [selectedCategoryIds, locationCategories, menus])
 
   const toggleDay = (scheduleIndex: number, day: number) => {
     const currentDays = customScheduleValue?.[scheduleIndex]?.days || []
@@ -1200,20 +1242,35 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                           Automatically available during assigned menu schedules
                         </p>
                         <div className="mt-3 space-y-2 rounded-lg bg-white dark:bg-slate-950 p-3 border dark:border-slate-800">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                              <span className="size-2 rounded-full bg-green-500"></span>
-                              Lunch Menu
-                            </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">11:00 AM - 4:00 PM</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                              <span className="size-2 rounded-full bg-blue-500"></span>
-                              Dinner Menu
-                            </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">4:00 PM - 11:00 PM</span>
-                          </div>
+                          {selectedCategoryIds.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              Assign a category to see which menu hours this item follows.
+                            </p>
+                          ) : linkedMenus.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              This item&apos;s categories are not linked to a menu yet.
+                            </p>
+                          ) : (
+                            linkedMenus.map((menu) => (
+                              <div key={menu.id} className="flex items-start justify-between gap-3 text-sm">
+                                <span className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                                  <span
+                                    className={cn(
+                                      "size-2 rounded-full",
+                                      menu.isActive ? "bg-green-500" : "bg-gray-400",
+                                    )}
+                                  />
+                                  {menu.name}
+                                  {!menu.isActive ? (
+                                    <span className="text-xs text-muted-foreground">(inactive)</span>
+                                  ) : null}
+                                </span>
+                                <span className="text-right font-medium text-gray-900 dark:text-gray-100">
+                                  {formatMenuSchedulePreview(menu.schedule)}
+                                </span>
+                              </div>
+                            ))
+                          )}
                         </div>
                       </div>
                     </label>
@@ -1247,6 +1304,12 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
 
                   {availabilityModeValue === "custom" && (
                     <div className="space-y-4">
+                      {form.formState.errors.customSchedule && (
+                        <p className="text-sm text-destructive">
+                          {form.formState.errors.customSchedule.message ??
+                            "Select at least one day for custom hours"}
+                        </p>
+                      )}
                       <div className="rounded-lg border-2 border-orange-200 dark:border-orange-900 bg-orange-50/30 dark:bg-orange-950/20 p-4 space-y-4">
                         <div className="flex items-center justify-between">
                           <h4 className="font-semibold text-sm">Custom Time Blocks</h4>

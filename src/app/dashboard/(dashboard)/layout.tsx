@@ -15,10 +15,6 @@ const DashboardHeader = dynamic(
   () => import("@/components/dashboard-header").then((mod) => mod.DashboardHeader),
   { ssr: false }
 )
-const FloatingActionButton = dynamic(
-  () => import("@/components/floating-action-button").then((mod) => mod.FloatingActionButton),
-  { ssr: false }
-)
 const CommandPalette = dynamic(
   () => import("@/components/command-palette").then((mod) => mod.CommandPalette),
   { ssr: false }
@@ -105,15 +101,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     <TenantProvider initialMerchants={merchantMemberships} userId={userId}>
       <LocationProvider>
       <RestaurantHydrationRunner />
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full">
+      <SidebarProvider className="h-svh max-h-svh overflow-hidden">
+        <div className="flex h-full min-h-0 w-full overflow-hidden">
           <AppSidebar />
-          <SidebarInset className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <SidebarInset className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <DashboardHeader />
-            <main className="flex min-h-0 flex-1 flex-col gap-4 min-w-0 overflow-hidden" aria-label="Main content">
+            <main className="flex min-h-0 flex-1 flex-col min-w-0 overflow-hidden" aria-label="Main content">
               {children}
             </main>
-            <FloatingActionButton />
             <CommandPalette />
           </SidebarInset>
         </div>

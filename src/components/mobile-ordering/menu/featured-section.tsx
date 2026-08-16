@@ -7,6 +7,9 @@ import { Plus, Minus, Trash2 } from "lucide-react";
 import type { MenuItem, CartItem } from "@/lib/menu-data";
 import { resolveCatalogText } from "@/lib/catalog-i18n";
 import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
+import { PromoPrice } from "@/components/shared/promo-price";
+import { cartQuantityForCatalogItem } from "@/lib/public-menu/guest-cart-lines";
 
 interface FeaturedSectionProps {
   items: MenuItem[];
@@ -25,6 +28,7 @@ export function FeaturedSection({
 }: FeaturedSectionProps) {
   const t = useGuestT();
   const { locale } = useGuestLocale();
+  const { formatMoney } = useGuestLocalization();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [pressedItems, setPressedItems] = useState<Set<string>>(new Set());
 
@@ -53,8 +57,7 @@ export function FeaturedSection({
         className="flex gap-2 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:pb-0 lg:grid-cols-4 lg:gap-8 xl:grid-cols-5"
       >
         {items.map((item) => {
-          const cartItem = cartItems.find((c) => c.id === item.id);
-          const quantity = cartItem?.quantity || 0;
+          const quantity = cartQuantityForCatalogItem(cartItems, item.id);
           const isPressed = pressedItems.has(item.id);
           const localized = resolveCatalogText(
             locale,
@@ -150,7 +153,13 @@ export function FeaturedSection({
                   {localized.description}
                 </p>
                 <p className="text-sm font-semibold text-foreground mt-1">
-                  €{item.price.toFixed(2)}
+                  <PromoPrice
+                    price={item.price}
+                    compareAtPrice={item.compareAtPrice}
+                    promoKind={item.promoKind}
+                    formatMoney={formatMoney}
+                    bogoLabel={t("menu.bogo")}
+                  />
                 </p>
               </div>
             </div>

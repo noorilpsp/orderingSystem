@@ -4,12 +4,14 @@ import { useState, useCallback } from "react"
 import { CustomizationsContent } from "@/components/customizations-content"
 import { CustomizationDrawer } from "@/components/customization-drawer"
 import { CustomizationsToolbar } from "@/components/customizations-toolbar"
+import { CustomizationImportModal } from "@/components/modals/customization-import-modal"
 import { useMenu } from "../menu-context"
 import {
   CUSTOMIZATION_TEMPLATES,
   customizationGroupFromTemplate,
 } from "@/lib/menu/customization-templates"
 import { applyCustomizationTemplatePack } from "@/lib/menu/customization-template-packs"
+import { downloadCustomizationGroupsCsv } from "@/lib/menu/export-customizations"
 import { toast } from "sonner"
 import type { CustomizationGroup } from "@/types/customization"
 
@@ -20,10 +22,12 @@ export default function MenuCustomizationsPage() {
     updateCustomizationGroup,
     deleteCustomizationGroup,
     duplicateCustomizationGroup,
+    importCustomizationGroups,
   } = useMenu()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<CustomizationGroup | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [importOpen, setImportOpen] = useState(false)
 
   const handleCreateGroup = useCallback(() => {
     setEditingGroup(null)
@@ -151,6 +155,14 @@ export default function MenuCustomizationsPage() {
     setEditingGroup(null)
   }
 
+  const handleExportCsv = useCallback(() => {
+    if (customizationGroups.length === 0) {
+      toast.error("No customization groups to export")
+      return
+    }
+    downloadCustomizationGroupsCsv(customizationGroups)
+  }, [customizationGroups])
+
   const filteredGroups = customizationGroups.filter((group) =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase()),
   )
@@ -169,6 +181,8 @@ export default function MenuCustomizationsPage() {
           <CustomizationsToolbar
             onCreateGroup={handleCreateGroup}
             onSearch={setSearchQuery}
+            onImportCsv={() => setImportOpen(true)}
+            onExportCsv={handleExportCsv}
             totalGroups={customizationGroups.length}
           />
 
@@ -191,6 +205,13 @@ export default function MenuCustomizationsPage() {
         onSave={handleSaveGroup}
         onDelete={handleDeleteGroup}
         availableGroups={customizationGroups}
+      />
+
+      <CustomizationImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        existingGroupNames={customizationGroups.map((group) => group.name)}
+        onImport={importCustomizationGroups}
       />
     </div>
   )

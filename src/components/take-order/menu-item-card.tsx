@@ -1,10 +1,12 @@
 "use client"
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import { AlertTriangle, Flame } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { formatCurrency, dietaryIcons } from "@/lib/take-order-data"
+import { dietaryIcons } from "@/lib/take-order-data"
 import type { MenuItem } from "@/lib/take-order-data"
+import { PromoPrice } from "@/components/shared/promo-price"
 
 interface MenuItemCardProps {
   item: MenuItem
@@ -21,6 +23,7 @@ export function MenuItemCard({
   density = "default",
   onClick,
 }: MenuItemCardProps) {
+  const { formatMoney } = useMerchantLocalization()
   const isUnavailable = !item.available
   const isCompact = density === "compact"
 
@@ -77,7 +80,14 @@ export function MenuItemCard({
       <div className={cn("flex flex-1 flex-col p-3", isCompact ? "gap-1 p-2.5" : "gap-1.5")}>
         <div className="flex items-start justify-between gap-2">
           <h3 className={cn("font-semibold leading-tight", isCompact ? "text-sm" : "text-base")}>{item.name}</h3>
-          <span className={cn("shrink-0 font-bold", isCompact ? "text-sm" : "text-base")}>{formatCurrency(item.price)}</span>
+          <PromoPrice
+            price={item.price}
+            compareAtPrice={item.compareAtPrice}
+            promoKind={item.promoKind}
+            formatMoney={formatMoney}
+            bogoLabel="BOGO"
+            className={cn("shrink-0", isCompact ? "text-sm" : "text-base")}
+          />
         </div>
 
         {categoryLabel && (

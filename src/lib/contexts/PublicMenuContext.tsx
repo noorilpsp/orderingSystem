@@ -23,17 +23,34 @@ import {
   categories as demoCategories,
   menuItems as demoMenuItems,
 } from "@/lib/menu-data-static";
-import type { PublicMenuLoyaltySettings, PublicMenuReward, PublicMenuView } from "@/lib/public-menu/types";
+import type {
+  PublicMenuLoyaltySettings,
+  PublicMenuReward,
+  PublicMenuTable,
+  PublicMenuView,
+} from "@/lib/public-menu/types";
 import {
   buildRewardCartLine,
   findRewardInCart,
   isRewardCartLine,
 } from "@/lib/public-menu/guest-reward-cart";
 import {
+  decrementGuestCartLine,
+  mergeGuestCartAdd,
+  replaceGuestCartItem,
+} from "@/lib/public-menu/guest-cart-lines";
+import {
+  clearGuestCart,
+  pruneGuestCartAgainstMenu,
+  readGuestCart,
+  writeGuestCart,
+} from "@/lib/public-menu/guest-cart-storage";
+import {
   clearSelectedRewardId,
   readSelectedRewardId,
   writeSelectedRewardId,
 } from "@/lib/public-menu/guest-reward-storage";
+import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
 import { buildGuestMenuQueryString } from "@/lib/public-menu/buildPublicMenuUrl";
 import {
   buildGuestIdempotencyKey,
@@ -43,7 +60,9 @@ import {
 } from "@/lib/public-menu/guest-order-placement";
 import {
   getOrCreateGuestDeviceId,
+  readGuestTableLock,
   writeGuestSeat,
+  writeGuestTableLock,
   type StoredGuestSeat,
 } from "@/lib/public-menu/guest-seat-storage";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
@@ -93,13 +112,19 @@ type PublicMenuContextValue = {
   items: GuestMenuItem[];
   customizationGroups: GuestCustomizationGroup[];
   orderModes: GuestOrderModes;
+  /** Configured tables for delivery-to-table checkout. */
+  tables: PublicMenuTable[];
   /** Sales tax percent (e.g. 21 = 21%). Defaults to 21 when menu not loaded. */
   taxRate: number;
   cart: GuestCartItem[];
   orderType: OrderType;
   tableNumber: string;
+  /** True when the guest joined via table QR (or already claimed a seat) — Change table is blocked. */
+  tableLocked: boolean;
   setOrderType: (type: OrderType) => void;
   setTableNumber: (table: string) => void;
+  /** Lock the guest to a table from a QR / ?table= deep link. */
+  lockTableFromQr: (table: string) => void;
   addToCart: (item: GuestMenuItem | GuestCartItem) => void;
   addRewardToCart: (reward: PublicMenuReward) => void;
   removeFromCart: (itemId: string) => void;
@@ -112,7 +137,10 @@ type PublicMenuContextValue = {
   rewardsPath: string;
   ordersPath: string;
   accountPath: string;
-  callTableService: (requestType: "waiter" | "bill") => Promise<{ ok: boolean; message: string }>;
+  callTableService: (
+    requestType: "waiter" | "bill",
+    options?: { tableNumber?: string },
+  ) => Promise<{ ok: boolean; message: string }>;
   refetch: () => Promise<void>;
   guestOrderPlacement: GuestOrderPlacementState | null;
   placeGuestOrder: (request: GuestOrderPlacementRequest) => string;
@@ -121,7 +149,7 @@ type PublicMenuContextValue = {
   guestSeatLoading: boolean;
   guestSeatError: string | null;
   guestDeviceId: string;
-  claimGuestSeat: () => Promise<void>;
+  claimGuestSeat: () => Promise<GuestSeatState | null>;
   updateGuestSeatName: (name: string | null) => Promise<{ ok: boolean; message?: string }>;
   changeGuestSeat: (targetSeatNumber?: number) => Promise<{ ok: boolean; message?: string }>;
   fetchTableSeats: () => Promise<GuestTableSeatOption[]>;
@@ -167,8 +195,10 @@ export function PublicMenuProvider({
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<PublicMenuView | null>(null);
   const [cart, setCart] = useState<GuestCartItem[]>([]);
+  const [hydratedCartSlug, setHydratedCartSlug] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
-  const [tableNumber, setTableNumber] = useState(initialTableNumber);
+  const [tableNumber, setTableNumberState] = useState(initialTableNumber);
+  const [tableLockedFromQr, setTableLockedFromQr] = useState(false);
   const [guestOrderPlacement, setGuestOrderPlacement] =
     useState<GuestOrderPlacementState | null>(null);
   const [guestSeat, setGuestSeat] = useState<GuestSeatState | null>(null);
@@ -195,6 +225,16 @@ export function PublicMenuProvider({
   useEffect(() => {
     setGuestDeviceId(getOrCreateGuestDeviceId());
   }, []);
+
+  useEffect(() => {
+    setCart(readGuestCart(storeSlug));
+    setHydratedCartSlug(storeSlug);
+  }, [storeSlug]);
+
+  useEffect(() => {
+    if (hydratedCartSlug !== storeSlug) return;
+    writeGuestCart(storeSlug, cart);
+  }, [cart, hydratedCartSlug, storeSlug]);
 
   const refetchCustomer = useCallback(async () => {
     if (storeSlug === "demo") {
@@ -298,17 +338,61 @@ export function PublicMenuProvider({
   }, [clearOrderHistory, customer, customerLoading, refetchOrderHistory]);
 
   const logoutCustomer = useCallback(async () => {
+    // Clear before the server redirect: PublicMenuProvider lives in the menu
+    // layout and survives soft navigation, so stale customer would otherwise stick.
     clearOrderHistory();
-    await customerLogout(accountReturnTo);
-  }, [accountReturnTo, clearOrderHistory]);
+    setCustomer(null);
+    setCustomerLoading(false);
+    const query = buildGuestMenuQueryString({ tableNumber, mode: orderType });
+    await customerLogout(`/menu/${storeSlug}/account${query}`);
+  }, [clearOrderHistory, orderType, storeSlug, tableNumber]);
 
   useEffect(() => {
-    setTableNumber(initialTableNumber);
+    setTableNumberState(initialTableNumber);
   }, [initialTableNumber]);
 
   useEffect(() => {
     setOrderType(initialOrderType);
   }, [initialOrderType]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || storeSlug === "demo") return;
+    const lockedTable = readGuestTableLock(storeSlug);
+    if (!lockedTable) return;
+    setTableLockedFromQr(true);
+    setTableNumberState((prev) => (prev.trim() ? prev : lockedTable));
+  }, [storeSlug]);
+
+  const setTableNumber = useCallback(
+    (table: string) => {
+      const next = table.trim();
+      if (tableLockedFromQr) {
+        const locked = readGuestTableLock(storeSlug) ?? tableNumber.trim();
+        if (locked) {
+          // Stay on the QR table; ignore clears or hops to other tables.
+          if (!next || next !== locked) {
+            setTableNumberState(locked);
+            return;
+          }
+        }
+      }
+      setTableNumberState(next);
+    },
+    [storeSlug, tableLockedFromQr, tableNumber],
+  );
+
+  const lockTableFromQr = useCallback(
+    (table: string) => {
+      const next = table.trim();
+      if (!next) return;
+      writeGuestTableLock(storeSlug, next);
+      setTableLockedFromQr(true);
+      setTableNumberState(next);
+    },
+    [storeSlug],
+  );
+
+  const tableLocked = tableLockedFromQr || guestSeat != null;
 
   const guestQuery = useMemo(
     () => buildGuestMenuQueryString({ tableNumber, mode: orderType }),
@@ -343,15 +427,28 @@ export function PublicMenuProvider({
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        const message =
-          (payload as { message?: string } | null)?.message ?? "Failed to load menu";
-        throw new Error(message);
+        const raw =
+          (payload as { error?: { message?: string }; message?: string } | null)
+            ?.error?.message ??
+          (payload as { message?: string } | null)?.message ??
+          "Failed to load menu";
+        throw new Error(
+          toUserFacingErrorMessage(
+            raw,
+            "Connection is slow or unstable. Please try again.",
+          ),
+        );
       }
       const parsed = unwrapPublicMenuResponse(payload);
       if (!parsed) throw new Error("Invalid menu response");
       setView(parsed);
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : "Failed to load menu");
+      setError(
+        toUserFacingErrorMessage(
+          fetchError,
+          "Connection is slow or unstable. Please try again.",
+        ),
+      );
       setView(null);
     } finally {
       setLoading(false);
@@ -384,28 +481,7 @@ export function PublicMenuProvider({
       "quantity" in item && typeof item.quantity === "number" && item.quantity > 0
         ? Math.floor(item.quantity)
         : 1;
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((cartItem) => cartItem.id === item.id);
-      if (existingItem) {
-        const isUpdatingCustomizations =
-          "selectedOptions" in item ||
-          "sauceQuantities" in item ||
-          "specialInstructions" in item;
-        if (isUpdatingCustomizations) {
-          return prevCart.map((cartItem) =>
-            cartItem.id === item.id
-              ? ({ ...item, quantity: incomingQty } as GuestCartItem)
-              : cartItem,
-          );
-        }
-        return prevCart.map((cartItem) =>
-          cartItem.id === item.id
-            ? { ...cartItem, quantity: cartItem.quantity + incomingQty }
-            : cartItem,
-        );
-      }
-      return [...prevCart, { ...item, quantity: incomingQty } as GuestCartItem];
-    });
+    setCart((prevCart) => mergeGuestCartAdd(prevCart, item, incomingQty));
   }, []);
 
   const addRewardToCart = useCallback(
@@ -423,35 +499,31 @@ export function PublicMenuProvider({
   const removeFromCart = useCallback(
     (itemId: string) => {
       setCart((prevCart) => {
-        const existingItem = prevCart.find((cartItem) => cartItem.id === itemId);
-        if (!existingItem) return prevCart;
-
-        if (isRewardCartLine(existingItem)) {
-          clearSelectedRewardId(storeSlug);
-          return prevCart.filter((cartItem) => cartItem.id !== itemId);
-        }
-
-        if (existingItem.quantity > 1) {
-          return prevCart.map((cartItem) =>
-            cartItem.id === itemId
-              ? { ...cartItem, quantity: cartItem.quantity - 1 }
-              : cartItem,
-          );
-        }
-        return prevCart.filter((cartItem) => cartItem.id !== itemId);
+        const { cart, removedReward } = decrementGuestCartLine(prevCart, itemId);
+        if (removedReward) clearSelectedRewardId(storeSlug);
+        return cart;
       });
     },
     [storeSlug],
   );
 
   const updateCartItem = useCallback((item: GuestCartItem) => {
-    setCart((prevCart) => prevCart.map((cartItem) => (cartItem.id === item.id ? item : cartItem)));
+    setCart((prevCart) => replaceGuestCartItem(prevCart, item));
   }, []);
 
   const clearCart = useCallback(() => {
     clearSelectedRewardId(storeSlug);
+    clearGuestCart(storeSlug);
     setCart([]);
   }, [storeSlug]);
+
+  useEffect(() => {
+    if (hydratedCartSlug !== storeSlug) return;
+    const menuItems = view?.items ?? [];
+    if (menuItems.length === 0) return;
+    const menuItemIds = new Set(menuItems.map((item) => item.id));
+    setCart((prevCart) => pruneGuestCartAgainstMenu(prevCart, menuItemIds));
+  }, [hydratedCartSlug, storeSlug, view?.items]);
 
   useEffect(() => {
     if (!view?.rewards.length || !view.items.length) return;
@@ -500,21 +572,21 @@ export function PublicMenuProvider({
     [storeSlug],
   );
 
-  const claimGuestSeat = useCallback(async () => {
+  const claimGuestSeat = useCallback(async (): Promise<GuestSeatState | null> => {
     const table = tableNumber.trim();
-    const isSelfPickup =
-      resolveGuestSessionMode(view?.orderModes) === "self_service";
-    // Self pickup dine-in does not seat guests at a table.
+    const guestSessionMode = resolveGuestSessionMode(view?.orderModes);
+    // Seat-per-phone for delivery-to-table (staff_seated). Self-pickup dine-in has no table seats.
     if (
       orderType !== "dine-in" ||
       !table ||
       !guestDeviceId ||
       storeSlug === "demo" ||
-      isSelfPickup
+      guestSessionMode === "self_service"
     ) {
       setGuestSeat(null);
       setGuestSeatError(null);
-      return;
+      setGuestSeatLoading(false);
+      return null;
     }
 
     setGuestSeatLoading(true);
@@ -541,17 +613,20 @@ export function PublicMenuProvider({
       }
 
       const data = payload.data as GuestSeatState & { tableNumber?: string };
-      applyGuestSeat(table, {
+      const seat: GuestSeatState = {
         sessionId: data.sessionId,
         seatId: data.seatId,
         seatNumber: data.seatNumber,
         guestName: data.guestName ?? null,
-      });
+      };
+      applyGuestSeat(table, seat);
+      return seat;
     } catch (claimError) {
       setGuestSeat(null);
       setGuestSeatError(
         claimError instanceof Error ? claimError.message : "Unable to assign a seat",
       );
+      return null;
     } finally {
       setGuestSeatLoading(false);
     }
@@ -661,8 +736,12 @@ export function PublicMenuProvider({
   }, [storeSlug, tableNumber]);
 
   const callTableService = useCallback(
-    async (requestType: "waiter" | "bill") => {
-      if (!tableNumber.trim()) {
+    async (
+      requestType: "waiter" | "bill",
+      options?: { tableNumber?: string },
+    ) => {
+      const table = (options?.tableNumber ?? tableNumber).trim();
+      if (!table) {
         return { ok: false, message: "Table number is required" };
       }
       try {
@@ -671,7 +750,7 @@ export function PublicMenuProvider({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             storeSlug,
-            tableNumber: tableNumber.trim(),
+            tableNumber: table,
             requestType,
           }),
         });
@@ -682,14 +761,19 @@ export function PublicMenuProvider({
             "Request sent";
           return { ok: true, message };
         }
-        const message =
+        const message = toUserFacingErrorMessage(
           (payload as { error?: { message?: string }; message?: string } | null)?.error
             ?.message ??
-          (payload as { message?: string } | null)?.message ??
-          "Failed to send request";
+            (payload as { message?: string } | null)?.message ??
+            "Failed to send request",
+          "Connection is slow or unstable. Please try again.",
+        );
         return { ok: false, message };
       } catch {
-        return { ok: false, message: "Failed to send request" };
+        return {
+          ok: false,
+          message: "Connection is slow or unstable. Please try again.",
+        };
       }
     },
     [storeSlug, tableNumber],
@@ -713,12 +797,15 @@ export function PublicMenuProvider({
     items: view?.items ?? [],
     customizationGroups: view?.customizationGroups ?? [],
     orderModes: view?.orderModes ?? {},
+    tables: view?.tables ?? [],
     taxRate: view?.taxRate ?? 21,
     cart,
     orderType,
     tableNumber,
+    tableLocked,
     setOrderType,
     setTableNumber,
+    lockTableFromQr,
     addToCart,
     addRewardToCart,
     removeFromCart,
@@ -778,46 +865,15 @@ export function StaticDemoMenuProvider({ children }: { children: ReactNode }) {
       "quantity" in item && typeof item.quantity === "number" && item.quantity > 0
         ? Math.floor(item.quantity)
         : 1;
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((cartItem) => cartItem.id === item.id);
-      if (existingItem) {
-        const isUpdatingCustomizations =
-          "selectedOptions" in item ||
-          "sauceQuantities" in item ||
-          "specialInstructions" in item;
-        if (isUpdatingCustomizations) {
-          return prevCart.map((cartItem) =>
-            cartItem.id === item.id
-              ? ({ ...item, quantity: incomingQty } as GuestCartItem)
-              : cartItem,
-          );
-        }
-        return prevCart.map((cartItem) =>
-          cartItem.id === item.id
-            ? { ...cartItem, quantity: cartItem.quantity + incomingQty }
-            : cartItem,
-        );
-      }
-      return [...prevCart, { ...item, quantity: incomingQty } as GuestCartItem];
-    });
+    setCart((prevCart) => mergeGuestCartAdd(prevCart, item, incomingQty));
   }, []);
 
   const removeFromCart = useCallback((itemId: string) => {
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((cartItem) => cartItem.id === itemId);
-      if (existingItem && existingItem.quantity > 1) {
-        return prevCart.map((cartItem) =>
-          cartItem.id === itemId
-            ? { ...cartItem, quantity: cartItem.quantity - 1 }
-            : cartItem,
-        );
-      }
-      return prevCart.filter((cartItem) => cartItem.id !== itemId);
-    });
+    setCart((prevCart) => decrementGuestCartLine(prevCart, itemId).cart);
   }, []);
 
   const updateCartItem = useCallback((item: GuestCartItem) => {
-    setCart((prevCart) => prevCart.map((cartItem) => (cartItem.id === item.id ? item : cartItem)));
+    setCart((prevCart) => replaceGuestCartItem(prevCart, item));
   }, []);
 
   const clearCart = useCallback(() => setCart([]), []);
@@ -839,12 +895,19 @@ export function StaticDemoMenuProvider({ children }: { children: ReactNode }) {
       pickup: { enabled: true },
       delivery: { enabled: false },
     },
+    tables: [
+      { id: "demo-t1", tableNumber: "1" },
+      { id: "demo-t2", tableNumber: "2" },
+      { id: "demo-t3", tableNumber: "5" },
+    ],
     taxRate: 21,
     cart,
     orderType,
     tableNumber,
+    tableLocked: true,
     setOrderType,
     setTableNumber,
+    lockTableFromQr: () => {},
     addToCart,
     addRewardToCart,
     removeFromCart,
@@ -866,7 +929,7 @@ export function StaticDemoMenuProvider({ children }: { children: ReactNode }) {
     guestSeatLoading: false,
     guestSeatError: null,
     guestDeviceId: "demo-device",
-    claimGuestSeat: async () => {},
+    claimGuestSeat: async () => null,
     updateGuestSeatName: async () => ({ ok: true }),
     changeGuestSeat: async () => ({ ok: true }),
     fetchTableSeats: async () => [],

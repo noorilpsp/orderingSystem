@@ -56,7 +56,7 @@
   --z-sticky: 40;
   --z-tab-bar: 45;
   --z-bottom-bar: 50;
-  --z-toast: 60;
+  --z-toast: 120;
   --z-popover: 80;
   --z-modal-backdrop: 110;
   --z-modal-content: 111;
@@ -1365,6 +1365,24 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
     .smart-bottom-bar-grip {
       min-height: unset !important;
       min-width: unset !important;
+    }
+
+    /* Guest split-bill compact controls (payer ×, seat chips) */
+    .guest-bill-compact-btn {
+      min-height: unset !important;
+      min-width: unset !important;
+      height: auto !important;
+      width: auto !important;
+    }
+
+    /* − / + share steppers: keep rounded square, never a circle */
+    .guest-bill-stepper-btn {
+      min-height: unset !important;
+      min-width: unset !important;
+      width: 2rem !important;
+      height: 2rem !important;
+      border-radius: 0.375rem !important;
+      padding: 0 !important;
     }
 
     /* Checkout Order Summary - compact collapse button and controls like checkout-button-design */

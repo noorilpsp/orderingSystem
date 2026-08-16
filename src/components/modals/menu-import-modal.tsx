@@ -247,7 +247,7 @@ export function MenuImportModal({
           <DialogDescription>
             Upload a spreadsheet to bulk-create menu items. The menu column links each item&apos;s
             category to guest menus (semicolon-separated for multiple). Leave menu empty to use the
-            default below.
+            default below. Optional name_ar and description_ar columns set the Arabic guest-menu copy.
           </DialogDescription>
           {menuHint && (
             <p className="text-xs text-muted-foreground pt-1">Menus: {menuHint}</p>
@@ -289,7 +289,7 @@ export function MenuImportModal({
                 </Button>
                 <Button
                   variant="ghost"
-                  onClick={() => downloadMenuImportTemplate(stationCatalog, menuCatalog)}
+                  onClick={() => downloadMenuImportTemplate(stationCatalog, menuCatalog, kdsEnabled)}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download template
@@ -331,6 +331,7 @@ export function MenuImportModal({
                   <tr>
                     <th className="text-left p-2 font-medium">Row</th>
                     <th className="text-left p-2 font-medium">Name</th>
+                    <th className="text-left p-2 font-medium">Arabic</th>
                     <th className="text-left p-2 font-medium">Price</th>
                     <th className="text-left p-2 font-medium">Category</th>
                     <th className="text-left p-2 font-medium">Menu</th>
@@ -361,6 +362,9 @@ export function MenuImportModal({
                       >
                         <td className="p-2">{validation.rowIndex}</td>
                         <td className="p-2">{row?.name ?? "—"}</td>
+                        <td className="p-2 text-xs" dir="auto">
+                          {row?.i18n?.ar?.name ?? "—"}
+                        </td>
                         <td className="p-2">{row?.price ?? "—"}</td>
                         <td className="p-2">{row?.category ?? "—"}</td>
                         <td className="p-2 text-xs">

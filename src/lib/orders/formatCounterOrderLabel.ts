@@ -1,6 +1,7 @@
 /**
  * Staff /orders counter ticket label (PU-xxx / DI-xxx).
  * Matches the display format used on the ops board.
+ * Already-prefixed ticket ids (PU-/DI-/T-) are returned unchanged.
  */
 export function formatCounterOrderLabel(input: {
   orderNumber: string | null | undefined;
@@ -17,7 +18,12 @@ export function formatCounterOrderLabel(input: {
   }
 
   const upper = raw.toUpperCase();
-  if (upper.startsWith("PU-") || upper.startsWith("DI-")) {
+  // Keep explicit ticket formats as stored (including table tickets like T1-4821).
+  if (
+    upper.startsWith("PU-") ||
+    upper.startsWith("DI-") ||
+    /^T[\w-]+$/i.test(raw)
+  ) {
     return raw;
   }
   if (upper.startsWith("PU") || upper.startsWith("DI")) {
@@ -25,5 +31,8 @@ export function formatCounterOrderLabel(input: {
     return raw;
   }
 
-  return `${prefix}-${raw.slice(-3)}`;
+  // Prefer a readable numeric tail when present; otherwise last 4 chars.
+  const digits = raw.replace(/\D/g, "");
+  const tail = digits.length >= 3 ? digits.slice(-4) : raw.slice(-4);
+  return `${prefix}-${tail}`;
 }

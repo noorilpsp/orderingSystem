@@ -14,23 +14,26 @@ const sizeClasses = {
 }
 
 const statusVariants = {
-  // Order statuses
+  // Order statuses (ops-aligned hues: sky / amber / red / emerald / rose / fuchsia)
   pending: "bg-gray-300 text-gray-900 dark:bg-gray-600 dark:text-white",
-  preparing: "bg-blue-500 text-white",
-  served: "bg-green-500 text-white",
-  delivered: "bg-green-500 text-white",
+  new: "bg-sky-500 text-white dark:bg-sky-500/90 dark:text-sky-50",
+  preparing: "bg-amber-500 text-white dark:bg-amber-500/90 dark:text-amber-50",
+  served: "bg-emerald-500 text-white dark:bg-emerald-500/90 dark:text-emerald-50",
+  delivered: "bg-emerald-500 text-white",
   delayed: "bg-red-500 text-white",
-  paid: "bg-green-600 text-white",
-  active: "bg-blue-500 text-white",
-  ready: "bg-green-500 text-white",
+  paid: "bg-emerald-600 text-white",
+  active: "bg-sky-500 text-white",
+  ready: "bg-red-500 text-white dark:bg-red-500/90 dark:text-red-50",
+  voided: "bg-rose-500 text-white dark:bg-rose-500/90 dark:text-rose-50",
+  refunded: "bg-fuchsia-500 text-white dark:bg-fuchsia-500/90 dark:text-fuchsia-50",
 
   // Reservation statuses
   reserved: "bg-yellow-500 text-white dark:bg-yellow-500 dark:text-white",
   confirmed: "bg-blue-500 text-white",
   arrived: "bg-orange-400 text-black dark:bg-orange-300 dark:text-black",
   seated: "bg-green-500 text-white",
-  completed: "bg-slate-500 text-white dark:bg-slate-400 dark:text-white",
-  cancelled: "bg-red-500 text-white",
+  completed: "bg-emerald-500 text-white dark:bg-emerald-500/90 dark:text-emerald-50",
+  cancelled: "bg-rose-500 text-white",
   noShow: "bg-gray-700 text-white dark:bg-gray-500 dark:text-white",
 
   // Table statuses

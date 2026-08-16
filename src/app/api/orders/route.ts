@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, desc, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, gte, lte, inArray } from "drizzle-orm";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { orders, orderItems, orderTimeline, seats } from "@/lib/db/schema/orders";
+import { staff } from "@/lib/db/schema/staff";
+import { users } from "@/db/schema";
 import { devTimer, devSqlLog, devTimeStart, devTimeEnd, runExplain, DEV } from "@/lib/pos/devTimer";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { createOrderFromApi, fireWave } from "@/domain";
@@ -131,11 +133,123 @@ export async function GET(request: NextRequest) {
       limit: 100, // Limit to prevent huge responses
     });
 
+    // Who accepted / started preparing (first preparing timeline entry per order).
+    const orderIds = ordersList.map((order) => order.id);
+    const acceptedByByOrderId = new Map<string, { id: string; fullName: string }>();
+    if (orderIds.length > 0) {
+      const preparingEvents = await db.query.orderTimeline.findMany({
+        where: and(
+          inArray(orderTimeline.orderId, orderIds),
+          eq(orderTimeline.status, "preparing"),
+        ),
+        columns: {
+          orderId: true,
+          changedByStaffId: true,
+          changedByUserId: true,
+          createdAt: true,
+        },
+        with: {
+          changedByStaff: {
+            columns: {
+              id: true,
+              fullName: true,
+            },
+          },
+          changedByUser: {
+            columns: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+        orderBy: [asc(orderTimeline.createdAt)],
+      });
+
+      const missingUserIds = new Set<string>();
+      for (const event of preparingEvents) {
+        if (acceptedByByOrderId.has(event.orderId)) continue;
+        if (event.changedByStaff) {
+          acceptedByByOrderId.set(event.orderId, {
+            id: event.changedByStaff.id,
+            fullName: event.changedByStaff.fullName,
+          });
+          continue;
+        }
+        // Owner/admin accounts often aren't linked to a Staff row — use users.fullName.
+        if (event.changedByUser?.fullName) {
+          acceptedByByOrderId.set(event.orderId, {
+            id: event.changedByUser.id,
+            fullName: event.changedByUser.fullName,
+          });
+          continue;
+        }
+        if (event.changedByUserId) {
+          missingUserIds.add(event.changedByUserId);
+        }
+      }
+
+      if (missingUserIds.size > 0) {
+        const [staffRows, userRows] = await Promise.all([
+          db.query.staff.findMany({
+            where: and(
+              eq(staff.locationId, locationId),
+              inArray(staff.userId, [...missingUserIds]),
+            ),
+            columns: {
+              id: true,
+              fullName: true,
+              userId: true,
+            },
+          }),
+          db.query.users.findMany({
+            where: inArray(users.id, [...missingUserIds]),
+            columns: {
+              id: true,
+              fullName: true,
+            },
+          }),
+        ]);
+
+        const staffByUserId = new Map(
+          staffRows
+            .filter((row): row is typeof row & { userId: string } => !!row.userId)
+            .map((row) => [row.userId, { id: row.id, fullName: row.fullName }] as const),
+        );
+        const userById = new Map(
+          userRows.map((row) => [row.id, { id: row.id, fullName: row.fullName }] as const),
+        );
+
+        for (const event of preparingEvents) {
+          if (acceptedByByOrderId.has(event.orderId)) continue;
+          const fromStaff =
+            event.changedByUserId != null
+              ? staffByUserId.get(event.changedByUserId) ?? null
+              : null;
+          if (fromStaff) {
+            acceptedByByOrderId.set(event.orderId, fromStaff);
+            continue;
+          }
+          const fromUser =
+            event.changedByUserId != null
+              ? userById.get(event.changedByUserId) ?? null
+              : null;
+          if (fromUser) {
+            acceptedByByOrderId.set(event.orderId, fromUser);
+          }
+        }
+      }
+    }
+
     // Transform to match expected format
     const transformedOrders = ordersList.map((order) => {
       // Check if any items have notes
       const hasItemNotes = order.orderItems?.some((item) => item.notes && item.notes.trim().length > 0) || false;
-      
+      const acceptedBy =
+        acceptedByByOrderId.get(order.id) ??
+        (order.assignedStaff
+          ? { id: order.assignedStaff.id, fullName: order.assignedStaff.fullName }
+          : null);
+
       return {
         id: order.id,
         orderNumber: order.orderNumber,
@@ -149,10 +263,12 @@ export async function GET(request: NextRequest) {
         itemsCount: order.orderItems?.length || 0,
         total: parseFloat(order.total || "0"),
         createdAt: order.createdAt.toISOString(),
+        updatedAt: order.updatedAt.toISOString(),
+        completedAt: order.completedAt?.toISOString() ?? null,
+        cancelledAt: order.cancelledAt?.toISOString() ?? null,
         status: order.status,
-        assignedStaff: order.assignedStaff
-          ? { id: order.assignedStaff.id, fullName: order.assignedStaff.fullName }
-          : null,
+        // Staff column = who accepted / started preparing.
+        assignedStaff: acceptedBy,
         paymentStatus: order.paymentStatus,
         notes: order.notes,
         hasItemNotes,

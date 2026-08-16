@@ -6,7 +6,6 @@ import {
   LoyaltySampleDataBanner,
 } from "@/components/dashboard/loyalty-program-settings-card"
 import { LoyaltyRewardsManager } from "@/components/dashboard/loyalty-rewards-manager"
-import { LoyaltyInsightsPanel } from "@/components/dashboard/loyalty-insights-panel"
 import { useTenant } from "@/lib/contexts/TenantContext"
 import type { LoyaltyMemberRow } from "@/lib/loyalty/loyaltyMembersView"
 import { Label } from "@/components/ui/label"
@@ -91,7 +90,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useMediaQuery } from "@/hooks/use-media-query"
 
 // KPI Data
 const loyaltyKPIs = [
@@ -1526,11 +1524,8 @@ export default function LoyaltyPage() {
   }
 
   // New sidebar and insights state
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const isLargeScreen = useMediaQuery("(min-width: 1024px)")
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastUpdated, setLastUpdated] = useState("12s ago")
-  const [selectedAlert, setSelectedAlert] = useState<string | null>(null)
   const [analyticsTab, setAnalyticsTab] = useState<"overview" | "members" | "tiers" | "rewards" | "revenue" | "predictions" | "custom">("overview")
   const [showReportBuilder, setShowReportBuilder] = useState(false)
   const [reportBuilderStep, setReportBuilderStep] = useState(1)
@@ -1629,16 +1624,6 @@ export default function LoyaltyPage() {
               <h1 id="page-title" className="text-3xl font-bold">
                 Loyalty & Rewards
               </h1>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="hidden text-sm text-muted-foreground sm:inline">Updated 1m ago</span>
-              <Button
-                variant={sidebarOpen ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setSidebarOpen((open) => !open)}
-              >
-                {sidebarOpen ? "Hide insights" : "Show insights"}
-              </Button>
             </div>
           </div>
 
@@ -6135,45 +6120,7 @@ export default function LoyaltyPage() {
 
           </div>
         </div>
-
-        {sidebarOpen ? (
-          <aside className="sticky top-0 hidden h-[calc(100dvh-4rem)] w-[300px] shrink-0 flex-col overflow-y-auto border-l bg-background p-4 lg:flex 2xl:w-[340px] 2xl:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Insights</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSidebarOpen(false)}
-                className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <LoyaltyInsightsPanel
-              selectedAlert={selectedAlert}
-              onSelectAlert={setSelectedAlert}
-              onDismiss={() => setSidebarOpen(false)}
-              onMarkRead={() => setSelectedAlert(null)}
-            />
-          </aside>
-        ) : null}
       </div>
-
-      <Sheet open={sidebarOpen && !isLargeScreen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Insights</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4">
-            <LoyaltyInsightsPanel
-              selectedAlert={selectedAlert}
-              onSelectAlert={setSelectedAlert}
-              onDismiss={() => setSidebarOpen(false)}
-              onMarkRead={() => setSelectedAlert(null)}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
     </>
   )
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 import React from "react"
 
 import { CheckCircle2, Edit3, Plus } from "lucide-react"
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { TABLE_COLOR_STATES, getTableDetailColorState } from "@/lib/table-color-state"
 import type { Seat, TableStatus } from "@/lib/table-data"
-import { dietaryIcons, formatCurrency, getSeatTotal } from "@/lib/table-data"
+import { dietaryIcons, getSeatTotal } from "@/lib/table-data"
 
 interface TableVisualProps {
   tableNumber: number
@@ -81,6 +82,7 @@ export function TableVisual({
   onAcknowledgeWaiter,
   waiterAckPending = false,
 }: TableVisualProps) {
+  const { formatMoney } = useMerchantLocalization()
   const selected = seats.find((s) => s.number === selectedSeat)
   const colorConfig = TABLE_COLOR_STATES[getTableDetailColorState(status)]
   const isTableSelected = selectedSeat === null
@@ -258,7 +260,7 @@ export function TableVisual({
             {selected.items.length}
             {" items"}
             {" \u00B7 "}
-            {formatCurrency(getSeatTotal(selected))}
+            {formatMoney(getSeatTotal(selected))}
           </p>
           <Button
             variant="outline"

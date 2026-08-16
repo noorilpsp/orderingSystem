@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 
 type TipOption = "none" | "10" | "15" | "20" | "custom";
 
@@ -20,6 +21,7 @@ export function TipSection({
   onTipOptionChange,
   onCustomTipChange,
 }: TipSectionProps) {
+  const { formatMoney, localization } = useGuestLocalization();
   const getTipAmount = (option: TipOption) => {
     if (option === "10") return subtotal * 0.1;
     if (option === "15") return subtotal * 0.15;
@@ -54,7 +56,7 @@ export function TipSection({
                 <div className="flex flex-col items-center">
                   <span className="text-sm font-medium">{percent}%</span>
                   <span className="text-xs text-muted-foreground mt-1">
-                    €{amount.toFixed(2)}
+                    {formatMoney(amount)}
                   </span>
                 </div>
               </button>
@@ -83,7 +85,7 @@ export function TipSection({
           <div className="relative">
             <Input
               type="number"
-              placeholder="Custom €"
+              placeholder={`Custom ${localization.currency}`}
               value={customTip}
               onChange={(e) => {
                 onTipOptionChange("custom");

@@ -1,3 +1,5 @@
+import { catalogI18nFromArFields, type CatalogI18n } from "@/lib/catalog-i18n"
+
 export type ItemStatus = "live" | "soldout" | "hidden" | "draft"
 
 export interface ImportRow {
@@ -14,6 +16,7 @@ export interface ImportRow {
   defaultSubstation?: string
   menuIds?: string[]
   menuNames?: string[]
+  i18n?: CatalogI18n | null
 }
 
 export interface ImportMenuCatalogEntry {
@@ -99,6 +102,18 @@ const COLUMN_ALIASES: Record<string, string> = {
   substation: "kitchen_lane",
   menu: "menu",
   menus: "menu",
+  name_ar: "name_ar",
+  "name ar": "name_ar",
+  arabic_name: "name_ar",
+  name_arabic: "name_ar",
+  "arabic name": "name_ar",
+  "name arabic": "name_ar",
+  description_ar: "description_ar",
+  "description ar": "description_ar",
+  arabic_description: "description_ar",
+  description_arabic: "description_ar",
+  "arabic description": "description_ar",
+  "description arabic": "description_ar",
 }
 
 export function normalizeNameKey(name: string): string {
@@ -346,6 +361,8 @@ export function validateImportRow(
   const prepStationRaw = getField(raw, "prep_station")
   const kitchenLaneRaw = getField(raw, "kitchen_lane")
   const menuRaw = getField(raw, "menu")
+  const nameAr = getField(raw, "name_ar")
+  const descriptionAr = getField(raw, "description_ar")
 
   if (!name) {
     errors.push({ row: rowIndex, field: "name", message: "Name is required" })
@@ -446,6 +463,7 @@ export function validateImportRow(
           defaultSubstation: kds.defaultSubstation,
           menuIds: menus.menuIds,
           menuNames: menus.menuNames,
+          i18n: catalogI18nFromArFields({ name: nameAr, description: descriptionAr }),
         }
       : undefined,
   }
