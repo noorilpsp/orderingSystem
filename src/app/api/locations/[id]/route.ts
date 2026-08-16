@@ -6,6 +6,7 @@ import { merchantLocations } from "@/lib/db/schema/merchant-locations"
 import { merchantUsers } from "@/lib/db/schema/merchant-users"
 import type { MerchantLocation } from "@/lib/db/schema/merchant-locations"
 import { unstable_cache } from "@/lib/unstable-cache"
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
 
 export const runtime = "nodejs"
 
@@ -315,6 +316,7 @@ export async function PUT(
     }
 
     // Return updated location data - no browser cache
+    await revalidatePublicMenuForLocation(locationId)
     return NextResponse.json(updatedLocation as MerchantLocation, {
       status: 200,
       headers: {

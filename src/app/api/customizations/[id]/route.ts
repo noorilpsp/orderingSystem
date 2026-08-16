@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { customizationGroups, customizationOptions, conditionalPrices, conditionalQuantities, secondaryGroupRules } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -587,6 +588,7 @@ export async function PUT(
       },
     });
 
+    await revalidatePublicMenuForLocation(existingGroup.location.id);
     return NextResponse.json(groupWithOptions);
   } catch (error) {
     console.error("[PUT /api/customizations/[id]] Error:", error);
@@ -674,6 +676,7 @@ export async function DELETE(
     // Delete group (cascade will handle related records)
     await db.delete(customizationGroups).where(eq(customizationGroups.id, groupId));
 
+    await revalidatePublicMenuForLocation(existingGroup.location.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/customizations/[id]] Error:", error);

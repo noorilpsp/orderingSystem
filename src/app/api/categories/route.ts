@@ -8,6 +8,7 @@ import { unstable_cache } from "@/lib/unstable-cache";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -238,6 +239,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await revalidatePublicMenuForLocation(locationId);
     return NextResponse.json({
       ...completeCategory,
       menuIds: completeCategory?.menuCategories?.map((mc) => mc.menu.id) || [],

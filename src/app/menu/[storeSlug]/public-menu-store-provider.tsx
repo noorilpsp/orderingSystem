@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { PublicMenuProvider, usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { GuestLocaleProvider } from "@/lib/guest-i18n";
 import { mapMerchantLanguageToGuestLocale } from "@/lib/merchant-localization";
+import type { PublicMenuView } from "@/lib/public-menu/types";
 
 function GuestLocaleFromMerchant({ children }: { children: ReactNode }) {
   const publicMenu = usePublicMenuOptional();
@@ -72,14 +73,17 @@ function GuestMenuSearchParamsSync() {
 
 export function PublicMenuStoreProvider({
   storeSlug,
+  initialView,
   children,
 }: {
   storeSlug: string;
+  initialView?: PublicMenuView | null;
   children: ReactNode;
 }) {
   return (
     <PublicMenuProvider
       storeSlug={storeSlug}
+      initialView={initialView}
       initialTableNumber=""
       initialOrderType="pickup"
     >

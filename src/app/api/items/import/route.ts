@@ -25,6 +25,7 @@ import {
   type ImportStationCatalog,
   type ImportMenuCatalog,
 } from "@/lib/menu/import-items"
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
 import { getLocationStationsWithSubstations } from "@/lib/kds/getLocationStations"
 import { isLocationKdsEnabled } from "@/lib/merchant-features"
 
@@ -415,6 +416,8 @@ export async function POST(request: NextRequest) {
     if (itemAllergenValues.length > 0) {
       await withDbRetry(() => db.insert(itemAllergens).values(itemAllergenValues))
     }
+
+    await revalidatePublicMenuForLocation(locationId)
 
     return NextResponse.json({
       created: insertedItems.length,

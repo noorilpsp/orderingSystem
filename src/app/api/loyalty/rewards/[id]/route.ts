@@ -5,6 +5,7 @@ import {
   type LoyaltyRewardKind,
   type LoyaltyRewardStatus,
 } from "@/lib/loyalty/loyaltyRewards";
+import { revalidatePublicMenuForMerchant } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -61,5 +62,6 @@ export async function PATCH(
     const status = result.error === "Reward not found" ? 404 : 400;
     return NextResponse.json({ error: result.error }, { status });
   }
+  await revalidatePublicMenuForMerchant(merchantId);
   return NextResponse.json({ reward: result.reward });
 }

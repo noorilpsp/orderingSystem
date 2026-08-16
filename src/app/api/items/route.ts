@@ -9,6 +9,7 @@ import { getLocationStations, getSubstationKeysForStation } from "@/lib/kds/getL
 import { isLocationKdsEnabled } from "@/lib/merchant-features";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 import { resolveItemPromos } from "@/lib/promotions/resolveActivePromotions";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -348,6 +349,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await revalidatePublicMenuForLocation(locationId);
     return NextResponse.json(completeItem, { status: 201 });
   } catch (error) {
     console.error("[POST /api/items] Error:", error);

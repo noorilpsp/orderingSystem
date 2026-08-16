@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { tags } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,7 @@ export async function PATCH(
       .where(eq(tags.id, tagId))
       .returning();
 
+    await revalidatePublicMenuForLocation(access.existingTag.location.id);
     return NextResponse.json(updatedTag);
   } catch (error) {
     console.error("[PATCH /api/tags/[id]] Error:", error);
@@ -165,6 +167,7 @@ export async function DELETE(
     // Delete tag (cascade will handle related records)
     await db.delete(tags).where(eq(tags.id, tagId));
 
+    await revalidatePublicMenuForLocation(access.existingTag.location.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/tags/[id]] Error:", error);

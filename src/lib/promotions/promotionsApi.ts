@@ -4,6 +4,7 @@ import { items, merchantLocations } from "@/db/schema";
 import { promotionItems, promotions } from "@/lib/db/schema/promotions";
 import { requireMerchantMember } from "@/lib/loyalty/loyaltyRewards";
 import { roundMoney } from "@/lib/promotions/pricing";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 import type {
   PromotionDto,
   PromotionItemDto,
@@ -258,6 +259,7 @@ export async function createPromotion(
   if (!created) return { ok: false, error: "Failed to create promotion" };
 
   await db.insert(promotionItems).values(itemRowsForKind(input.kind, input.items, created.id));
+  await revalidatePublicMenuForLocation(created.locationId);
 
   return { ok: true, promotion: toDto(created, await loadPromotionItems(created.id)) };
 }
@@ -293,6 +295,7 @@ export async function updatePromotion(
 
   await db.delete(promotionItems).where(eq(promotionItems.promotionId, promotionId));
   await db.insert(promotionItems).values(itemRowsForKind(input.kind, input.items, promotionId));
+  await revalidatePublicMenuForLocation(updated.locationId);
 
   return { ok: true, promotion: toDto(updated, await loadPromotionItems(promotionId)) };
 }
@@ -337,6 +340,7 @@ export async function setPromotionStatus(
     .where(eq(promotions.id, promotionId))
     .returning();
   if (!updated) return { ok: false, error: "Failed to update promotion" };
+  await revalidatePublicMenuForLocation(updated.locationId);
   return { ok: true, promotion: toDto(updated, await loadPromotionItems(promotionId)) };
 }
 
@@ -346,10 +350,11 @@ export async function deletePromotion(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const existing = await db.query.promotions.findFirst({
     where: and(eq(promotions.id, promotionId), eq(promotions.merchantId, merchantId)),
-    columns: { id: true },
+    columns: { id: true, locationId: true },
   });
   if (!existing) return { ok: false, error: "Promotion not found" };
   await db.delete(promotions).where(eq(promotions.id, promotionId));
+  await revalidatePublicMenuForLocation(existing.locationId);
   return { ok: true };
 }
 

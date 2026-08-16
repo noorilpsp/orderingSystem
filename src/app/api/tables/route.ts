@@ -13,6 +13,7 @@ import {
 } from "@/domain/idempotency";
 import { createTableMutation } from "@/domain";
 import { posFailure, posSuccess, requireIdempotencyKey, toErrorMessage } from "@/app/api/_lib/pos-envelope";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
       requestHash,
       responseJson: { body: successBody, status: 201 },
     });
+    await revalidatePublicMenuForLocation(locationId);
     return posSuccess(successBody.data, { status: 201, correlationId: idempotencyKey });
   } catch (error) {
     console.error("[POST /api/tables] Error:", error);

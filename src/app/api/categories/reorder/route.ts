@@ -3,6 +3,7 @@ import { db } from "@/db"
 import { categories } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { supabaseServer } from "@/lib/supabaseServer"
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
 
 export async function PUT(request: NextRequest) {
   try {
@@ -42,6 +43,7 @@ export async function PUT(request: NextRequest) {
         )
     )
 
+    await revalidatePublicMenuForLocation(locationId)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error reordering categories:", error)

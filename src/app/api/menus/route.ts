@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { menus, menuCategories, categories } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -199,6 +200,7 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    await revalidatePublicMenuForLocation(locationId);
     return NextResponse.json(newMenu, { status: 201 });
   } catch (error) {
     console.error("[POST /api/menus] Error:", error);

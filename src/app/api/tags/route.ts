@@ -7,6 +7,7 @@ import { tags } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -182,6 +183,7 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    await revalidatePublicMenuForLocation(locationId);
     return NextResponse.json(newTag, { status: 201 });
   } catch (error) {
     console.error("[POST /api/tags] Error:", error);

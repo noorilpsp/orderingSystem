@@ -16,6 +16,7 @@ import {
   updateTableMutation,
 } from "@/domain";
 import { posFailure, posSuccess, requireIdempotencyKey, toErrorMessage } from "@/app/api/_lib/pos-envelope";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -208,6 +209,7 @@ export async function PUT(
       requestHash,
       responseJson: { body: successBody, status: 200 },
     });
+    await revalidatePublicMenuForLocation(existingTable.locationId);
     return posSuccess(successBody.data, { correlationId: idempotencyKey });
   } catch (error) {
     console.error("[PUT /api/tables/[id]] Error:", error);
@@ -321,6 +323,7 @@ export async function DELETE(
       requestHash,
       responseJson: { body: successBody, status: 200 },
     });
+    await revalidatePublicMenuForLocation(existingTable.locationId);
     return posSuccess(successBody.data, { correlationId: idempotencyKey });
   } catch (error) {
     console.error("[DELETE /api/tables/[id]] Error:", error);

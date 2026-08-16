@@ -7,6 +7,7 @@ import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
 import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -259,6 +260,7 @@ export async function PUT(
       },
     });
 
+    await revalidatePublicMenuForLocation(existingCategory.location.id);
     return NextResponse.json({
       ...completeCategory,
       menuIds: completeCategory?.menuCategories?.map((mc) => mc.menu.id) || [],
@@ -356,6 +358,7 @@ export async function DELETE(
     // Delete category (cascade will handle related records)
     await withDbRetry(() => db.delete(categories).where(eq(categories.id, categoryId)));
 
+    await revalidatePublicMenuForLocation(existingCategory.location.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/categories/[id]] Error:", error);

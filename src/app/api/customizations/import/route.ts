@@ -11,6 +11,7 @@ import {
   type CustomizationImportGroup,
   type CustomizationImportOptions,
 } from "@/lib/menu/import-customizations"
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
 
 export const runtime = "nodejs"
 
@@ -198,6 +199,8 @@ export async function POST(request: NextRequest) {
         })
       }
     }
+
+    await revalidatePublicMenuForLocation(locationId)
 
     return NextResponse.json({
       created: createdIds.length,

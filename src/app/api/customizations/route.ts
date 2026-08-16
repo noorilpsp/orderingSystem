@@ -6,6 +6,7 @@ import { customizationGroups, customizationOptions, conditionalPrices, condition
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -490,6 +491,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await revalidatePublicMenuForLocation(locationId);
     return NextResponse.json(completeGroup, { status: 201 });
   } catch (error) {
     console.error("[POST /api/customizations] Error:", error);

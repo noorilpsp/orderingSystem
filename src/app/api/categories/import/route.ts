@@ -11,6 +11,7 @@ import {
   type CategoryImportOptions,
   type CategoryImportRow,
 } from "@/lib/menu/import-categories"
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
 import type { ImportMenuCatalog } from "@/lib/menu/import-items"
 
 export const runtime = "nodejs"
@@ -208,6 +209,8 @@ export async function POST(request: NextRequest) {
     if (menuLinks.length > 0) {
       await withDbRetry(() => db.insert(menuCategories).values(menuLinks))
     }
+
+    await revalidatePublicMenuForLocation(locationId)
 
     return NextResponse.json({
       created: createdIds.length,

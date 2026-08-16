@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { buildPublicMenuView } from "@/lib/public-menu/buildPublicMenuView";
+import { getCachedPublicMenuView } from "@/lib/public-menu/publicMenuCache";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
 
 export const runtime = "nodejs";
@@ -20,13 +20,16 @@ export async function GET(
   }
 
   try {
-    const view = await buildPublicMenuView(normalizedSlug);
+    const view = await getCachedPublicMenuView(normalizedSlug);
     if (!view) {
       return posFailure("NOT_FOUND", "Store not found", { status: 404 });
     }
 
     const response = posSuccess(view);
-    response.headers.set("Cache-Control", "no-store, must-revalidate");
+    response.headers.set(
+      "Cache-Control",
+      "public, s-maxage=15, stale-while-revalidate=300",
+    );
     return response;
   } catch (error) {
     return posFailure(

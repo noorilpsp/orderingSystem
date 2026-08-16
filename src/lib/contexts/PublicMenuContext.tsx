@@ -184,16 +184,19 @@ export function PublicMenuProvider({
   storeSlug,
   initialTableNumber = "",
   initialOrderType = "pickup",
+  initialView,
   children,
 }: {
   storeSlug: string;
   initialTableNumber?: string;
   initialOrderType?: OrderType;
+  initialView?: PublicMenuView | null;
   children: ReactNode;
 }) {
-  const [loading, setLoading] = useState(true);
+  const hasServerView = initialView !== undefined;
+  const [loading, setLoading] = useState(!hasServerView);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<PublicMenuView | null>(null);
+  const [view, setView] = useState<PublicMenuView | null>(initialView ?? null);
   const [cart, setCart] = useState<GuestCartItem[]>([]);
   const [hydratedCartSlug, setHydratedCartSlug] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
@@ -422,8 +425,7 @@ export function PublicMenuProvider({
     setError(null);
     try {
       const response = await fetch(
-        `/api/public/menu/${encodeURIComponent(storeSlug)}?_t=${Date.now()}`,
-        { cache: "no-store" },
+        `/api/public/menu/${encodeURIComponent(storeSlug)}`,
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -456,8 +458,9 @@ export function PublicMenuProvider({
   }, [storeSlug]);
 
   useEffect(() => {
+    if (hasServerView) return;
     void fetchMenu();
-  }, [fetchMenu]);
+  }, [fetchMenu, hasServerView]);
 
   const customizationGroupMap = useMemo(
     () => new Map((view?.customizationGroups ?? []).map((group) => [group.id, group])),

@@ -6,6 +6,7 @@ import {
   type LoyaltyRewardKind,
   type LoyaltyRewardStatus,
 } from "@/lib/loyalty/loyaltyRewards";
+import { revalidatePublicMenuForMerchant } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -56,5 +57,6 @@ export async function POST(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  await revalidatePublicMenuForMerchant(merchantId);
   return NextResponse.json({ reward: result.reward }, { status: 201 });
 }

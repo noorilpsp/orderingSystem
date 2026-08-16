@@ -113,6 +113,69 @@ export function isWithinSchedule(blocks: MenuScheduleBlock[], now = new Date()):
   });
 }
 
+function blockMinutes(block: MenuScheduleBlock): {
+  startMinutes: number;
+  endMinutes: number;
+  overnight: boolean;
+} | null {
+  const [startH, startM] = to24HourFormat(block.startTime).split(":").map(Number);
+  const [endH, endM] = to24HourFormat(block.endTime).split(":").map(Number);
+  if (!Number.isFinite(startH) || !Number.isFinite(endH)) return null;
+  const startMinutes = startH * 60 + (startM || 0);
+  const endMinutes = endH * 60 + (endM || 0);
+  return {
+    startMinutes,
+    endMinutes,
+    overnight: endMinutes < startMinutes,
+  };
+}
+
+function atMinutes(dayStart: Date, minutes: number): Date {
+  const next = new Date(dayStart);
+  next.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return next;
+}
+
+/** Next start or end of these blocks after `now` (merchant-defined slots). */
+export function nextWithinScheduleBoundary(
+  blocks: MenuScheduleBlock[],
+  now = new Date(),
+): Date | null {
+  if (blocks.length === 0) return null;
+  const nowMs = now.getTime();
+  let soonest: number | null = null;
+
+  const consider = (value: Date) => {
+    const ms = value.getTime();
+    if (ms > nowMs && (soonest === null || ms < soonest)) soonest = ms;
+  };
+
+  for (let offset = 0; offset <= 8; offset += 1) {
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    dayStart.setDate(dayStart.getDate() + offset);
+    const weekday = dayStart.getDay();
+
+    for (const block of blocks) {
+      const times = blockMinutes(block);
+      if (!times) continue;
+      const startsToday = block.days.includes(weekday);
+      if (startsToday) {
+        consider(atMinutes(dayStart, times.startMinutes));
+        if (!times.overnight) {
+          consider(atMinutes(dayStart, times.endMinutes));
+        } else {
+          const nextDay = new Date(dayStart);
+          nextDay.setDate(nextDay.getDate() + 1);
+          consider(atMinutes(nextDay, times.endMinutes));
+        }
+      }
+    }
+  }
+
+  return soonest === null ? null : new Date(soonest);
+}
+
 export function isItemAvailableNow(
   useCustomHours: boolean | null | undefined,
   customSchedule: unknown,

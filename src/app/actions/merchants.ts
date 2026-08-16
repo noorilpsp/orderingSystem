@@ -11,6 +11,7 @@ import { merchants, merchantLocations } from "@/db/schema";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { isPlatformAdmin } from "@/lib/permissions";
 import { ADMIN_MERCHANTS_CACHE_TAG } from "@/lib/queries";
+import { revalidatePublicMenuForMerchant } from "@/lib/public-menu/publicMenuCache";
 import { normalizeMerchantFeatures } from "@/lib/db/schema/merchants";
 
 // Configure Neon to use WebSocket for transaction support
@@ -365,6 +366,7 @@ export async function updateMerchant(data: unknown) {
     revalidatePath("/admin/merchants");
     revalidatePath(`/admin/merchants/${validated.id}`);
     revalidatePath(`/admin/merchants/${validated.id}/edit`);
+    await revalidatePublicMenuForMerchant(validated.id);
 
     return {
       success: true,

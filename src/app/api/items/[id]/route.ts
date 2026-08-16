@@ -9,6 +9,7 @@ import { getLocationStations } from "@/lib/kds/getLocationStations";
 import { isLocationKdsEnabled } from "@/lib/merchant-features";
 import { unstable_cache } from "@/lib/unstable-cache";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -350,6 +351,7 @@ export async function PUT(
       },
     });
 
+    await revalidatePublicMenuForLocation(existingItem.location.id);
     return NextResponse.json(updatedItem);
   } catch (error) {
     console.error("[PUT /api/items/[id]] Error:", error);
@@ -438,6 +440,7 @@ export async function DELETE(
     // Delete item (cascade will handle related records)
     await db.delete(items).where(eq(items.id, itemId));
 
+    await revalidatePublicMenuForLocation(existingItem.location.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/items/[id]] Error:", error);

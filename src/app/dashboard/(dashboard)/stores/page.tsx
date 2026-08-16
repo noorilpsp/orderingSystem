@@ -1140,7 +1140,7 @@ export default function StoresPage() {
   // Loading state
   if (tenantLoading || locationsLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <p className="text-muted-foreground">Loading store information...</p>
@@ -1152,7 +1152,7 @@ export default function StoresPage() {
   // Error state
   if (locationsError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 p-8 bg-destructive/10 rounded-lg border border-destructive/20">
           <AlertCircle className="h-8 w-8 text-destructive" />
           <p className="text-destructive font-medium">Error loading stores</p>
@@ -1165,7 +1165,7 @@ export default function StoresPage() {
   // No merchant state
   if (!currentMerchantId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 p-8">
           <AlertCircle className="h-8 w-8 text-muted-foreground" />
           <p className="text-muted-foreground font-medium">No merchant selected</p>
@@ -1176,7 +1176,7 @@ export default function StoresPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-full min-h-0 overflow-y-auto bg-background">
       {/* Fixed top save bar — always in view when there are unsaved changes */}
       {hasUnsavedChanges ? (
         <div className="fixed inset-x-0 top-14 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 shadow-sm">
@@ -1276,9 +1276,7 @@ export default function StoresPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Form Sections */}
-          <div className="lg:col-span-2 space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Store Basics */}
             <Card>
               <CardHeader>
@@ -2306,58 +2304,6 @@ export default function StoresPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
-
-          {/* Right Column - Helper Panel */}
-          <div className="hidden lg:block lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              {/* Preview */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Store Preview</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Banner */}
-                  <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                    {bannerPreview && bannerPreview !== "/placeholder.svg" ? (
-                      <img
-                        src={bannerPreview}
-                        alt="Store banner"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <StoreIcon className="w-12 h-12 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-start gap-3">
-                    {/* Logo */}
-                    <div className="h-12 w-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-                      {logoPreview && logoPreview !== "/placeholder.svg" ? (
-                        <img
-                          src={logoPreview}
-                          alt="Store logo"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <StoreIcon className="w-6 h-6 text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <h3 className="font-semibold truncate">{storeName || "Store Name"}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{shortDescription || "Store description"}</p>
-                      <Badge variant={storeStatus === "active" ? "default" : "secondary"} className="capitalize text-xs">
-                        {storeStatus}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
         </form>
       </div>
     </div>

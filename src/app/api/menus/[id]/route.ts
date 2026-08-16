@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { menus, menuCategories, categories } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -209,6 +210,7 @@ export async function PUT(
       .where(eq(menus.id, menuId))
       .returning();
 
+    await revalidatePublicMenuForLocation(existingMenu.location.id);
     return NextResponse.json(updatedMenu);
   } catch (error) {
     console.error("[PUT /api/menus/[id]] Error:", error);
@@ -297,6 +299,7 @@ export async function DELETE(
     // Delete menu (cascade will handle related records)
     await db.delete(menus).where(eq(menus.id, menuId));
 
+    await revalidatePublicMenuForLocation(existingMenu.location.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/menus/[id]] Error:", error);
