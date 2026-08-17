@@ -9,6 +9,10 @@ import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envel
 import { withDbRetry, toUserFacingDbError } from "@/lib/db/withDbRetry";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
+import {
+  categoriesListCacheTag,
+  revalidateCategoriesList,
+} from "@/lib/menu/categoriesListCache";
 
 export const runtime = "nodejs";
 
@@ -95,7 +99,7 @@ export async function GET(request: NextRequest) {
         }));
       },
       ["categories-list", locationId],
-      { revalidate: 300 } // 5 minutes
+      { revalidate: 300, tags: [categoriesListCacheTag(locationId)] }
     );
 
     const categoriesList = await getCachedCategories();
@@ -240,6 +244,7 @@ export async function POST(request: NextRequest) {
     });
 
     await revalidatePublicMenuForLocation(locationId);
+    revalidateCategoriesList(locationId);
     return NextResponse.json({
       ...completeCategory,
       menuIds: completeCategory?.menuCategories?.map((mc) => mc.menu.id) || [],

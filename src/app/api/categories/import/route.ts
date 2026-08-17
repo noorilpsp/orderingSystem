@@ -12,6 +12,7 @@ import {
   type CategoryImportRow,
 } from "@/lib/menu/import-categories"
 import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
+import { revalidateCategoriesList } from "@/lib/menu/categoriesListCache"
 import type { ImportMenuCatalog } from "@/lib/menu/import-items"
 
 export const runtime = "nodejs"
@@ -211,6 +212,7 @@ export async function POST(request: NextRequest) {
     }
 
     await revalidatePublicMenuForLocation(locationId)
+    revalidateCategoriesList(locationId)
 
     return NextResponse.json({
       created: createdIds.length,

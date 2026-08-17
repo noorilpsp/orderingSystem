@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -170,8 +169,8 @@ export function CategoryImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Import categories from CSV</DialogTitle>
           <DialogDescription>
             Upload a spreadsheet to bulk-create categories. The menu column links each category to
@@ -230,8 +229,8 @@ export function CategoryImportModal({
         )}
 
         {step === "preview" && plan && (
-          <div className="space-y-4 flex-1 min-h-0 flex flex-col">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
               {fileName && <Badge variant="secondary">{fileName}</Badge>}
               <Badge variant="outline">{plan.validations.length} rows</Badge>
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
@@ -243,23 +242,23 @@ export function CategoryImportModal({
             </div>
 
             {skippedCount > 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="shrink-0 text-sm text-muted-foreground">
                 {skippedCount} row{skippedCount === 1 ? "" : "s"} will be skipped. {validCount}{" "}
                 categor{validCount === 1 ? "y" : "ies"} will be imported.
               </p>
             )}
 
-            <ScrollArea className="flex-1 border rounded-md max-h-[320px]">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 sticky top-0">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="sticky top-0 z-10 bg-muted">
                   <tr>
-                    <th className="text-left p-2 font-medium">Row</th>
-                    <th className="text-left p-2 font-medium">Name</th>
-                    <th className="text-left p-2 font-medium">Arabic</th>
-                    <th className="text-left p-2 font-medium">Emoji</th>
-                    <th className="text-left p-2 font-medium">Description</th>
-                    <th className="text-left p-2 font-medium">Menu</th>
-                    <th className="text-left p-2 font-medium">Issues</th>
+                    <th className="p-2 text-left font-medium">Row</th>
+                    <th className="p-2 text-left font-medium">Name</th>
+                    <th className="p-2 text-left font-medium">Arabic</th>
+                    <th className="p-2 text-left font-medium">Emoji</th>
+                    <th className="p-2 text-left font-medium">Description</th>
+                    <th className="p-2 text-left font-medium">Menu</th>
+                    <th className="p-2 text-left font-medium">Issues</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -277,18 +276,18 @@ export function CategoryImportModal({
                         )}
                       >
                         <td className="p-2">{validation.rowIndex}</td>
-                        <td className="p-2">{row?.name ?? "—"}</td>
-                        <td className="p-2 text-xs" dir="auto">
+                        <td className="max-w-[140px] truncate p-2">{row?.name ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
                           {row?.i18n?.ar?.name ?? "—"}
                         </td>
                         <td className="p-2">{row?.emoji ?? "—"}</td>
-                        <td className="p-2 text-xs text-muted-foreground max-w-[180px] truncate">
+                        <td className="max-w-[180px] truncate p-2 text-xs text-muted-foreground">
                           {row?.description ?? "—"}
                         </td>
-                        <td className="p-2 text-xs">
+                        <td className="max-w-[160px] truncate p-2 text-xs">
                           {row?.menuNames?.join("; ") ?? (menuId ? "Default" : "—")}
                         </td>
-                        <td className="p-2 text-xs text-muted-foreground">
+                        <td className="max-w-[200px] p-2 text-xs text-muted-foreground">
                           {issues.length > 0 ? issues.map((issue) => issue.message).join("; ") : "OK"}
                         </td>
                       </tr>
@@ -296,9 +295,9 @@ export function CategoryImportModal({
                   })}
                 </tbody>
               </table>
-            </ScrollArea>
+            </div>
 
-            <div className="space-y-3 border-t pt-4">
+            <div className="shrink-0 space-y-3 border-t pt-4">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="skip-existing-categories"
@@ -353,7 +352,7 @@ export function CategoryImportModal({
               </div>
             )}
             {importResult.errors.length > 0 && (
-              <div className="text-sm text-muted-foreground space-y-1">
+              <div className="max-h-40 space-y-1 overflow-y-auto text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">Skipped rows:</p>
                 {importResult.errors.map((err, index) => (
                   <p key={`${err.row}-${index}`}>
@@ -366,7 +365,7 @@ export function CategoryImportModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           {step === "upload" && (
             <Button variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
