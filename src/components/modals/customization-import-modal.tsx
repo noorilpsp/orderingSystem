@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { downloadCustomizationImportTemplate } from "@/lib/menu/import-customization-template"
@@ -146,8 +145,8 @@ export function CustomizationImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Import customization groups from CSV</DialogTitle>
           <DialogDescription>
             Upload a spreadsheet to bulk-create modifier groups and their options. Repeat the group
@@ -201,8 +200,8 @@ export function CustomizationImportModal({
         )}
 
         {step === "preview" && plan && (
-          <div className="space-y-4 flex-1 min-h-0 flex flex-col">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
               {fileName && <Badge variant="secondary">{fileName}</Badge>}
               <Badge variant="outline">{plan.validations.length} option rows</Badge>
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
@@ -214,24 +213,24 @@ export function CustomizationImportModal({
             </div>
 
             {skippedRowCount > 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="shrink-0 text-sm text-muted-foreground">
                 {skippedRowCount} option row{skippedRowCount === 1 ? "" : "s"} will be skipped.{" "}
                 {validGroupCount} group{validGroupCount === 1 ? "" : "s"} will be imported.
               </p>
             )}
 
-            <ScrollArea className="flex-1 border rounded-md max-h-[320px]">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 sticky top-0">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="sticky top-0 z-10 bg-muted">
                   <tr>
-                    <th className="text-left p-2 font-medium">Row</th>
-                    <th className="text-left p-2 font-medium">Group</th>
-                    <th className="text-left p-2 font-medium">Arabic</th>
-                    <th className="text-left p-2 font-medium">Option</th>
-                    <th className="text-left p-2 font-medium">Option AR</th>
-                    <th className="text-left p-2 font-medium">Price</th>
-                    <th className="text-left p-2 font-medium">Rules</th>
-                    <th className="text-left p-2 font-medium">Issues</th>
+                    <th className="p-2 text-left font-medium">Row</th>
+                    <th className="p-2 text-left font-medium">Group</th>
+                    <th className="p-2 text-left font-medium">Arabic</th>
+                    <th className="p-2 text-left font-medium">Option</th>
+                    <th className="p-2 text-left font-medium">Option AR</th>
+                    <th className="p-2 text-left font-medium">Price</th>
+                    <th className="p-2 text-left font-medium">Rules</th>
+                    <th className="p-2 text-left font-medium">Issues</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -249,21 +248,21 @@ export function CustomizationImportModal({
                         )}
                       >
                         <td className="p-2">{validation.rowIndex}</td>
-                        <td className="p-2">{row?.groupName ?? "—"}</td>
-                        <td className="p-2 text-xs" dir="auto">
+                        <td className="max-w-[140px] truncate p-2">{row?.groupName ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
                           {row?.groupNameAr ?? "—"}
                         </td>
-                        <td className="p-2">{row?.optionName ?? "—"}</td>
-                        <td className="p-2 text-xs" dir="auto">
+                        <td className="max-w-[140px] truncate p-2">{row?.optionName ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
                           {row?.optionNameAr ?? "—"}
                         </td>
                         <td className="p-2">{row ? row.priceDelta.toFixed(2) : "—"}</td>
-                        <td className="p-2 text-xs">
+                        <td className="max-w-[180px] truncate p-2 text-xs">
                           {row
                             ? `${row.required ? "Required" : "Optional"} · ${row.min}–${formatMax(row.max)}${row.isDefault ? " · Default" : ""}`
                             : "—"}
                         </td>
-                        <td className="p-2 text-xs text-muted-foreground">
+                        <td className="max-w-[200px] p-2 text-xs text-muted-foreground">
                           {issues.length > 0 ? issues.map((issue) => issue.message).join("; ") : "OK"}
                         </td>
                       </tr>
@@ -271,9 +270,9 @@ export function CustomizationImportModal({
                   })}
                 </tbody>
               </table>
-            </ScrollArea>
+            </div>
 
-            <div className="space-y-3 border-t pt-4">
+            <div className="shrink-0 space-y-3 border-t pt-4">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="skip-existing-groups"
@@ -311,7 +310,7 @@ export function CustomizationImportModal({
               </div>
             )}
             {importResult.errors.length > 0 && (
-              <div className="text-sm text-muted-foreground space-y-1">
+              <div className="max-h-40 space-y-1 overflow-y-auto text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">Skipped rows:</p>
                 {importResult.errors.map((err, index) => (
                   <p key={`${err.row}-${index}`}>
@@ -324,7 +323,7 @@ export function CustomizationImportModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           {step === "upload" && (
             <Button variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel

@@ -26,6 +26,7 @@ import {
   type ImportMenuCatalog,
 } from "@/lib/menu/import-items"
 import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
+import { revalidateCategoriesList } from "@/lib/menu/categoriesListCache"
 import { getLocationStationsWithSubstations } from "@/lib/kds/getLocationStations"
 import { isLocationKdsEnabled } from "@/lib/merchant-features"
 
@@ -418,6 +419,7 @@ export async function POST(request: NextRequest) {
     }
 
     await revalidatePublicMenuForLocation(locationId)
+    revalidateCategoriesList(locationId)
 
     return NextResponse.json({
       created: insertedItems.length,

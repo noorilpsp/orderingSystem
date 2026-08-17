@@ -10,6 +10,7 @@ import { isLocationKdsEnabled } from "@/lib/merchant-features";
 import { unstable_cache } from "@/lib/unstable-cache";
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
+import { itemDetailCacheTag, revalidateItemDetail } from "@/lib/menu/itemDetailCache";
 
 export const runtime = "nodejs";
 
@@ -85,7 +86,7 @@ export async function GET(
         return item;
       },
       ["item-data", itemId],
-      { revalidate: 300 } // 5 minutes
+      { revalidate: 300, tags: [itemDetailCacheTag(itemId)] }
     );
 
     const item = await getCachedItem();
@@ -352,6 +353,7 @@ export async function PUT(
     });
 
     await revalidatePublicMenuForLocation(existingItem.location.id);
+    revalidateItemDetail(existingItem.id);
     return NextResponse.json(updatedItem);
   } catch (error) {
     console.error("[PUT /api/items/[id]] Error:", error);
@@ -441,6 +443,7 @@ export async function DELETE(
     await db.delete(items).where(eq(items.id, itemId));
 
     await revalidatePublicMenuForLocation(existingItem.location.id);
+    revalidateItemDetail(existingItem.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/items/[id]] Error:", error);

@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -241,8 +240,8 @@ export function MenuImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Import menu items from CSV</DialogTitle>
           <DialogDescription>
             Upload a spreadsheet to bulk-create menu items. The menu column links each item&apos;s
@@ -306,8 +305,8 @@ export function MenuImportModal({
         )}
 
         {step === "preview" && plan && (
-          <div className="space-y-4 flex-1 min-h-0 flex flex-col">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
               {fileName && <Badge variant="secondary">{fileName}</Badge>}
               <Badge variant="outline">{plan.validations.length} rows</Badge>
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
@@ -319,31 +318,31 @@ export function MenuImportModal({
             </div>
 
             {skippedCount > 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="shrink-0 text-sm text-muted-foreground">
                 {skippedCount} row{skippedCount === 1 ? "" : "s"} will be skipped. {validCount} row
                 {validCount === 1 ? "" : "s"} will be imported.
               </p>
             )}
 
-            <ScrollArea className="flex-1 border rounded-md max-h-[320px]">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 sticky top-0">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="sticky top-0 z-10 bg-muted">
                   <tr>
-                    <th className="text-left p-2 font-medium">Row</th>
-                    <th className="text-left p-2 font-medium">Name</th>
-                    <th className="text-left p-2 font-medium">Arabic</th>
-                    <th className="text-left p-2 font-medium">Price</th>
-                    <th className="text-left p-2 font-medium">Category</th>
-                    <th className="text-left p-2 font-medium">Menu</th>
-                    <th className="text-left p-2 font-medium">Photo</th>
+                    <th className="p-2 text-left font-medium">Row</th>
+                    <th className="p-2 text-left font-medium">Name</th>
+                    <th className="p-2 text-left font-medium">Arabic</th>
+                    <th className="p-2 text-left font-medium">Price</th>
+                    <th className="p-2 text-left font-medium">Category</th>
+                    <th className="p-2 text-left font-medium">Menu</th>
+                    <th className="p-2 text-left font-medium">Photo</th>
                     {kdsEnabled ? (
                       <>
-                        <th className="text-left p-2 font-medium">Prep station</th>
-                        <th className="text-left p-2 font-medium">Kitchen lane</th>
+                        <th className="p-2 text-left font-medium">Prep station</th>
+                        <th className="p-2 text-left font-medium">Kitchen lane</th>
                       </>
                     ) : null}
-                    <th className="text-left p-2 font-medium">Status</th>
-                    <th className="text-left p-2 font-medium">Issues</th>
+                    <th className="p-2 text-left font-medium">Status</th>
+                    <th className="p-2 text-left font-medium">Issues</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -361,16 +360,16 @@ export function MenuImportModal({
                         )}
                       >
                         <td className="p-2">{validation.rowIndex}</td>
-                        <td className="p-2">{row?.name ?? "—"}</td>
-                        <td className="p-2 text-xs" dir="auto">
+                        <td className="max-w-[140px] truncate p-2">{row?.name ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
                           {row?.i18n?.ar?.name ?? "—"}
                         </td>
                         <td className="p-2">{row?.price ?? "—"}</td>
-                        <td className="p-2">{row?.category ?? "—"}</td>
-                        <td className="p-2 text-xs">
+                        <td className="max-w-[140px] truncate p-2">{row?.category ?? "—"}</td>
+                        <td className="max-w-[160px] truncate p-2 text-xs">
                           {row?.menuNames?.join("; ") ?? (menuId ? "Default" : "—")}
                         </td>
-                        <td className="p-2 text-xs text-muted-foreground max-w-[120px] truncate">
+                        <td className="max-w-[120px] truncate p-2 text-xs text-muted-foreground">
                           {row?.photoUrl ? "Yes" : "—"}
                         </td>
                         {kdsEnabled ? (
@@ -380,7 +379,7 @@ export function MenuImportModal({
                           </>
                         ) : null}
                         <td className="p-2">{row?.status ?? (importAsDrafts ? "draft" : "live")}</td>
-                        <td className="p-2 text-xs text-muted-foreground">
+                        <td className="max-w-[200px] p-2 text-xs text-muted-foreground">
                           {issues.length > 0 ? issues.map((i) => i.message).join("; ") : "OK"}
                         </td>
                       </tr>
@@ -388,9 +387,9 @@ export function MenuImportModal({
                   })}
                 </tbody>
               </table>
-            </ScrollArea>
+            </div>
 
-            <div className="space-y-3 border-t pt-4">
+            <div className="shrink-0 space-y-3 border-t pt-4">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="create-categories"
@@ -458,7 +457,7 @@ export function MenuImportModal({
               </p>
             )}
             {importResult.errors.length > 0 && (
-              <div className="text-sm text-muted-foreground space-y-1">
+              <div className="max-h-40 space-y-1 overflow-y-auto text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">Skipped rows:</p>
                 {importResult.errors.map((err, i) => (
                   <p key={i}>
@@ -470,7 +469,7 @@ export function MenuImportModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           {step === "upload" && (
             <Button variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
