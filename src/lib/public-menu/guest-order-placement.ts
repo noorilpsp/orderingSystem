@@ -23,6 +23,7 @@ export type GuestOrderPlacementRequest = {
   scheduledPickupAt?: string | null;
   pointsToRedeem?: number;
   rewardId?: string;
+  phone?: string | null;
   items: GuestOrderPlacementItem[];
 };
 
@@ -31,6 +32,7 @@ export type GuestOrderPlacementState = {
   status: "pending" | "success" | "error";
   orderId?: string;
   orderNumber?: string;
+  claimToken?: string;
   error?: string;
   request?: GuestOrderPlacementRequest;
 };
@@ -40,7 +42,40 @@ type StoredGuestOrderPlacement = GuestOrderPlacementState & {
 };
 
 const STORAGE_PREFIX = "guest-order-placement:";
+const CLAIM_STORAGE_PREFIX = "guest-order-claim:";
 const inFlightPlacementKeys = new Set<string>();
+
+function claimStorageKey(storeSlug: string, orderId: string): string {
+  return `${CLAIM_STORAGE_PREFIX}${storeSlug}:${orderId}`;
+}
+
+export function writeGuestOrderClaimToken(
+  storeSlug: string,
+  orderId: string,
+  token: string,
+): void {
+  if (typeof localStorage === "undefined") return;
+  const trimmed = token.trim();
+  if (!trimmed || !orderId) return;
+  try {
+    localStorage.setItem(claimStorageKey(storeSlug, orderId), trimmed);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readGuestOrderClaimToken(
+  storeSlug: string,
+  orderId: string,
+): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const token = localStorage.getItem(claimStorageKey(storeSlug, orderId))?.trim();
+    return token || null;
+  } catch {
+    return null;
+  }
+}
 
 function storageKey(storeSlug: string, idempotencyKey: string): string {
   return `${STORAGE_PREFIX}${storeSlug}:${idempotencyKey}`;
@@ -93,7 +128,7 @@ function parseOrderError(payload: unknown): string {
 export async function submitGuestOrderPlacement(
   idempotencyKey: string,
   request: GuestOrderPlacementRequest,
-): Promise<{ orderId: string; orderNumber: string }> {
+): Promise<{ orderId: string; orderNumber: string; claimToken?: string }> {
   const response = await fetch("/api/public/orders", {
     method: "POST",
     headers: {
@@ -108,14 +143,22 @@ export async function submitGuestOrderPlacement(
     throw new Error(parseOrderError(payload));
   }
 
-  const data = (payload as { data?: { orderId?: string; orderNumber?: string } }).data;
+  const data = (payload as {
+    data?: { orderId?: string; orderNumber?: string; claimToken?: string };
+  }).data;
   if (!data?.orderId) {
     throw new Error("Invalid order response");
+  }
+
+  const claimToken = data.claimToken?.trim() || undefined;
+  if (claimToken) {
+    writeGuestOrderClaimToken(request.storeSlug, data.orderId, claimToken);
   }
 
   return {
     orderId: data.orderId,
     orderNumber: data.orderNumber ?? data.orderId,
+    claimToken,
   };
 }
 
@@ -144,6 +187,7 @@ export function runGuestOrderPlacementInBackground(
         status: "success",
         orderId: result.orderId,
         orderNumber: result.orderNumber,
+        claimToken: result.claimToken,
         request,
       };
       writeGuestOrderPlacement(storeSlug, success);

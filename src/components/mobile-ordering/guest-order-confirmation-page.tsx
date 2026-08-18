@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCheck, ChevronLeft, CookingPot, Loader2, MapPin, Phone } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CheckCheck, ChevronLeft, CookingPot, Loader2, LogIn, MapPin, Phone, Sparkles } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 import { createGuestOrderReadyPlayer, unlockGuestOrderReadyAudio } from "@/lib/mobile-ordering/guest-order-ready-sound";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/public-menu/guest-active-order-storage";
 import {
   readGuestOrderPlacement,
+  readGuestOrderClaimToken,
   resumeGuestOrderPlacementIfNeeded,
   type GuestOrderPlacementItem,
   type GuestOrderPlacementState,
@@ -37,6 +38,13 @@ import { guestLineCompareAtTotal, lineTotalWithPromo } from "@/lib/promotions/pr
 import { PromoPrice } from "@/components/shared/promo-price";
 
 type OrderType = "on_site" | "pickup";
+
+type LoyaltyClaimState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "skipped" }
+  | { status: "error" }
+  | { status: "claimed"; awarded: number };
 
 type StatusStep = {
   id: "placed" | "preparing" | "ready";
@@ -243,6 +251,7 @@ function unwrapStatusResponse(payload: unknown): PublicOrderStatusPayload | null
 
 export function GuestOrderConfirmationPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const t = useGuestT();
   const { locale } = useGuestLocale();
@@ -259,7 +268,11 @@ export function GuestOrderConfirmationPage() {
     syncGuestOrderPlacement,
     checkoutPath,
     refetchOrderHistory,
+    refetchCustomer,
     taxRate: taxRatePercent,
+    customer,
+    customerLoading,
+    loyaltySettings,
   } = usePublicMenu();
 
   const placementKey = searchParams.get("placementKey") ?? "";
@@ -314,6 +327,8 @@ export function GuestOrderConfirmationPage() {
   const etaMinutes = Number(searchParams.get("eta") ?? 15);
   const initialScheduledFor = searchParams.get("scheduledFor");
   const estimatedEarnPoints = Math.max(0, Number(searchParams.get("earnPoints") ?? "0") || 0);
+  const [loyaltyClaim, setLoyaltyClaim] = useState<LoyaltyClaimState>({ status: "idle" });
+  const claimAttemptedRef = useRef(false);
 
   const [trackStatus, setTrackStatus] = useState<GuestOrderTrackStatus>(
     initialScheduledFor ? "scheduled" : "placed",
@@ -398,6 +413,68 @@ export function GuestOrderConfirmationPage() {
     if (!placementKey || !isPlacementPending) return;
     resumeGuestOrderPlacementIfNeeded(storeSlug, placementKey, syncGuestOrderPlacement);
   }, [isPlacementPending, placementKey, storeSlug, syncGuestOrderPlacement]);
+
+  const claimToken = useMemo(() => {
+    const fromPlacement = resolvedPlacement?.claimToken?.trim();
+    if (fromPlacement) return fromPlacement;
+    if (!orderId) return null;
+    return readGuestOrderClaimToken(storeSlug, orderId);
+  }, [orderId, resolvedPlacement?.claimToken, storeSlug]);
+
+  const confirmReturnTo = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+  const confirmLoginPath = `/login?returnTo=${encodeURIComponent(confirmReturnTo)}`;
+  const confirmSignupPath = `/signup?returnTo=${encodeURIComponent(confirmReturnTo)}`;
+
+  useEffect(() => {
+    if (customerLoading) return;
+    if (!customer || !orderId || !claimToken || isSubmittingOrder || placementError) {
+      return;
+    }
+    if (claimAttemptedRef.current) return;
+    claimAttemptedRef.current = true;
+
+    let cancelled = false;
+    setLoyaltyClaim({ status: "pending" });
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/public/orders/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storeSlug, orderId, token: claimToken }),
+        });
+        const payload = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          data?: { awarded?: number };
+        } | null;
+        if (cancelled) return;
+        if (!response.ok || payload?.ok === false) {
+          setLoyaltyClaim({ status: "error" });
+          return;
+        }
+        const awarded = Math.max(0, Number(payload?.data?.awarded ?? 0) || 0);
+        setLoyaltyClaim({ status: "claimed", awarded });
+        void refetchOrderHistory();
+        void refetchCustomer();
+      } catch {
+        if (!cancelled) setLoyaltyClaim({ status: "error" });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    claimToken,
+    customer,
+    customerLoading,
+    isSubmittingOrder,
+    orderId,
+    placementError,
+    refetchCustomer,
+    refetchOrderHistory,
+    storeSlug,
+  ]);
 
   useEffect(() => {
     if (resolvedPlacement?.status !== "success" || !resolvedPlacement.orderId) return;
@@ -722,6 +799,30 @@ export function GuestOrderConfirmationPage() {
     }
   }
 
+  const showGuestClaimCta =
+    !customerLoading &&
+    !customer &&
+    Boolean(claimToken) &&
+    !isSubmittingOrder &&
+    !placementError;
+  const showGuestEarnCopy =
+    Boolean(loyaltySettings?.enabled) && estimatedEarnPoints > 0;
+  const claimedAwarded =
+    loyaltyClaim.status === "claimed" ? loyaltyClaim.awarded : 0;
+  const showYouWillEarn =
+    loyaltyClaim.status === "claimed" &&
+    claimedAwarded === 0 &&
+    estimatedEarnPoints > 0 &&
+    trackStatus !== "served" &&
+    trackStatus !== "cancelled" &&
+    trackStatus !== "refunded";
+  const showYouEarned =
+    estimatedEarnPoints > 0 &&
+    (claimedAwarded > 0 ||
+      (Boolean(customer) &&
+        trackStatus === "served" &&
+        (loyaltyClaim.status === "claimed" || !claimToken)));
+
   return (
     <div className="min-h-screen">
       <header className="checkout-header sticky top-0 z-30 border-b border-border/70 bg-card/80 px-2 backdrop-blur-xl lg:px-4">
@@ -785,10 +886,50 @@ export function GuestOrderConfirmationPage() {
           </section>
         ) : null}
 
-        {estimatedEarnPoints > 0 && trackStatus === "served" ? (
+        {showGuestClaimCta ? (
+          <section className="rounded-2xl border border-amber-300/40 bg-amber-500/10 p-4 text-sm shadow-sm backdrop-blur-md dark:border-amber-200/20 dark:bg-amber-500/10">
+            <div className="flex items-start gap-2">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-amber-800 dark:text-amber-100" />
+              <p className="font-semibold text-amber-900 dark:text-amber-100">
+                {showGuestEarnCopy
+                  ? t("confirm.signInToEarn", {
+                      points: estimatedEarnPoints.toLocaleString(),
+                    })
+                  : t("confirm.signInToSaveOrder")}
+              </p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Link
+                href={confirmLoginPath}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
+              >
+                <LogIn className="h-4 w-4" />
+                {t("account.signIn")}
+              </Link>
+              <Link
+                href={confirmSignupPath}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-border/70 bg-card/80 text-sm font-semibold text-foreground"
+              >
+                {t("account.createAccount")}
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {showYouEarned ? (
           <section className="rounded-2xl border border-amber-300/40 bg-amber-500/10 p-4 text-sm shadow-sm backdrop-blur-md dark:border-amber-200/20 dark:bg-amber-500/10">
             <p className="font-semibold text-amber-900 dark:text-amber-100">
-              {t("confirm.youEarned", { points: estimatedEarnPoints })}
+              {t("confirm.youEarned", {
+                points: (claimedAwarded > 0 ? claimedAwarded : estimatedEarnPoints).toLocaleString(),
+              })}
+            </p>
+          </section>
+        ) : showYouWillEarn ? (
+          <section className="rounded-2xl border border-amber-300/40 bg-amber-500/10 p-4 text-sm shadow-sm backdrop-blur-md dark:border-amber-200/20 dark:bg-amber-500/10">
+            <p className="font-semibold text-amber-900 dark:text-amber-100">
+              {t("confirm.youWillEarn", {
+                points: estimatedEarnPoints.toLocaleString(),
+              })}
             </p>
           </section>
         ) : null}

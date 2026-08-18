@@ -13,6 +13,7 @@ import { computeKdsActions } from "@/lib/kds/computeKdsActions";
 import { getLocationStationsWithSubstations } from "@/lib/kds/getLocationStations";
 import type { KdsView, KdsOrder, KdsOrderItem, KdsStation, KdsDelay } from "@/lib/kds/kdsView";
 import { isKdsView } from "@/lib/kds/kdsView";
+import { formatGuestContactLabel } from "@/lib/orders/guestContactLabel";
 
 /** KDS shows orders sent to kitchen. Dine-in: only fired waves (firedAt set). Pickup/delivery: included when placed (no fire step). */
 
@@ -46,7 +47,7 @@ export async function buildKdsView(locationId: string): Promise<KdsView | null> 
     },
     with: {
       table: { columns: { id: true, tableNumber: true } },
-      customer: { columns: { id: true, name: true } },
+      customer: { columns: { id: true, name: true, phone: true } },
       session: {
         columns: { id: true, tableId: true },
         with: { table: { columns: { id: true, tableNumber: true } } },
@@ -110,7 +111,12 @@ export async function buildKdsView(locationId: string): Promise<KdsView | null> 
     ])
   );
   const customerNameByOrderId = new Map(
-    ordersList.map((o) => [o.id, o.customer?.name ?? null])
+    ordersList.map((o) => [
+      o.id,
+      o.customer
+        ? formatGuestContactLabel(o.customer.name, o.customer.phone)
+        : null,
+    ]),
   );
 
   const now = new Date();

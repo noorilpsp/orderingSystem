@@ -304,7 +304,7 @@ export async function POST(request: NextRequest) {
         acceptsCards: location.acceptsCards ?? true,
         acceptsMobilePayments: location.acceptsMobilePayments ?? false,
         serviceChargePercentage: location.serviceChargePercentage?.toString() ?? null,
-        taxRate: (location.taxRate ?? 21.0).toString(),
+        taxRate: (location.taxRate ?? 0).toString(),
         averagePrepTimeMinutes: location.averagePrepTimeMinutes ?? null,
         status: location.status ?? "active",
         visibleInDirectory: location.visibleInDirectory ?? true,

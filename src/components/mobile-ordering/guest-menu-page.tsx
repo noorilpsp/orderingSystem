@@ -211,9 +211,20 @@ export function GuestMenuPage() {
     toastTimerRef.current = setTimeout(() => setToast(null), 2500);
   }, []);
 
+  const isCatalogSoldOut = useCallback(
+    (itemId: string) => items.some((entry) => entry.id === itemId && entry.status === "soldout"),
+    [items],
+  );
+
+  const handleItemClick = useCallback((item: GuestMenuItem | GuestCartItem) => {
+    if (isCatalogSoldOut(item.id)) return;
+    setSelectedItem(item);
+  }, [isCatalogSoldOut]);
+
   /** + on cards: open configurator when required options exist; otherwise quick-add. */
   const handleQuickAddToCart = useCallback(
     (item: GuestMenuItem | GuestCartItem) => {
+      if (isCatalogSoldOut(item.id)) return;
       const existingLines = cart.filter(
         (entry) => entry.id === item.id && !isRewardCartLine(entry),
       );
@@ -229,7 +240,7 @@ export function GuestMenuPage() {
       }
       addToCart(item);
     },
-    [addToCart, cart, getCustomizationGroupsForItem],
+    [addToCart, cart, getCustomizationGroupsForItem, isCatalogSoldOut],
   );
 
   const handleModalAddToCart = useCallback(
@@ -627,7 +638,7 @@ export function GuestMenuPage() {
             cartItems={cart}
             onAddToCart={handleQuickAddToCart}
             onRemoveFromCart={removeFromCart}
-            onItemClick={setSelectedItem}
+            onItemClick={handleItemClick}
           />
         ) : null}
 
@@ -693,7 +704,7 @@ export function GuestMenuPage() {
                             variant={cardVariant}
                             onAddToCart={handleQuickAddToCart}
                             onRemoveFromCart={removeFromCart}
-                            onItemClick={setSelectedItem}
+                            onItemClick={handleItemClick}
                             quantity={quantity}
                           />
                           {!isTabletUp && index < categoryItems.length - 1 ? (

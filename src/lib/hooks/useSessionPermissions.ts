@@ -18,10 +18,10 @@ function setPermissionsCache(data: SessionPermissions | null): void {
  * This replaces the old usePermissions hook with a more efficient approach
  */
 export function useSessionPermissions() {
-  const [permissions, setPermissions] = useState<SessionPermissions | null>(
-    () => getPermissionsCache()
-  )
-  const [loading, setLoading] = useState(() => !getPermissionsCache())
+  // Always start empty so SSR HTML matches the client's first paint.
+  // Module cache is applied after mount to avoid hydration mismatches.
+  const [permissions, setPermissions] = useState<SessionPermissions | null>(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {

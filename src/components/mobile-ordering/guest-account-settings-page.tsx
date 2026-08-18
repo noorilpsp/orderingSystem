@@ -32,6 +32,7 @@ export function GuestAccountSettingsPage() {
         <GuestAccountSettings
           email={customer.email}
           name={customer.name}
+          phone={customer.phone}
           storeSlug={storeSlug}
           onProfileSaved={async () => {
             await refetchCustomer();

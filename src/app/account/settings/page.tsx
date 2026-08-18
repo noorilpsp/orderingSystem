@@ -36,6 +36,7 @@ export default async function AccountSettingsPage({
       <AccountSettingsSection
         email={customer.email}
         name={customer.name}
+        phone={customer.phone}
         storeSlug={storeSlug}
       />
     </div>

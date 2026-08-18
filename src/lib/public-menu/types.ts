@@ -79,6 +79,8 @@ export type CreatePublicOrderInput = {
   scheduledPickupAt?: string | null;
   pointsToRedeem?: number;
   rewardId?: string;
+  /** Walk-in guest mobile number so the restaurant can call about the order. */
+  phone?: string | null;
   items: PublicOrderItemInput[];
 };
 

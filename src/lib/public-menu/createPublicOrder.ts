@@ -35,6 +35,8 @@ import {
   parseScheduledPickupAt,
 } from "@/lib/public-menu/scheduledOrderRelease";
 import { getLoggedInCustomer } from "@/lib/public-menu/getLoggedInCustomer";
+import { ensureWalkInCustomerByPhone } from "@/lib/public-menu/ensureWalkInCustomerByPhone";
+import { isValidGuestPhone } from "@/lib/public-menu/guest-phone";
 import { withTx } from "@/domain/tx";
 import {
   applyLoyaltyRedemptionForOrder,
@@ -258,7 +260,7 @@ async function createPickupOrDeliveryOrder(
     subtotal = preparedRedemption.subtotal;
   }
 
-  const taxRate = Number.parseFloat(String(location.taxRate ?? "21.00")) / 100;
+  const taxRate = Number.parseFloat(String(location.taxRate ?? "0.00")) / 100;
   const serviceChargeRate =
     Number.parseFloat(String(location.serviceChargePercentage ?? "0.00")) / 100;
   const taxAmount = subtotal * taxRate;
@@ -575,6 +577,29 @@ export async function createPublicOrder(
     userId = loggedIn?.userId ?? null;
   } catch (error) {
     console.error("[createPublicOrder] Failed to resolve logged-in customer:", error);
+  }
+
+  if (!userId) {
+    const guestSessionMode = resolveGuestSessionMode(location.orderModes);
+    const requiresGuestPhone =
+      input.orderType === "pickup" ||
+      input.orderType === "delivery" ||
+      (input.orderType === "dine_in" && guestSessionMode === "self_service");
+    if (requiresGuestPhone) {
+      const guestPhone = input.phone?.trim() || "";
+      if (!isValidGuestPhone(guestPhone)) {
+        return {
+          ok: false,
+          code: "BAD_REQUEST",
+          message: "Please enter a valid mobile number",
+        };
+      }
+      customerId =
+        (await ensureWalkInCustomerByPhone({
+          locationId: location.id,
+          phone: guestPhone,
+        })) ?? customerId;
+    }
   }
 
   if (input.orderType === "dine_in") {

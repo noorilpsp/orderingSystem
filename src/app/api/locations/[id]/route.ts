@@ -5,8 +5,9 @@ import { db } from "@/db"
 import { merchantLocations } from "@/lib/db/schema/merchant-locations"
 import { merchantUsers } from "@/lib/db/schema/merchant-users"
 import type { MerchantLocation } from "@/lib/db/schema/merchant-locations"
+import { revalidateTag } from "next/cache"
 import { unstable_cache } from "@/lib/unstable-cache"
-import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
+import { revalidatePublicMenuForLocation, revalidatePublicMenuForSlug } from "@/lib/public-menu/publicMenuCache"
 
 export const runtime = "nodejs"
 
@@ -54,7 +55,7 @@ export async function GET(
         return location
       },
       ["location-data", locationId],
-      { revalidate: 600 } // 10 minutes
+      { revalidate: 600, tags: [`location-data:${locationId}`] }
     )
 
     const location = await getCachedLocation()
@@ -174,6 +175,8 @@ export async function PUT(
         { status: 403 }
       )
     }
+
+    const previousSlug = existingLocation.storeSlug
 
     // Parse request body
     const body = await request.json().catch(() => ({}))
@@ -316,6 +319,17 @@ export async function PUT(
     }
 
     // Return updated location data - no browser cache
+    revalidateTag(`location-data:${locationId}`, { expire: 0 })
+    if (existingLocation.merchantId) {
+      revalidateTag(`merchant-locations:${existingLocation.merchantId}`, { expire: 0 })
+    }
+    if (
+      previousSlug &&
+      updatedLocation.storeSlug &&
+      previousSlug.trim().toLowerCase() !== updatedLocation.storeSlug.trim().toLowerCase()
+    ) {
+      await revalidatePublicMenuForSlug(previousSlug)
+    }
     await revalidatePublicMenuForLocation(locationId)
     return NextResponse.json(updatedLocation as MerchantLocation, {
       status: 200,

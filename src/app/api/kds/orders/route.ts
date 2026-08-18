@@ -6,6 +6,7 @@ import { orders } from "@/lib/db/schema/orders";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { assertLocationKdsEnabled } from "@/lib/kds/assertKdsEnabled";
 import { posFailure, posSuccess, toErrorMessage } from "@/app/api/_lib/pos-envelope";
+import { formatGuestContactLabel } from "@/lib/orders/guestContactLabel";
 
 export const runtime = "nodejs";
 
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
           columns: { id: true, tableNumber: true },
         },
         customer: {
-          columns: { id: true, name: true },
+          columns: { id: true, name: true, phone: true },
         },
         session: {
           columns: { id: true, tableId: true },
@@ -114,7 +115,9 @@ export async function GET(request: NextRequest) {
         order.session?.table?.tableNumber ??
         order.table?.tableNumber ??
         null;
-      const customerName = order.customer?.name ?? null;
+      const customerName = order.customer
+        ? formatGuestContactLabel(order.customer.name, order.customer.phone)
+        : null;
 
       return {
         id: order.id,

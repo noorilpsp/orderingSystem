@@ -89,6 +89,7 @@ export type PublicMenuCustomer = {
   userId: string;
   email: string;
   name: string;
+  phone: string | null;
   customerId: string | null;
   loyaltyPoints: number | null;
   loyaltyPointsExpiry: {
@@ -253,6 +254,7 @@ export function PublicMenuProvider({
           userId: result.customer.userId,
           email: result.customer.email,
           name: result.customer.name,
+          phone: result.customer.phone ?? null,
           customerId: result.customer.customerId,
           loyaltyPoints: result.customer.loyaltyPoints ?? null,
           loyaltyPointsExpiry: result.customer.loyaltyPointsExpiry ?? null,
@@ -423,11 +425,12 @@ export function PublicMenuProvider({
   const fetchMenu = useCallback(async (options?: { background?: boolean }) => {
     if (!options?.background) {
       setLoading(true);
+      setError(null);
     }
-    setError(null);
     try {
       const response = await fetch(
         `/api/public/menu/${encodeURIComponent(storeSlug)}`,
+        { cache: "no-store" },
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -446,7 +449,11 @@ export function PublicMenuProvider({
       const parsed = unwrapPublicMenuResponse(payload);
       if (!parsed) throw new Error("Invalid menu response");
       setView(parsed);
+      setError(null);
     } catch (fetchError) {
+      if (options?.background) {
+        return;
+      }
       setError(
         toUserFacingErrorMessage(
           fetchError,
@@ -464,6 +471,29 @@ export function PublicMenuProvider({
   useEffect(() => {
     void fetchMenu({ background: hasServerView });
   }, [fetchMenu, hasServerView]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || storeSlug === "demo") return;
+
+    const refetchInBackground = () => {
+      void fetchMenu({ background: true });
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refetchInBackground();
+      }
+    };
+
+    window.addEventListener("focus", refetchInBackground);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", refetchInBackground);
+    return () => {
+      window.removeEventListener("focus", refetchInBackground);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", refetchInBackground);
+    };
+  }, [fetchMenu, storeSlug]);
 
   const customizationGroupMap = useMemo(
     () => new Map((view?.customizationGroups ?? []).map((group) => [group.id, group])),
@@ -804,7 +834,7 @@ export function PublicMenuProvider({
     customizationGroups: view?.customizationGroups ?? [],
     orderModes: view?.orderModes ?? {},
     tables: view?.tables ?? [],
-    taxRate: view?.taxRate ?? 21,
+    taxRate: view?.taxRate ?? 0,
     cart,
     orderType,
     tableNumber,

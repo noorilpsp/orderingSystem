@@ -54,7 +54,7 @@ export function CartBar({
   const publicMenu = usePublicMenuOptional();
   const restaurant = publicMenu?.restaurant ?? staticRestaurant;
   const customizationGroups = publicMenu?.customizationGroups ?? staticCustomizationGroups;
-  const taxRatePercent = publicMenu?.taxRate ?? 21;
+  const taxRatePercent = publicMenu?.taxRate ?? 0;
   const resolvedCheckoutPath = checkoutPath ?? publicMenu?.checkoutPath ?? "/mobile/checkout";
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);

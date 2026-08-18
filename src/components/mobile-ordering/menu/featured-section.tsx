@@ -10,6 +10,7 @@ import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
 import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 import { PromoPrice } from "@/components/shared/promo-price";
 import { cartQuantityForCatalogItem } from "@/lib/public-menu/guest-cart-lines";
+import { cn } from "@/lib/utils";
 
 interface FeaturedSectionProps {
   items: MenuItem[];
@@ -59,6 +60,7 @@ export function FeaturedSection({
         {items.map((item) => {
           const quantity = cartQuantityForCatalogItem(cartItems, item.id);
           const isPressed = pressedItems.has(item.id);
+          const isSoldOut = item.status === "soldout";
           const localized = resolveCatalogText(
             locale,
             { name: item.name, description: item.description },
@@ -68,8 +70,15 @@ export function FeaturedSection({
           return (
             <div
               key={item.id}
-              className="w-[calc(40%-4px)] min-w-[120px] flex-shrink-0 snap-start md:w-auto md:min-w-0"
-              onClick={() => onItemClick(item)}
+              className={cn(
+                "w-[calc(40%-4px)] min-w-[120px] flex-shrink-0 snap-start md:w-auto md:min-w-0",
+                isSoldOut ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+              )}
+              aria-disabled={isSoldOut}
+              onClick={() => {
+                if (isSoldOut) return;
+                onItemClick(item);
+              }}
             >
               <div className="menu-item-controls relative aspect-square bg-gray-200 rounded-lg overflow-hidden">
                 {/* Image */}

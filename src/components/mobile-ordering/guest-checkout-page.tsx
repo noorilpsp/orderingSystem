@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Clock, Loader2, Store, User } from "lucide-react";
+import { ChevronLeft, Clock, Loader2, LogIn, MapPin, Phone, Sparkles, Store, User } from "lucide-react";
 import { OrderTypeToggle } from "@/components/mobile-ordering/checkout/order-type-toggle";
 import {
   PickupTimingPicker,
@@ -32,6 +32,11 @@ import {
   sumGuestCartItems,
 } from "@/lib/public-menu/guest-cart-pricing";
 import { guestCartLineId } from "@/lib/public-menu/guest-cart-lines";
+import {
+  isValidGuestPhone,
+  readStoredGuestPhone,
+  writeStoredGuestPhone,
+} from "@/lib/public-menu/guest-phone";
 import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
 import { PromoPrice } from "@/components/shared/promo-price";
 import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
@@ -60,7 +65,7 @@ export function GuestCheckoutPage() {
     unavailableReason,
     placeGuestOrder,
     customer,
-    accountLoginPath,
+    checkoutPath,
     loyaltySettings,
     rewards,
     taxRate: taxRatePercent,
@@ -72,12 +77,21 @@ export function GuestCheckoutPage() {
   const [pickupTimingMode, setPickupTimingMode] = useState<PickupTimingMode>("now");
   const [scheduledPickupAt, setScheduledPickupAt] = useState<string | null>(null);
   const [orderNotes, setOrderNotes] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
+  const [guestPhoneError, setGuestPhoneError] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<GuestPaymentMethodId>("pay_at_pickup");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const placingRef = useRef(false);
+  const guestPhoneInputRef = useRef<HTMLInputElement>(null);
   const didDefaultPickupRef = useRef(false);
 
   const pickupPrepMinutes = orderModes.pickup?.estimated_time_minutes ?? 15;
+
+  useEffect(() => {
+    if (customer) return;
+    const stored = readStoredGuestPhone();
+    if (stored) setGuestPhone(stored);
+  }, [customer]);
 
   // Walk-in checkout starts on pickup once; table QR keeps dine-in.
   useEffect(() => {
@@ -112,9 +126,11 @@ export function GuestCheckoutPage() {
     selectedReward != null ? previewCatalogDiscount(selectedReward, foodSubtotal) : 0;
   const loyaltyEarnSubtotal = Math.max(0, foodSubtotal - loyaltyDiscount);
   const estimatedEarnPoints =
-    customer && loyaltySettings?.enabled
-      ? Math.floor(loyaltyEarnSubtotal * loyaltySettings.pointsPerDollar)
+    loyaltySettings?.enabled
+      ? Math.floor(loyaltyEarnSubtotal * (loyaltySettings.pointsPerDollar ?? 0))
       : 0;
+  const showGuestEarnTeaser = !customer && estimatedEarnPoints > 0;
+  const checkoutLoginPath = `/login?returnTo=${encodeURIComponent(checkoutPath)}`;
   const subtotal = foodSubtotal;
   const tax = subtotal * (taxRatePercent / 100);
   const total = Math.max(0, subtotal + tax - loyaltyDiscount);
@@ -129,6 +145,7 @@ export function GuestCheckoutPage() {
   // Delivery-to-table needs a table. Self pickup dine-in is counter collect —
   // never bind checkout to a table (avoids sticky ?table= looking "auto-selected").
   const usesTableSession = orderType === "dine-in" && !isSelfPickupMode;
+  const needsGuestPhone = !customer && !usesTableSession;
 
   // Drop any leftover table when this store is self pickup.
   useEffect(() => {
@@ -166,7 +183,17 @@ export function GuestCheckoutPage() {
     "rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-md";
 
   const handlePlaceOrder = () => {
-    if (!isFormComplete || unavailableReason || placingRef.current) return;
+    if (unavailableReason || placingRef.current) return;
+    if (needsGuestPhone && !isValidGuestPhone(guestPhone)) {
+      setGuestPhoneError(true);
+      guestPhoneInputRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      guestPhoneInputRef.current?.focus();
+      return;
+    }
+    if (!isFormComplete) return;
     placingRef.current = true;
     setIsSubmitting(true);
 
@@ -206,6 +233,9 @@ export function GuestCheckoutPage() {
             : [];
 
       const guestNotes = orderNotes.trim() || null;
+      if (needsGuestPhone) {
+        writeStoredGuestPhone(guestPhone);
+      }
 
       // Delivery-to-table: ensure this phone has a seat before placing (for split later).
       let seatId: string | null = guestSeat?.seatId ?? null;
@@ -227,6 +257,7 @@ export function GuestCheckoutPage() {
             ? scheduledPickupAt
             : null,
         rewardId: selectedReward?.id,
+        phone: needsGuestPhone ? guestPhone.trim() : null,
         items,
       });
 
@@ -310,12 +341,29 @@ export function GuestCheckoutPage() {
         ) : null}
 
         <section className={cardClass}>
-          <div className="flex items-start gap-3">
-            <Store className="mt-0.5 h-5 w-5 text-muted-foreground" />
-            <div>
-              <p className="font-semibold text-foreground">{restaurant?.name}</p>
-              <p className="text-sm text-muted-foreground">{restaurant?.address}</p>
+          <div className="flex flex-col gap-3">
+            <div className="flex h-4 items-center gap-2">
+              <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="m-0 text-sm font-semibold leading-none text-foreground">
+                {restaurant?.name}
+              </p>
             </div>
+            {restaurant?.address ? (
+              <div className="flex h-4 items-center gap-2">
+                <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <p className="m-0 text-sm leading-none text-muted-foreground">
+                  {restaurant.address}
+                </p>
+              </div>
+            ) : null}
+            {restaurant?.phone ? (
+              <div className="flex h-4 items-center gap-2">
+                <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <p className="m-0 text-sm leading-none text-muted-foreground">
+                  {restaurant.phone}
+                </p>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -327,29 +375,73 @@ export function GuestCheckoutPage() {
         ) : null}
 
         <section className={cardClass}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3">
-              <User className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground">
-                  {customer ? t("checkout.orderingAs") : t("checkout.guestCheckout")}
-                </p>
-                <p className="truncate text-sm text-muted-foreground">
-                  {customer
-                    ? customer.name || customer.email
+          <div className="flex min-w-0 items-start gap-3">
+            <User className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="font-semibold text-foreground">
+                {customer ? t("checkout.orderingAs") : t("checkout.guestCheckout")}
+              </p>
+              {customer ? (
+                <>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <User className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{customer.name || customer.email}</span>
+                  </p>
+                  {customer.phone ? (
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Phone className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{customer.phone}</span>
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {showGuestEarnTeaser
+                    ? t("checkout.signInToEarnOrder", {
+                        points: estimatedEarnPoints.toLocaleString(),
+                      })
                     : t("checkout.signInToSave")}
                 </p>
-              </div>
+              )}
             </div>
-            {customer ? null : (
-              <Link
-                href={accountLoginPath}
-                className="shrink-0 text-sm font-medium text-primary underline"
-              >
-                {t("account.signIn")}
-              </Link>
-            )}
           </div>
+          {!needsGuestPhone ? null : (
+            <label className="mt-4 block text-sm text-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("checkout.phone")}
+              </span>
+              <input
+                ref={guestPhoneInputRef}
+                id="guest-checkout-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={guestPhone}
+                onChange={(event) => {
+                  setGuestPhone(event.target.value);
+                  if (guestPhoneError) setGuestPhoneError(false);
+                }}
+                placeholder={t("checkout.phonePlaceholder")}
+                maxLength={50}
+                aria-invalid={guestPhoneError}
+                className={`mt-1.5 h-11 w-full scroll-mt-24 rounded-xl border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  guestPhoneError
+                    ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20"
+                    : "border-border/70 focus:border-primary focus:ring-primary/20"
+                }`}
+              />
+              <span
+                className={`mt-1.5 block text-xs ${
+                  guestPhoneError
+                    ? "text-rose-600 dark:text-rose-300"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {guestPhoneError ? t("checkout.phoneRequired") : t("checkout.phoneHint")}
+              </span>
+            </label>
+          )}
         </section>
 
         <section className={cardClass}>
@@ -498,12 +590,32 @@ export function GuestCheckoutPage() {
               </span>
             </div>
           ) : null}
-          {estimatedEarnPoints > 0 ? (
+          {customer && estimatedEarnPoints > 0 ? (
             <div className="mt-2 flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{t("checkout.youWillEarn")}</span>
               <span className="font-medium text-amber-700 dark:text-amber-300">
-                {estimatedEarnPoints} {t("common.points")}
+                {estimatedEarnPoints.toLocaleString()} {t("common.points")}
               </span>
+            </div>
+          ) : null}
+          {showGuestEarnTeaser ? (
+            <div className="mt-3 rounded-xl border border-amber-400/35 bg-amber-500/10 p-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="inline-flex items-center gap-2 font-medium text-amber-900 dark:text-amber-100">
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  {t("checkout.signInToEarnRow")}
+                </span>
+                <span className="shrink-0 font-semibold text-amber-800 dark:text-amber-200">
+                  {estimatedEarnPoints.toLocaleString()} {t("common.points")}
+                </span>
+              </div>
+              <Link
+                href={checkoutLoginPath}
+                className="mt-2.5 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
+              >
+                <LogIn className="h-4 w-4" />
+                {t("account.signIn")}
+              </Link>
             </div>
           ) : null}
           <div className="my-2 h-px bg-border/80" />

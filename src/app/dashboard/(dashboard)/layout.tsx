@@ -32,13 +32,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   // This ensures merchant memberships are available
   if (permissionsLoading || !sessionPermissions) {
     return (
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full">
-          <div className="flex flex-1 items-center justify-center">
-            <div className="text-muted-foreground">Loading...</div>
-          </div>
+      <div className="flex min-h-screen w-full">
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-muted-foreground">Loading...</div>
         </div>
-      </SidebarProvider>
+      </div>
     )
   }
 
@@ -53,9 +51,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   const userId = sessionPermissions.userId
 
-  // Debug: Log merchant memberships to help diagnose issues
-  if (typeof window !== 'undefined' && merchantMemberships.length === 0) {
-    console.warn('[DashboardLayout] No merchant memberships found:', {
+  if (merchantMemberships.length === 0 && process.env.NODE_ENV === "development") {
+    console.warn("[DashboardLayout] No merchant memberships found:", {
       userId,
       sessionPermissions,
       merchantMembershipsCount: sessionPermissions.merchantMemberships.length,

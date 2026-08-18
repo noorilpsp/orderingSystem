@@ -120,31 +120,7 @@ function PermissionsProviderInner({ children }: { children: ReactNode }) {
   )
 }
 
-// Default context value for SSR/prerendering
-const defaultContextValue: PermissionsContextType = {
-  permissions: null,
-  sessionPermissions: null,
-  loading: true,
-  error: null,
-  refetch: () => {},
-  isPlatformAdmin: false,
-  hasMerchantAccess: () => false,
-  canAccessLocation: () => false,
-  getUserRole: () => null,
-}
-
 export function PermissionsProvider({ children }: { children: ReactNode }) {
-  // During SSR/prerendering (when window is undefined), use default values
-  // This avoids triggering static analysis warnings with cacheComponents
-  if (typeof window === 'undefined') {
-    return (
-      <PermissionsContext.Provider value={defaultContextValue}>
-        {children}
-      </PermissionsContext.Provider>
-    )
-  }
-
-  // On client side, use the actual permissions hook
   return <PermissionsProviderInner>{children}</PermissionsProviderInner>
 }
 

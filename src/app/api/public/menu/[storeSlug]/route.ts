@@ -26,10 +26,7 @@ export async function GET(
     }
 
     const response = posSuccess(view);
-    response.headers.set(
-      "Cache-Control",
-      "public, s-maxage=15, stale-while-revalidate=300",
-    );
+    response.headers.set("Cache-Control", "no-store, must-revalidate");
     return response;
   } catch (error) {
     return posFailure(

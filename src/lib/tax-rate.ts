@@ -1,10 +1,11 @@
 /**
  * Coerce a location tax rate percent (e.g. 21 = 21%).
- * Preserves 0 — do not use `x || 21`, which treats 0 as missing.
+ * Preserves 0 — do not use `x || fallback`, which treats 0 as missing.
+ * Missing/invalid values default to 0%.
  */
 export function coerceTaxRatePercent(
   value: unknown,
-  fallback = 21,
+  fallback = 0,
 ): number {
   if (value == null || value === "") return fallback;
   const parsed = Number.parseFloat(String(value));

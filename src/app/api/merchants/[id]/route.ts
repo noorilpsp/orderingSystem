@@ -6,6 +6,7 @@ import { merchants, normalizeLoyaltySettings } from "@/lib/db/schema/merchants";
 import { merchantUsers } from "@/lib/db/schema/merchant-users";
 import type { Merchant } from "@/lib/db/schema/merchants";
 import { unstable_cache } from "@/lib/unstable-cache";
+import { revalidateTag } from "next/cache";
 import { revalidatePublicMenuForMerchant } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
@@ -89,7 +90,7 @@ export async function GET(
         return merchant;
       },
       ['merchant-data', merchantId],
-      { revalidate: 600 } // 10 minutes
+      { revalidate: 600, tags: [`merchant-data:${merchantId}`] }
     );
 
     const merchant = await getCachedMerchant();
@@ -387,10 +388,7 @@ export async function PUT(
       );
     }
 
-    // Note: Cache will naturally expire after 10 minutes (revalidate: 600)
-    // For immediate invalidation, we'd need to use a different caching strategy
-    // The updated data will be available on next request after cache expires
-
+    revalidateTag(`merchant-data:${updatedMerchant.id}`, { expire: 0 });
     await revalidatePublicMenuForMerchant(updatedMerchant.id);
 
     return NextResponse.json(updatedMerchant as Merchant, {

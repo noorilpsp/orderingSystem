@@ -52,7 +52,7 @@ export async function getCachedPublicMenuView(
     return entry.view;
   }
 
-  revalidateTag(publicMenuCacheTag(slug), "max");
+  revalidateTag(publicMenuCacheTag(slug), { expire: 0 });
   const fresh = await loadPublicMenuCacheEntry(slug);
   return fresh.view;
 }
@@ -60,8 +60,10 @@ export async function getCachedPublicMenuView(
 export async function revalidatePublicMenuForSlug(storeSlug: string | null | undefined) {
   const slug = storeSlug?.trim().toLowerCase();
   if (!slug) return;
-  revalidateTag(publicMenuCacheTag(slug), "max");
-  revalidatePath(`/menu/${slug}`);
+  // Immediate expire so store-settings changes are not served stale.
+  revalidateTag(publicMenuCacheTag(slug), { expire: 0 });
+  revalidatePath(`/menu/${slug}`, "layout");
+  revalidatePath(`/api/public/menu/${slug}`);
 }
 
 export async function revalidatePublicMenuForLocation(

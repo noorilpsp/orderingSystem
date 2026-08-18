@@ -11,6 +11,7 @@ import {
   createPublicOrder,
   getPublicGuestIdempotencyUserId,
 } from "@/lib/public-menu/createPublicOrder";
+import { createGuestOrderClaimToken } from "@/lib/public-menu/guest-order-claim-token";
 
 export const runtime = "nodejs";
 
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
           typeof body.rewardId === "string" && body.rewardId.trim().length > 0
             ? body.rewardId.trim()
             : undefined,
+        phone: typeof body.phone === "string" ? body.phone : null,
         items: body.items ?? [],
       }),
     );
@@ -131,11 +133,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const claimToken = createGuestOrderClaimToken(result.orderId);
     const responseBody = {
       ok: true,
       data: {
         orderId: result.orderId,
         orderNumber: result.orderNumber,
+        ...(claimToken ? { claimToken } : {}),
       },
       correlationId: idempotencyKey,
     };

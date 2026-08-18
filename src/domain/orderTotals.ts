@@ -54,7 +54,7 @@ export async function recalculateOrderTotals(
     .where(and(eq(orderItemsTable.orderId, orderId), isNull(orderItemsTable.voidedAt)));
 
   const subtotal = Number(row?.subtotal ?? 0);
-  const taxRate = parseFloat(String(location?.taxRate ?? "21.00")) / 100;
+  const taxRate = parseFloat(String(location?.taxRate ?? "0.00")) / 100;
   const serviceChargeRate =
     parseFloat(String(location?.serviceChargePercentage ?? "0.00")) / 100;
   const taxAmount = subtotal * taxRate;

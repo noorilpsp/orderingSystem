@@ -5,7 +5,9 @@ import { db } from "@/db"
 import { merchantLocations } from "@/lib/db/schema/merchant-locations"
 import { merchantUsers } from "@/lib/db/schema/merchant-users"
 import type { MerchantLocation } from "@/lib/db/schema/merchant-locations"
+import { revalidateTag } from "next/cache"
 import { unstable_cache } from "@/lib/unstable-cache"
+import { revalidatePublicMenuForSlug } from "@/lib/public-menu/publicMenuCache"
 
 export const runtime = "nodejs"
 
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
         return locations
       },
       ["merchant-locations-list", merchantId],
-      { revalidate: 600 } // 10 minutes
+      { revalidate: 600, tags: [`merchant-locations:${merchantId}`] }
     )
 
     const locations = await getCachedLocations()
@@ -200,11 +202,21 @@ export async function POST(request: NextRequest) {
       bannerUrl: body.bannerUrl ?? null,
     }
 
+    if (body.taxRate !== undefined && body.taxRate !== null) {
+      const taxRate = Number(body.taxRate)
+      if (Number.isFinite(taxRate) && taxRate >= 0 && taxRate <= 100) {
+        locationData.taxRate = taxRate.toFixed(2)
+      }
+    }
+
     // Create location
     const [newLocation] = await db
       .insert(merchantLocations)
       .values(locationData)
       .returning()
+
+    revalidateTag(`merchant-locations:${merchantId}`, { expire: 0 })
+    await revalidatePublicMenuForSlug(newLocation?.storeSlug)
 
     // Return created location - no browser cache
     return NextResponse.json(newLocation as MerchantLocation, {

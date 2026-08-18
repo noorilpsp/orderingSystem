@@ -105,9 +105,15 @@ export function MenuItemCard({
 
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isSoldOut) return;
     setIsPressed(true);
     setTimeout(() => setIsPressed(false), 200);
     onAddToCart(item);
+  };
+
+  const handleCardClick = () => {
+    if (isSoldOut) return;
+    onItemClick?.(item);
   };
 
   const overlayControlClass =
@@ -270,10 +276,13 @@ export function MenuItemCard({
   if (isTile) {
     return (
       <div
-        onClick={() => onItemClick?.(item)}
+        onClick={handleCardClick}
+        aria-disabled={isSoldOut}
         className={cn(
-          "menu-item-controls flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition hover:border-border hover:bg-card/90",
-          isSoldOut && "opacity-60",
+          "menu-item-controls flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition",
+          isSoldOut
+            ? "cursor-not-allowed opacity-60"
+            : "cursor-pointer hover:border-border hover:bg-card/90",
         )}
       >
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
@@ -331,8 +340,12 @@ export function MenuItemCard({
 
   return (
     <div
-      onClick={() => onItemClick?.(item)}
-      className={cn("flex cursor-pointer gap-3", isSoldOut && "opacity-60")}
+      onClick={handleCardClick}
+      aria-disabled={isSoldOut}
+      className={cn(
+        "flex gap-3",
+        isSoldOut ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
     >
       <div className="flex min-w-0 flex-1 flex-col justify-between">
         <div className="flex flex-col gap-1">

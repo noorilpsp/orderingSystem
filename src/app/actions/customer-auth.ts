@@ -14,6 +14,12 @@ const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   name: z.string().trim().min(1, "Name is required").max(120),
+  phone: z
+    .string()
+    .trim()
+    .min(7, "Please enter a valid mobile number")
+    .max(50)
+    .refine((value) => value.replace(/\D/g, "").length >= 7, "Please enter a valid mobile number"),
   returnTo: z.string().optional(),
 });
 
@@ -57,6 +63,7 @@ async function upsertNeonUser(input: {
   id: string;
   email: string;
   fullName: string;
+  phone?: string | null;
   lastLoginAt?: Date | null;
 }) {
   await db
@@ -65,6 +72,7 @@ async function upsertNeonUser(input: {
       id: input.id,
       email: input.email,
       fullName: input.fullName,
+      phone: input.phone?.trim() || null,
       isActive: true,
       lastLoginAt: input.lastLoginAt ?? null,
       updatedAt: new Date(),
@@ -74,6 +82,7 @@ async function upsertNeonUser(input: {
       set: {
         email: input.email,
         fullName: input.fullName,
+        ...(input.phone != null ? { phone: input.phone.trim() || null } : {}),
         lastLoginAt: input.lastLoginAt ?? undefined,
         updatedAt: new Date(),
       },
@@ -84,6 +93,7 @@ export async function customerSignup(data: {
   email: string;
   password: string;
   name: string;
+  phone: string;
   returnTo?: string;
 }) {
   const validation = signupSchema.safeParse(data);
@@ -91,7 +101,7 @@ export async function customerSignup(data: {
     return { error: validation.error.issues[0]?.message || "Invalid input" };
   }
 
-  const { email, password, name, returnTo } = validation.data;
+  const { email, password, name, phone, returnTo } = validation.data;
   const nextPath = sanitizeReturnTo(returnTo);
 
   try {
@@ -109,7 +119,7 @@ export async function customerSignup(data: {
       email,
       password,
       options: {
-        data: { full_name: name },
+        data: { full_name: name, phone },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/login`,
       },
     });
@@ -133,6 +143,7 @@ export async function customerSignup(data: {
         id: signUpData.user.id,
         email: signUpData.user.email ?? email,
         fullName: name,
+        phone,
         lastLoginAt: signUpData.session ? new Date() : null,
       });
     } catch (dbError) {
@@ -262,6 +273,12 @@ export async function fetchLoggedInCustomerAction(storeSlug?: string | null) {
 
 const updateProfileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
+  phone: z
+    .string()
+    .trim()
+    .min(7, "Please enter a valid mobile number")
+    .max(50)
+    .refine((value) => value.replace(/\D/g, "").length >= 7, "Please enter a valid mobile number"),
   storeSlug: z.string().trim().optional(),
 });
 
@@ -272,10 +289,12 @@ const updatePasswordSchema = z.object({
 
 export async function updateCustomerProfile(data: {
   name: string;
+  phone: string;
   storeSlug?: string | null;
 }) {
   const validation = updateProfileSchema.safeParse({
     name: data.name,
+    phone: data.phone,
     storeSlug: data.storeSlug?.trim() || undefined,
   });
   if (!validation.success) {
@@ -293,8 +312,9 @@ export async function updateCustomerProfile(data: {
     }
 
     const name = validation.data.name;
+    const phone = validation.data.phone;
     const { error: metaError } = await supabase.auth.updateUser({
-      data: { full_name: name },
+      data: { full_name: name, phone },
     });
     if (metaError) {
       return { ok: false as const, error: metaError.message || "Unable to update profile." };
@@ -303,12 +323,12 @@ export async function updateCustomerProfile(data: {
     const now = new Date();
     await db
       .update(users)
-      .set({ fullName: name, updatedAt: now })
+      .set({ fullName: name, phone, updatedAt: now })
       .where(eq(users.id, user.id));
 
     await db
       .update(customers)
-      .set({ name })
+      .set({ name, phone })
       .where(eq(customers.userId, user.id));
 
     if (validation.data.storeSlug) {
@@ -317,10 +337,11 @@ export async function updateCustomerProfile(data: {
         storeSlug: validation.data.storeSlug,
         name,
         email: user.email ?? null,
+        phone,
       });
     }
 
-    return { ok: true as const, name };
+    return { ok: true as const, name, phone };
   } catch (error) {
     console.error("[updateCustomerProfile]", error);
     return { ok: false as const, error: "Unable to update profile. Please try again." };

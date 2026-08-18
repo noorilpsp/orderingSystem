@@ -1397,6 +1397,14 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
       min-height: unset !important;
       min-width: unset !important;
     }
+
+    /* Store phone / other inline checkout links — don't use 44px tap-row height */
+    .checkout-compact-link {
+      min-height: unset !important;
+      min-width: unset !important;
+      display: block;
+      line-height: 1rem;
+    }
   }
 
   /* Context pill dropdown - match checkout-button-design hover/focus (bg + text/icon color) */

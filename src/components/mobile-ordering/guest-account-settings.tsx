@@ -12,20 +12,27 @@ import { cn } from "@/lib/utils";
 type GuestAccountSettingsProps = {
   email: string;
   name: string;
+  phone?: string | null;
   storeSlug?: string | null;
-  onProfileSaved?: (name: string) => void | Promise<void>;
+  onProfileSaved?: (name: string, phone: string) => void | Promise<void>;
   className?: string;
 };
+
+function isValidPhone(value: string) {
+  return value.replace(/\D/g, "").length >= 7;
+}
 
 export function GuestAccountSettings({
   email,
   name,
+  phone = "",
   storeSlug = null,
   onProfileSaved,
   className,
 }: GuestAccountSettingsProps) {
   const t = useGuestT();
   const [displayName, setDisplayName] = useState(name);
+  const [displayPhone, setDisplayPhone] = useState(phone ?? "");
   const [profilePending, setProfilePending] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -41,12 +48,22 @@ export function GuestAccountSettings({
     setDisplayName(name);
   }, [name]);
 
+  useEffect(() => {
+    setDisplayPhone(phone ?? "");
+  }, [phone]);
+
+  const nameChanged = displayName.trim() !== name.trim();
+  const phoneChanged = displayPhone.trim() !== (phone ?? "").trim();
+  const profileValid =
+    displayName.trim().length > 0 && isValidPhone(displayPhone.trim());
+
   const handleSaveProfile = async () => {
     setProfilePending(true);
     setProfileError(null);
     setProfileMessage(null);
     const result = await updateCustomerProfile({
       name: displayName,
+      phone: displayPhone,
       storeSlug,
     });
     setProfilePending(false);
@@ -55,7 +72,7 @@ export function GuestAccountSettings({
       return;
     }
     setProfileMessage(t("account.settingsProfileSaved"));
-    await onProfileSaved?.(result.name);
+    await onProfileSaved?.(result.name, result.phone);
   };
 
   const handleSavePassword = async () => {
@@ -96,16 +113,6 @@ export function GuestAccountSettings({
           {t("account.settingsProfile")}
         </p>
         <label className="block text-sm text-foreground">
-          {t("auth.email")}
-          <input
-            type="email"
-            value={email}
-            readOnly
-            disabled
-            className={cn(inputClass, "cursor-not-allowed opacity-70")}
-          />
-        </label>
-        <label className="block text-sm text-foreground">
           {t("auth.fullName")}
           <input
             type="text"
@@ -114,6 +121,28 @@ export function GuestAccountSettings({
             maxLength={120}
             autoComplete="name"
             className={inputClass}
+          />
+        </label>
+        <label className="block text-sm text-foreground">
+          {t("auth.phone")}
+          <input
+            type="tel"
+            inputMode="tel"
+            value={displayPhone}
+            onChange={(event) => setDisplayPhone(event.target.value)}
+            maxLength={50}
+            autoComplete="tel"
+            className={inputClass}
+          />
+        </label>
+        <label className="block text-sm text-foreground">
+          {t("auth.email")}
+          <input
+            type="email"
+            value={email}
+            readOnly
+            disabled
+            className={cn(inputClass, "cursor-not-allowed opacity-70")}
           />
         </label>
         {profileError ? (
@@ -129,8 +158,8 @@ export function GuestAccountSettings({
           type="button"
           disabled={
             profilePending ||
-            !displayName.trim() ||
-            displayName.trim() === name.trim()
+            !profileValid ||
+            (!nameChanged && !phoneChanged)
           }
           onClick={() => {
             void handleSaveProfile();

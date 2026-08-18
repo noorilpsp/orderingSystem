@@ -72,7 +72,11 @@ export function GuestAccountPage() {
 
           {loyaltySettings?.enabled && typeof loyaltyPoints === "number" ? (
             <div className="mt-4 flex items-center justify-between rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
-              <span className="text-sm text-muted-foreground">{t("account.pointsHere")}</span>
+              <span className="text-sm text-muted-foreground">
+                {t("account.pointsHere", {
+                  name: restaurant?.name ?? t("account.thisRestaurant"),
+                })}
+              </span>
               <span className="text-sm font-semibold text-foreground">
                 {loyaltyPoints.toLocaleString()} {t("common.points")}
               </span>
@@ -130,7 +134,7 @@ export function GuestAccountPage() {
           onClick={() => {
             void logoutCustomer();
           }}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border/70 text-sm font-semibold text-muted-foreground hover:text-foreground"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-rose-400/50 bg-rose-500/15 text-sm font-semibold text-rose-800 hover:bg-rose-500/25 dark:text-rose-200"
         >
           <LogOut className="h-4 w-4" />
           {t("account.signOut")}

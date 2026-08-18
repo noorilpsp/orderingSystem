@@ -21,6 +21,7 @@ export type LoggedInCustomerProfile = {
   userId: string;
   email: string;
   name: string;
+  phone: string | null;
   customerId: string | null;
   locationId: string | null;
   merchantId: string | null;
@@ -52,12 +53,18 @@ export async function getLoggedInCustomer(
     email.split("@")[0] ||
     "Guest";
 
+  const phone =
+    dbUser?.phone?.trim() ||
+    (authUser.user_metadata as { phone?: string } | null)?.phone?.trim() ||
+    null;
+
   const slug = storeSlug?.trim().toLowerCase() || null;
   if (!slug) {
     return {
       userId: authUser.id,
       email,
       name,
+      phone,
       customerId: null,
       locationId: null,
       merchantId: null,
@@ -72,6 +79,7 @@ export async function getLoggedInCustomer(
     storeSlug: slug,
     name,
     email,
+    phone,
   });
 
   let merchantId: string | null = null;
@@ -112,6 +120,7 @@ export async function getLoggedInCustomer(
     userId: authUser.id,
     email,
     name: ensured?.name?.trim() || name,
+    phone: ensured?.phone?.trim() || phone,
     customerId: ensured?.customerId ?? null,
     locationId: ensured?.locationId ?? null,
     merchantId,

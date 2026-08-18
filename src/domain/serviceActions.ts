@@ -507,7 +507,7 @@ async function createPickupDeliveryOrder(
     });
   }
 
-  const taxRate = parseFloat(String(location.taxRate ?? "21.00")) / 100;
+  const taxRate = parseFloat(String(location.taxRate ?? "0.00")) / 100;
   const serviceChargeRate = parseFloat(String(location.serviceChargePercentage ?? "0.00")) / 100;
   const taxAmount = subtotal * taxRate;
   const serviceCharge = subtotal * serviceChargeRate;

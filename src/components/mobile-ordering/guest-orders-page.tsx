@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronLeft, ChevronRight, Loader2, RotateCcw } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Loader2,
+  LogIn,
+  RotateCcw,
+} from "lucide-react";
 import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/guest-deal-badge";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";

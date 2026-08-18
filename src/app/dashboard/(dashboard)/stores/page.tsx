@@ -428,7 +428,7 @@ export default function StoresPage() {
       deliveryRadius: 5,
       deliveryFee: 5.99,
       minimumOrder: 15,
-      taxRate: 21,
+      taxRate: 0,
       storeStatus: "active",
       publicListing: true,
       timezone: "Europe/Brussels",

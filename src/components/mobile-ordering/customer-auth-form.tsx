@@ -43,12 +43,14 @@ function floatingLabelClass(active: boolean) {
 export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
   const isSignup = mode === "signup";
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [step, setStep] = useState<"name" | "email" | "password">(
+  const [step, setStep] = useState<"name" | "phone" | "email" | "password">(
     isSignup ? "name" : "email",
   );
   const [nameFocused, setNameFocused] = useState(false);
+  const [phoneFocused, setPhoneFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,12 +63,24 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
     : `/signup${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
 
   const showName = isSignup;
+  const showPhone = isSignup && step !== "name";
   const showEmail = !isSignup || step === "email" || step === "password";
   const showPassword = step === "password";
+
+  const isValidPhone = phone.replace(/\D/g, "").length >= 7;
 
   const advanceFromName = () => {
     if (name.trim().length === 0) {
       setFieldError("Name is required");
+      return;
+    }
+    setFieldError(null);
+    setStep("phone");
+  };
+
+  const advanceFromPhone = () => {
+    if (!isValidPhone) {
+      setFieldError("Please enter a valid mobile number");
       return;
     }
     setFieldError(null);
@@ -92,12 +106,16 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
       advanceFromName();
       return;
     }
+    if (isSignup && step === "phone") {
+      advanceFromPhone();
+      return;
+    }
     if (step === "email") {
       advanceFromEmail();
       return;
     }
 
-    if (!email || !password || (isSignup && !name.trim())) {
+    if (!email || !password || (isSignup && (!name.trim() || !isValidPhone))) {
       setError("Please fill in all fields");
       return;
     }
@@ -109,6 +127,7 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
           email,
           password,
           name: name.trim(),
+          phone: phone.trim(),
           returnTo,
         });
         if (result && "error" in result && result.error) {
@@ -185,8 +204,10 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
     );
   }
 
-  const nameConnected = showName && showEmail;
-  const emailConnectedTop = showEmail && (showName || showPassword);
+  const nameConnected = showName && (showPhone || showEmail);
+  const phoneConnectedTop = showPhone && showName;
+  const phoneConnectedBottom = showPhone && showEmail;
+  const emailConnectedTop = showEmail && (showName || showPhone || showPassword);
   const emailConnectedBottom = showEmail && showPassword;
 
   return (
@@ -257,7 +278,7 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
                   >
                     Name
                   </label>
-                  {!showEmail ? (
+                  {!showPhone ? (
                     <Button
                       type="button"
                       onClick={advanceFromName}
@@ -265,6 +286,63 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
                       size="icon"
                       className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
                         name.trim().length === 0 || loading
+                          ? "opacity-40 cursor-not-allowed"
+                          : "cursor-pointer"
+                      }`}
+                    >
+                      <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
+                      <span className="sr-only">Continue</span>
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {showPhone ? (
+                <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
+                  <input
+                    id="customer-phone"
+                    type="tel"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    placeholder=""
+                    value={phone}
+                    onChange={(event) => {
+                      setPhone(event.target.value);
+                      if (error) setError(null);
+                      if (fieldError) setFieldError(null);
+                    }}
+                    onFocus={() => setPhoneFocused(true)}
+                    onBlur={() => setPhoneFocused(false)}
+                    required
+                    autoFocus={step === "phone"}
+                    className={`w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border transition-all text-foreground focus:outline-none focus:ring-0 ${
+                      fieldError
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-border/50 focus:border-blue-500"
+                    } ${
+                      phoneConnectedTop && phoneConnectedBottom
+                        ? "rounded-none border-t-border/30 border-b-0"
+                        : phoneConnectedTop && !phoneConnectedBottom
+                          ? "rounded-b-xl border-t-border/30"
+                          : phoneConnectedBottom
+                            ? "rounded-t-xl border-b-0"
+                            : "rounded-xl"
+                    }`}
+                  />
+                  <label
+                    htmlFor="customer-phone"
+                    className={floatingLabelClass(phoneFocused || phone.length > 0)}
+                  >
+                    Mobile number
+                  </label>
+                  {!showEmail ? (
+                    <Button
+                      type="button"
+                      onClick={advanceFromPhone}
+                      disabled={!isValidPhone || loading}
+                      size="icon"
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
+                        !isValidPhone || loading
                           ? "opacity-40 cursor-not-allowed"
                           : "cursor-pointer"
                       }`}

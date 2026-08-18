@@ -149,7 +149,7 @@ export const merchantLocations = pgTable(
       scale: 2,
     }),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 })
-      .default("21.00")
+      .default("0.00")
       .notNull(),
     // Kitchen Operations
     averagePrepTimeMinutes: integer("average_prep_time_minutes"),

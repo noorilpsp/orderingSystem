@@ -48,6 +48,7 @@ import {
   buildTableCheckOrder,
   formatTableSeatGuestLabel,
 } from "@/lib/orders/buildTableCheckOrder";
+import { formatGuestContactLabel } from "@/lib/orders/guestContactLabel";
 import { coerceTaxRatePercent } from "@/lib/tax-rate";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -323,7 +324,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
         updatedAt: true,
       },
       with: {
-        customer: { columns: { name: true } },
+        customer: { columns: { name: true, phone: true } },
       },
       limit: 100,
     }),
@@ -398,7 +399,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
         customerId: true,
       },
       with: {
-        customer: { columns: { name: true } },
+        customer: { columns: { name: true, phone: true } },
       },
     });
 
@@ -919,7 +920,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       orderType: o.orderType,
       orderId: o.id,
     });
-    const customerName = o.customer?.name ?? "Guest";
+    const customerName = formatGuestContactLabel(o.customer?.name, o.customer?.phone);
     const paymentState = resolveOrdersPaymentState(paymentStatus);
     const createdAt = o.createdAt?.getTime() ?? 0;
     const stageEnteredAt = buildStageEnteredAt(createdAt, timelineByOrder.get(o.id) ?? []);
