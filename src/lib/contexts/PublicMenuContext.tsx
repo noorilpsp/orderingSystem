@@ -472,29 +472,6 @@ export function PublicMenuProvider({
     void fetchMenu({ background: hasServerView });
   }, [fetchMenu, hasServerView]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || storeSlug === "demo") return;
-
-    const refetchInBackground = () => {
-      void fetchMenu({ background: true });
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        refetchInBackground();
-      }
-    };
-
-    window.addEventListener("focus", refetchInBackground);
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pageshow", refetchInBackground);
-    return () => {
-      window.removeEventListener("focus", refetchInBackground);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pageshow", refetchInBackground);
-    };
-  }, [fetchMenu, storeSlug]);
-
   const customizationGroupMap = useMemo(
     () => new Map((view?.customizationGroups ?? []).map((group) => [group.id, group])),
     [view?.customizationGroups],

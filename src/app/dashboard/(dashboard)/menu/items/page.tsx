@@ -162,13 +162,13 @@ export default function MenuItemsPage() {
 
       try {
         if (action === "mark-live") {
-          bulkUpdateItems(selectedIds, { status: "live" })
+          await bulkUpdateItems(selectedIds, { status: "live" })
           toast.success(`${selectedIds.length} items marked as live`)
         } else if (action === "mark-soldout") {
-          bulkUpdateItems(selectedIds, { status: "soldout" })
+          await bulkUpdateItems(selectedIds, { status: "soldout" })
           toast.success(`${selectedIds.length} items marked as sold out`)
         } else if (action === "hide") {
-          bulkUpdateItems(selectedIds, { status: "hidden" })
+          await bulkUpdateItems(selectedIds, { status: "hidden" })
           toast.success(`${selectedIds.length} items hidden`)
         } else if (action === "duplicate") {
           // Duplicate selected items
@@ -179,7 +179,7 @@ export default function MenuItemsPage() {
               name: `${item.name} (Copy)`,
               status: "draft" as const,
             }
-            createItem(duplicateData)
+            await createItem(duplicateData)
           }
           toast.success(`${selectedIds.length} items duplicated`)
         }
@@ -212,14 +212,10 @@ export default function MenuItemsPage() {
             toast.error("Select at least one tag")
             return
           }
-          const selectedItems = items.filter((item) => selectedIds.includes(item.id))
-          for (const item of selectedItems) {
-            const newTags = [...new Set([...item.tags, ...tagsToApply])]
-            updateItem(item.id, { tags: newTags })
-          }
+          await bulkUpdateItems(selectedIds, { tags: tagsToApply })
           toast.success(`Updated tags for ${selectedIds.length} items`)
         } else if (bulkActionModal.action === "change-status") {
-          bulkUpdateItems(selectedIds, { status: data.status })
+          await bulkUpdateItems(selectedIds, { status: data.status })
           toast.success(`Status updated for ${selectedIds.length} items`)
         } else if (bulkActionModal.action === "categories") {
           const categoryIds: string[] = Array.isArray(data.categoryIds) ? data.categoryIds : []
@@ -227,14 +223,10 @@ export default function MenuItemsPage() {
             toast.error("Select at least one category")
             return
           }
-          const selectedItems = items.filter((item) => selectedIds.includes(item.id))
-          for (const item of selectedItems) {
-            const newCategories = [...new Set([...item.categories, ...categoryIds])]
-            updateItem(item.id, { categories: newCategories })
-          }
+          await bulkUpdateItems(selectedIds, { categories: categoryIds })
           toast.success(`Updated categories for ${selectedIds.length} items`)
         } else if (bulkActionModal.action === "delete") {
-          bulkDeleteItems(selectedIds)
+          await bulkDeleteItems(selectedIds)
           toast.success(`${selectedIds.length} items deleted`)
         }
         setSelectedIds([])
@@ -243,7 +235,7 @@ export default function MenuItemsPage() {
         toast.error("Failed to perform bulk action")
       }
     },
-    [bulkActionModal.action, selectedIds, items, updateItem, bulkUpdateItems, bulkDeleteItems],
+    [bulkActionModal.action, selectedIds, bulkUpdateItems, bulkDeleteItems],
   )
 
   const handleQuickActionItem = useCallback(

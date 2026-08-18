@@ -1,4 +1,4 @@
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
@@ -12,11 +12,28 @@ const MIN_CACHE_MS = 15 * 1000;
 
 type PublicMenuCacheEntry = {
   view: PublicMenuView | null;
+  sourceUpdatedAtMs: number;
   validUntilMs: number;
 };
 
 export function publicMenuCacheTag(storeSlug: string): string {
   return `public-menu:${storeSlug.trim().toLowerCase()}`;
+}
+
+export function normalizePublicMenuSlug(storeSlug: string | null | undefined): string {
+  return storeSlug?.trim().toLowerCase() ?? "";
+}
+
+export async function getPublicMenuCatalogRevision(
+  storeSlug: string | null | undefined,
+): Promise<number | null> {
+  const slug = normalizePublicMenuSlug(storeSlug);
+  if (!slug) return null;
+  const location = await db.query.merchantLocations.findFirst({
+    where: eq(merchantLocations.storeSlug, slug),
+    columns: { updatedAt: true },
+  });
+  return location?.updatedAt.getTime() ?? null;
 }
 
 async function loadPublicMenuCacheEntry(storeSlug: string): Promise<PublicMenuCacheEntry> {
@@ -26,8 +43,12 @@ async function loadPublicMenuCacheEntry(storeSlug: string): Promise<PublicMenuCa
     : null;
   const cap = Date.now() + MAX_CACHE_MS;
   const until = next ? Math.min(next.getTime(), cap) : cap;
+  const sourceUpdatedAtMs = view?.catalogUpdatedAt
+    ? Date.parse(view.catalogUpdatedAt)
+    : 0;
   return {
     view,
+    sourceUpdatedAtMs: Number.isFinite(sourceUpdatedAtMs) ? sourceUpdatedAtMs : 0,
     validUntilMs: Math.max(until, Date.now() + MIN_CACHE_MS),
   };
 }
@@ -35,9 +56,10 @@ async function loadPublicMenuCacheEntry(storeSlug: string): Promise<PublicMenuCa
 export async function getCachedPublicMenuView(
   storeSlug: string,
 ): Promise<PublicMenuView | null> {
-  const slug = storeSlug.trim().toLowerCase();
+  const slug = normalizePublicMenuSlug(storeSlug);
   if (!slug) return null;
 
+  const revisionMs = await getPublicMenuCatalogRevision(slug);
   const readEntry = unstable_cache(
     () => loadPublicMenuCacheEntry(slug),
     ["public-menu-view", slug],
@@ -48,7 +70,10 @@ export async function getCachedPublicMenuView(
   );
 
   const entry = await readEntry();
-  if (Date.now() < entry.validUntilMs) {
+  const cacheIsCurrent =
+    (revisionMs == null || entry.sourceUpdatedAtMs >= revisionMs) &&
+    Date.now() < entry.validUntilMs;
+  if (cacheIsCurrent) {
     return entry.view;
   }
 
@@ -58,32 +83,39 @@ export async function getCachedPublicMenuView(
 }
 
 export async function revalidatePublicMenuForSlug(storeSlug: string | null | undefined) {
-  const slug = storeSlug?.trim().toLowerCase();
+  const slug = normalizePublicMenuSlug(storeSlug);
   if (!slug) return;
-  // Immediate expire so store-settings changes are not served stale.
+  // Expire only the public-menu data cache. Do not call revalidatePath here:
+  // Next.js would refresh the current dashboard route (the page that triggered
+  // the mutation), which looks like a full reload of /dashboard/menu.
   revalidateTag(publicMenuCacheTag(slug), { expire: 0 });
-  revalidatePath(`/menu/${slug}`, "layout");
-  revalidatePath(`/api/public/menu/${slug}`);
 }
 
 export async function revalidatePublicMenuForLocation(
   locationId: string | null | undefined,
 ) {
   if (!locationId) return;
-  const location = await db.query.merchantLocations.findFirst({
-    where: eq(merchantLocations.id, locationId),
-    columns: { storeSlug: true },
-  });
-  await revalidatePublicMenuForSlug(location?.storeSlug);
+  try {
+    // Stamp only so the next guest load/refresh sees a newer catalog.
+    await db
+      .update(merchantLocations)
+      .set({ updatedAt: new Date() })
+      .where(eq(merchantLocations.id, locationId));
+  } catch (error) {
+    console.error("[revalidatePublicMenuForLocation]", error);
+  }
 }
 
 export async function revalidatePublicMenuForMerchant(
   merchantId: string | null | undefined,
 ) {
   if (!merchantId) return;
-  const rows = await db.query.merchantLocations.findMany({
-    where: eq(merchantLocations.merchantId, merchantId),
-    columns: { storeSlug: true },
-  });
-  await Promise.all(rows.map((row) => revalidatePublicMenuForSlug(row.storeSlug)));
+  try {
+    await db
+      .update(merchantLocations)
+      .set({ updatedAt: new Date() })
+      .where(eq(merchantLocations.merchantId, merchantId));
+  } catch (error) {
+    console.error("[revalidatePublicMenuForMerchant]", error);
+  }
 }

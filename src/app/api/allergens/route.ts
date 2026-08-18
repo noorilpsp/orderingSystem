@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { allergens } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
 import { unstable_cache } from "@/lib/unstable-cache";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -181,6 +182,7 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    await revalidatePublicMenuForLocation(locationId);
     return NextResponse.json(newAllergen, { status: 201 });
   } catch (error) {
     console.error("[POST /api/allergens] Error:", error);

@@ -40,6 +40,8 @@ export type PublicMenuTable = {
 export type PublicMenuView = {
   storeSlug: string;
   locationId: string;
+  /** Bumped on every dashboard catalog write so the guest menu can detect freshness. */
+  catalogUpdatedAt: string;
   /** Sales tax percent for this location (e.g. 21 = 21%). */
   taxRate: number;
   availability: PublicMenuAvailability;

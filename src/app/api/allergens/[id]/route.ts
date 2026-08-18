@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { db } from "@/db";
 import { allergens } from "@/db/schema";
 import { merchantLocations, merchantUsers } from "@/lib/db/schema";
+import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache";
 
 export const runtime = "nodejs";
 
@@ -80,6 +81,7 @@ export async function DELETE(
     // Delete allergen (cascade will handle related records)
     await db.delete(allergens).where(eq(allergens.id, allergenId));
 
+    await revalidatePublicMenuForLocation(existingAllergen.location.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[DELETE /api/allergens/[id]] Error:", error);

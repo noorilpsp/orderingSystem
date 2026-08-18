@@ -543,7 +543,7 @@ export function ItemDetailModal({
             onTouchStart={handleContentTouchStart}
             onTouchEnd={finishSheetDrag}
             onTouchCancel={finishSheetDrag}
-            className="menu-item-controls flex-1 overflow-y-auto px-4 pb-24"
+            className="menu-item-controls min-h-0 flex-1 overflow-y-auto px-4 pb-2"
           >
             {/* Image */}
             <div className="relative h-48 w-full overflow-hidden rounded-lg">
@@ -962,7 +962,7 @@ export function ItemDetailModal({
             </div>
 
             {/* Quantity Selector — keep − / + order in both locales */}
-            <div className="mt-6 flex items-center justify-center gap-5" dir="ltr">
+            <div className="mt-4 mb-1 flex items-center justify-center gap-5" dir="ltr">
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
                 className={`${glassControlBase} flex h-8 w-8 items-center justify-center rounded-full`}
@@ -982,7 +982,7 @@ export function ItemDetailModal({
           </div>
 
           {/* Add to Cart Button - Sticky */}
-          <div className="item-modal-footer liquid-glass absolute bottom-0 left-0 right-0 rounded-t-2xl border-t border-border/70 bg-card/85 px-4 py-4 shadow-lg shadow-black/30 backdrop-blur-xl">
+          <div className="item-modal-footer liquid-glass shrink-0 rounded-t-2xl border-t border-border/70 bg-card/85 px-4 pt-3 pb-3 shadow-lg shadow-black/30 backdrop-blur-xl">
             <Button
               onClick={handleAddToCart}
               className="sheen-overlay relative flex min-h-12 w-full items-center justify-center rounded-xl border border-white/26 bg-black/78 px-4 py-3 text-white backdrop-blur-2xl shadow-[0_14px_30px_rgba(0,0,0,0.42)] ring-1 ring-white/10 transition-transform duration-200 hover:bg-black/84 active:scale-[0.99] dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"

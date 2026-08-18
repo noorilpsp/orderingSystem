@@ -262,6 +262,7 @@ async function buildPublicMenuViewOnce(
       orderModes: true,
       merchantId: true,
       taxRate: true,
+      updatedAt: true,
     },
   });
 
@@ -573,6 +574,7 @@ async function buildPublicMenuViewOnce(
   return {
     storeSlug: location.storeSlug,
     locationId: location.id,
+    catalogUpdatedAt: location.updatedAt.toISOString(),
     taxRate: coerceTaxRatePercent(location.taxRate),
     availability: unavailableReason
       ? { status: "unavailable", reason: unavailableReason }

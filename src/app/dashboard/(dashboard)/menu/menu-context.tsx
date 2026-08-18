@@ -660,15 +660,17 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // Fetch all data when locationId changes
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     if (!locationId) {
       setLoading(false)
       return
     }
 
     try {
-      setLoading(true)
-      setError(null)
+      if (!options?.silent) {
+        setLoading(true)
+        setError(null)
+      }
 
       // Fetch all data in parallel with retry logic
       // Add timestamp to bust server-side cache
@@ -816,7 +818,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success(`${item.name || "Item"} created successfully`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       // Rollback optimistic update
       setItems((prev) => prev.filter((i) => i.id !== tempId))
@@ -880,7 +882,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success("Item updated successfully")
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       // Rollback optimistic update
       if (originalItem) {
@@ -913,7 +915,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success(`${item?.name || "Item"} deleted`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       // Rollback optimistic update
       if (item) {
@@ -926,22 +928,104 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   }, [items, fetchData])
 
   const bulkUpdateItems = useCallback(async (ids: string[], updates: Partial<MenuItem>) => {
+    const uniqueIds = [...new Set(ids.filter((id) => id.trim().length > 0))]
+    if (uniqueIds.length === 0) return
+
+    const originals = new Map(
+      items.filter((item) => uniqueIds.includes(item.id)).map((item) => [item.id, item]),
+    )
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!uniqueIds.includes(item.id)) return item
+        return {
+          ...item,
+          ...(updates.status !== undefined ? { status: updates.status } : {}),
+          ...(updates.featured !== undefined ? { featured: updates.featured } : {}),
+          ...(updates.tags !== undefined
+            ? { tags: [...new Set([...item.tags, ...updates.tags])] }
+            : {}),
+          ...(updates.dietaryTags !== undefined
+            ? { dietaryTags: [...new Set([...item.dietaryTags, ...updates.dietaryTags])] }
+            : {}),
+          ...(updates.categories !== undefined
+            ? { categories: [...new Set([...item.categories, ...updates.categories])] }
+            : {}),
+        }
+      }),
+    )
+
     try {
-      await Promise.all(ids.map((id) => updateItem(id, updates)))
-      toast.success(`${ids.length} items updated`)
+      const hasTags = updates.tags !== undefined || updates.dietaryTags !== undefined
+      const addTagIds = hasTags
+        ? await getOrCreateTagIds([...(updates.tags || []), ...(updates.dietaryTags || [])])
+        : undefined
+
+      const response = await fetch("/api/items/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          ids: uniqueIds,
+          updates: {
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.featured !== undefined ? { featured: updates.featured } : {}),
+            ...(addTagIds && addTagIds.length > 0 ? { addTagIds } : {}),
+            ...(updates.categories !== undefined ? { addCategoryIds: updates.categories } : {}),
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(
+          typeof error?.error === "string" ? error.error : "Failed to update items",
+        )
+      }
+
+      await fetchData({ silent: true })
     } catch (err) {
-      toast.error('Failed to update items')
+      setItems((prev) =>
+        prev.map((item) => originals.get(item.id) ?? item),
+      )
+      const errorMessage = err instanceof Error ? err.message : "Failed to update items"
+      toast.error(errorMessage)
+      throw err
     }
-  }, [updateItem])
+  }, [items, fetchData, getOrCreateTagIds])
 
   const bulkDeleteItems = useCallback(async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids.filter((id) => id.trim().length > 0))]
+    if (uniqueIds.length === 0) return
+
+    const removed = items.filter((item) => uniqueIds.includes(item.id))
+    setItems((prev) => prev.filter((item) => !uniqueIds.includes(item.id)))
+
     try {
-      await Promise.all(ids.map((id) => deleteItem(id)))
-      toast.success(`${ids.length} items deleted`)
+      const response = await fetch("/api/items/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids: uniqueIds }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(
+          typeof error?.error === "string" ? error.error : "Failed to delete items",
+        )
+      }
+
+      await fetchData({ silent: true })
     } catch (err) {
-      toast.error('Failed to delete items')
+      setItems((prev) => {
+        const existingIds = new Set(prev.map((item) => item.id))
+        return [...prev, ...removed.filter((item) => !existingIds.has(item.id))]
+      })
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete items"
+      toast.error(errorMessage)
+      throw err
     }
-  }, [deleteItem])
+  }, [items, fetchData])
 
   const importItems = useCallback(
     async (rows: ImportRow[], options: ImportOptions) => {
@@ -983,7 +1067,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         } else if (skipped > 0) {
           toast.error(`No items imported (${skipped} row${skipped === 1 ? "" : "s"} skipped)`)
         }
-        await fetchData()
+        await fetchData({ silent: true })
         return {
           created,
           skipped,
@@ -1093,7 +1177,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       await response.json()
       
       toast.success(`${category.name} created`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       // Rollback optimistic update
       setCategories((prev) => prev.filter((c) => c.id !== tempId))
@@ -1134,7 +1218,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       console.log('updateCategory - response:', updatedCategory)
 
       toast.success("Category updated")
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update category'
       console.error('updateCategory error:', err)
@@ -1171,7 +1255,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success(`${category?.name || "Category"} deleted`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       if (category) {
         setCategories((prev) => [...prev, category])
@@ -1268,7 +1352,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       if (!options?.silent) {
         toast.success(`${group.name} created`)
       }
-      await fetchData()
+      await fetchData({ silent: true })
 
       if (typeof created?.id !== "string") return null
 
@@ -1338,7 +1422,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success("Customization group updated")
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update customization group'
       toast.error(errorMessage)
@@ -1360,7 +1444,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
       const group = customizationGroups.find((g) => g.id === id)
       toast.success(`${group?.name || "Group"} deleted`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete customization group'
       toast.error(errorMessage)
@@ -1409,7 +1493,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
             `No groups imported (${skipped} group${skipped === 1 ? "" : "s"} skipped)`,
           )
         }
-        await fetchData()
+        await fetchData({ silent: true })
         return {
           created,
           skipped,
@@ -1471,7 +1555,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
             `No categories imported (${skipped} row${skipped === 1 ? "" : "s"} skipped)`,
           )
         }
-        await fetchData()
+        await fetchData({ silent: true })
         return {
           created,
           skipped,
@@ -1545,7 +1629,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success(`${menu.name} created`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       // Rollback optimistic update
       setMenus((prev) => prev.filter((m) => m.id !== tempId))
@@ -1578,7 +1662,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast.success("Menu updated")
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update menu'
       toast.error(errorMessage)
@@ -1600,7 +1684,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
       const menu = menus.find((m) => m.id === id)
       toast.success(`${menu?.name || "Menu"} deleted`)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete menu'
       toast.error(errorMessage)
