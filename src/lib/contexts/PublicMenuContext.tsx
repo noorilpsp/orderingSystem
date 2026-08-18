@@ -51,6 +51,7 @@ import {
   writeSelectedRewardId,
 } from "@/lib/public-menu/guest-reward-storage";
 import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
+import { preloadGuestCartImages, preloadGuestImage } from "@/lib/public-menu/preloadGuestCartImages";
 import { buildGuestMenuQueryString } from "@/lib/public-menu/buildPublicMenuUrl";
 import {
   buildGuestIdempotencyKey,
@@ -239,6 +240,10 @@ export function PublicMenuProvider({
     if (hydratedCartSlug !== storeSlug) return;
     writeGuestCart(storeSlug, cart);
   }, [cart, hydratedCartSlug, storeSlug]);
+
+  useEffect(() => {
+    preloadGuestCartImages(cart, view?.items ?? [], view?.rewards ?? []);
+  }, [cart, view?.items, view?.rewards]);
 
   const refetchCustomer = useCallback(async () => {
     if (storeSlug === "demo") {
@@ -490,6 +495,7 @@ export function PublicMenuProvider({
 
   const addToCart = useCallback((item: GuestMenuItem | GuestCartItem) => {
     if (isRewardCartLine(item)) return;
+    if ("image" in item) preloadGuestImage(item.image);
     const incomingQty =
       "quantity" in item && typeof item.quantity === "number" && item.quantity > 0
         ? Math.floor(item.quantity)
@@ -499,7 +505,12 @@ export function PublicMenuProvider({
 
   const addRewardToCart = useCallback(
     (reward: PublicMenuReward) => {
-      const line = buildRewardCartLine(reward, view?.items ?? []);
+      const catalog = view?.items ?? [];
+      const line = buildRewardCartLine(reward, catalog);
+      const rewardItem = reward.menuItemId
+        ? catalog.find((item) => item.id === reward.menuItemId)
+        : undefined;
+      preloadGuestImage(rewardItem?.image);
       setCart((prevCart) => [
         ...prevCart.filter((cartItem) => !isRewardCartLine(cartItem)),
         line,
