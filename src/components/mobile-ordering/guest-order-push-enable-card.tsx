@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Share } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGuestT } from "@/lib/guest-i18n";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import {
   getGuestOrderPushStatus,
   isGuestOrderPushSupported,
@@ -15,6 +25,9 @@ type GuestOrderPushEnableCardProps = {
   orderId: string | null;
 };
 
+const cardClassName =
+  "rounded-2xl border border-amber-500/40 bg-amber-50 px-3.5 py-3 text-sm text-amber-950 shadow-sm dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-50";
+
 /**
  * Auto-enables closed-tab order alerts when the browser already allows
  * notifications (typically granted on Place Order). Only shows UI when the
@@ -24,6 +37,7 @@ export function GuestOrderPushEnableCard({
   storeSlug,
   orderId,
 }: GuestOrderPushEnableCardProps) {
+  const t = useGuestT();
   const [supported, setSupported] = useState(false);
   const [iosNeedsInstall, setIosNeedsInstall] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
@@ -31,6 +45,7 @@ export function GuestOrderPushEnableCard({
   const [ready, setReady] = useState(false);
   const [needsManualEnable, setNeedsManualEnable] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [howToOpen, setHowToOpen] = useState(false);
   const autoTriedRef = useRef<string | null>(null);
 
   const trySubscribe = useCallback(
@@ -65,14 +80,14 @@ export function GuestOrderPushEnableCard({
       } catch (error) {
         setNeedsManualEnable(true);
         setErrorMessage(
-          error instanceof Error ? error.message : "Could not enable alerts",
+          error instanceof Error ? error.message : t("confirm.alertsCouldNotEnable"),
         );
         return false;
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [t],
   );
 
   useEffect(() => {
@@ -147,33 +162,74 @@ export function GuestOrderPushEnableCard({
 
   if (iosNeedsInstall) {
     return (
-      <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-50">
-        <p className="font-semibold text-amber-100">Get order alerts</p>
-        <p className="mt-0.5 text-xs text-amber-100/75">
-          iPhone: Share → Add to Home Screen, open that app, then return here —
-          alerts turn on automatically.
-        </p>
-        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-300/40 bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-50">
-          <Share className="h-3.5 w-3.5" />
-          Add to Home Screen
-        </span>
-      </div>
+      <>
+        <div className={cardClassName}>
+          <p className="font-semibold text-amber-950 dark:text-amber-50">
+            {t("confirm.alertsTitle")}
+          </p>
+          <p className="mt-0.5 text-xs text-amber-900/80 dark:text-amber-100/80">
+            {t("confirm.alertsIosHint")}
+          </p>
+          <button
+            type="button"
+            onClick={() => setHowToOpen(true)}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+          >
+            <Share className="h-3.5 w-3.5" />
+            {t("confirm.alertsAddToHome")}
+          </button>
+        </div>
+        <Dialog open={howToOpen} onOpenChange={setHowToOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{t("confirm.alertsHowTitle")}</DialogTitle>
+              <DialogDescription>{t("confirm.alertsHowIntro")}</DialogDescription>
+            </DialogHeader>
+            <ol className="space-y-3 text-sm text-foreground">
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white">
+                  1
+                </span>
+                <span>{t("confirm.alertsStep1")}</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white">
+                  2
+                </span>
+                <span>{t("confirm.alertsStep2")}</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white">
+                  3
+                </span>
+                <span>{t("confirm.alertsStep3")}</span>
+              </li>
+            </ol>
+            <DialogFooter>
+              <Button type="button" onClick={() => setHowToOpen(false)}>
+                {t("confirm.gotIt")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
   if (!needsManualEnable) return null;
 
   return (
-    <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-50">
+    <div className={cardClassName}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-amber-100">Turn on order alerts</p>
-          <p className="mt-0.5 text-xs text-amber-100/75">
-            Allow notifications so we can update you when the kitchen accepts,
-            your order is ready, or it’s delayed — even if you leave this page.
+          <p className="font-semibold text-amber-950 dark:text-amber-50">
+            {t("confirm.alertsTurnOnTitle")}
+          </p>
+          <p className="mt-0.5 text-xs text-amber-900/80 dark:text-amber-100/80">
+            {t("confirm.alertsTurnOnHint")}
           </p>
           {errorMessage ? (
-            <p className="mt-2 text-xs font-medium text-red-200" role="alert">
+            <p className="mt-2 text-xs font-medium text-red-700 dark:text-red-200" role="alert">
               {errorMessage}
             </p>
           ) : null}
@@ -185,11 +241,11 @@ export function GuestOrderPushEnableCard({
             void trySubscribe(storeSlug, orderId);
           }}
           className={cn(
-            "inline-flex h-9 items-center gap-1.5 rounded-full border border-amber-300/50 bg-amber-500 px-3 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50",
+            "inline-flex h-9 items-center gap-1.5 rounded-full bg-amber-600 px-3 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400",
           )}
         >
           <Bell className="h-3.5 w-3.5" />
-          {busy ? "…" : "Allow alerts"}
+          {busy ? "…" : t("confirm.alertsAllow")}
         </button>
       </div>
     </div>

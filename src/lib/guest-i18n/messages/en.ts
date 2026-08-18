@@ -306,6 +306,21 @@ export const enMessages = {
   "confirm.estimatedWait": "Estimated wait",
   "confirm.items": "Items",
   "confirm.enableNotifications": "Enable notifications",
+  "confirm.alertsTitle": "Get order alerts",
+  "confirm.alertsIosHint":
+    "iPhone: Share → Add to Home Screen, open that app, then return here — alerts turn on automatically.",
+  "confirm.alertsAddToHome": "Add to Home Screen",
+  "confirm.alertsHowTitle": "Add to Home Screen",
+  "confirm.alertsHowIntro":
+    "Safari can’t add this from the page. Use Share in the toolbar, then come back.",
+  "confirm.alertsStep1": "Tap the Share button in Safari (square with an arrow up).",
+  "confirm.alertsStep2": "Scroll and tap Add to Home Screen.",
+  "confirm.alertsStep3": "Open the new icon, then return to this order — alerts turn on automatically.",
+  "confirm.alertsTurnOnTitle": "Turn on order alerts",
+  "confirm.alertsTurnOnHint":
+    "Allow notifications so we can update you when the kitchen accepts, your order is ready, or it’s delayed — even if you leave this page.",
+  "confirm.alertsAllow": "Allow alerts",
+  "confirm.alertsCouldNotEnable": "Could not enable alerts",
   "confirm.pickupOrder": "Pickup order",
   "confirm.dineInTable": "Dine-in · Table {number}",
   "confirm.pickupScheduled": "Pickup · Scheduled for {time}",

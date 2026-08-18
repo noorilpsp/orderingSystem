@@ -299,6 +299,21 @@ export const arMessages: Record<EnMessageKey, string> = {
   "confirm.estimatedWait": "الانتظار المتوقع",
   "confirm.items": "الأصناف",
   "confirm.enableNotifications": "تفعيل الإشعارات",
+  "confirm.alertsTitle": "احصل على تنبيهات الطلب",
+  "confirm.alertsIosHint":
+    "آيفون: مشاركة ← إضافة إلى الشاشة الرئيسية، افتح التطبيق، ثم عد إلى هنا — تُفعَّل التنبيهات تلقائيًا.",
+  "confirm.alertsAddToHome": "إضافة إلى الشاشة الرئيسية",
+  "confirm.alertsHowTitle": "إضافة إلى الشاشة الرئيسية",
+  "confirm.alertsHowIntro":
+    "لا يستطيع سفاري الإضافة من الصفحة. استخدم المشاركة في الشريط، ثم عد إلى هنا.",
+  "confirm.alertsStep1": "اضغط زر المشاركة في سفاري (مربع وسهم للأعلى).",
+  "confirm.alertsStep2": "مرّر واضغط «إضافة إلى الشاشة الرئيسية».",
+  "confirm.alertsStep3": "افتح الأيقونة الجديدة، ثم عد إلى هذا الطلب — تُفعَّل التنبيهات تلقائيًا.",
+  "confirm.alertsTurnOnTitle": "تفعيل تنبيهات الطلب",
+  "confirm.alertsTurnOnHint":
+    "اسمح بالإشعارات لنخبرك عند قبول المطبخ للطلب، أو عندما يصبح جاهزًا، أو عند التأخير — حتى إذا غادرت هذه الصفحة.",
+  "confirm.alertsAllow": "السماح بالتنبيهات",
+  "confirm.alertsCouldNotEnable": "تعذر تفعيل التنبيهات",
   "confirm.pickupOrder": "طلب استلام",
   "confirm.dineInTable": "تناول · طاولة {number}",
   "confirm.pickupScheduled": "استلام · مجدول {time}",
