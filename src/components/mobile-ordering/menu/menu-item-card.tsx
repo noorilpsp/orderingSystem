@@ -249,7 +249,7 @@ export function MenuItemCard({
               "border-orange-500/55 bg-orange-500/20 text-orange-900 dark:text-orange-200 vivid:text-orange-100";
           } else if (tagKey === "new") {
             toneClass =
-              "border-violet-400/45 bg-fuchsia-500/20 text-fuchsia-900 dark:text-fuchsia-200 vivid:text-fuchsia-100";
+              "border-sky-400/55 bg-sky-500/20 text-sky-900 dark:text-sky-200 vivid:text-sky-100";
           } else if (tagKey === "gluten-free" || tagKey === "gluten free") {
             toneClass =
               "border-sky-400/45 bg-sky-500/20 text-sky-800 dark:text-sky-200 vivid:text-sky-100";
