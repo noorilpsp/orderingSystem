@@ -1,10 +1,22 @@
 import { db } from '@/db'
-import { merchantUsers, merchants } from '@/db/schema'
+import { merchantUsers, merchants, users } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { unstable_cache } from '@/lib/unstable-cache'
 import { isPlatformAdmin } from '@/lib/permissions'
 import type { SessionPermissions, MerchantMembership } from '@/lib/types/permissions'
 import { supabaseServer } from '@/lib/supabaseServer'
+
+function resolveFullName(
+  dbFullName: string | null | undefined,
+  authMetadata: unknown,
+): string | null {
+  const trimmedDb = dbFullName?.trim()
+  if (trimmedDb) return trimmedDb
+
+  const meta = authMetadata as { full_name?: string; fullName?: string; name?: string } | null
+  const fromMeta = meta?.full_name?.trim() || meta?.fullName?.trim() || meta?.name?.trim()
+  return fromMeta || null
+}
 
 /**
  * Single optimized query to get all session permissions
@@ -18,6 +30,19 @@ export async function getSessionPermissions(userId: string): Promise<SessionPerm
   const supabase = await supabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
   const email = user?.email ?? null
+
+  let dbFullName: string | null = null
+  try {
+    const [dbUser] = await db
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    dbFullName = dbUser?.fullName ?? null
+  } catch (error) {
+    console.error('[getSessionPermissions] Error fetching user name:', error)
+  }
+  const fullName = resolveFullName(dbFullName, user?.user_metadata)
 
   // Single optimized query with JOIN to get all merchant memberships
   // This replaces multiple separate queries
@@ -103,6 +128,7 @@ export async function getSessionPermissions(userId: string): Promise<SessionPerm
   return {
     userId,
     email,
+    fullName,
     isPlatformAdmin: isPlatformAdminFlag, // Only include if true
     currentMerchantId: null, // Set on client side
     merchantMemberships,

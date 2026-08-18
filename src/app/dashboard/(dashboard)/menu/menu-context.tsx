@@ -55,7 +55,7 @@ interface MenuContextType {
   deleteItem: (id: string) => Promise<void>
   bulkUpdateItems: (ids: string[], updates: Partial<MenuItem>) => Promise<void>
   bulkDeleteItems: (ids: string[]) => Promise<void>
-  reorderItems: (items: MenuItem[]) => Promise<void>
+  reorderItems: (items: MenuItem[], categoryId?: string) => Promise<void>
   importItems: (
     rows: ImportRow[],
     options: ImportOptions,
@@ -269,7 +269,13 @@ function transformItem(dbItem: any): MenuItem {
     currency: "USD", // Default, can be made configurable
     image: dbItem.photoUrl || undefined,
     status: dbItem.status,
-    categories: dbItem.categoryItems?.map((ci: any) => ci.category.id) || [],
+    categories: dbItem.categoryItems?.map((ci: any) => ci.category?.id ?? ci.categoryId) || [],
+    categoryOrders: Object.fromEntries(
+      (dbItem.categoryItems ?? []).map((ci: any) => [
+        ci.category?.id ?? ci.categoryId,
+        typeof ci.displayOrder === "number" ? ci.displayOrder : 0,
+      ]),
+    ),
     tags: regularTags,
     dietaryTags: dietaryTags,
     customizationGroups: dbItem.itemCustomizations?.map((ic: any) => ic.group.id) || [],
@@ -935,27 +941,45 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     [locationId, retryFetch, fetchData],
   )
 
-  const reorderItems = useCallback(async (reorderedItems: MenuItem[]) => {
-    // Optimistically update UI immediately
+  const reorderItems = useCallback(async (reorderedItems: MenuItem[], categoryId?: string) => {
     const previousItems = items
-    setItems(reorderedItems)
+    const updates = reorderedItems.map((item, index) => ({
+      id: item.id,
+      displayOrder: index,
+    }))
 
-    // Save in background - batch update via single API call
+    if (categoryId) {
+      const orderById = new Map(updates.map((update) => [update.id, update.displayOrder]))
+      setItems((prev) =>
+        prev.map((item) => {
+          const displayOrder = orderById.get(item.id)
+          if (displayOrder === undefined) return item
+          return {
+            ...item,
+            categoryOrders: {
+              ...item.categoryOrders,
+              [categoryId]: displayOrder,
+            },
+          }
+        }),
+      )
+    } else {
+      setItems(reorderedItems)
+    }
+
     try {
-      const updates = reorderedItems.map((item, index) => ({
-        id: item.id,
-        displayOrder: index,
-      }))
-      
-      await retryFetch(`/api/items/reorder?locationId=${locationId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: updates }),
+      const response = await retryFetch(`/api/items/reorder?locationId=${locationId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ items: updates, categoryId: categoryId ?? null }),
       })
+      if (!response.ok) {
+        throw new Error("Failed to reorder items")
+      }
     } catch (err) {
-      // Revert on error
       setItems(previousItems)
-      toast.error('Failed to reorder items')
+      toast.error("Failed to reorder items")
     }
   }, [items, locationId, retryFetch])
 

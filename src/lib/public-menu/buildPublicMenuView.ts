@@ -102,7 +102,7 @@ type RawItem = {
   displayOrder?: number | null;
   useCustomHours?: boolean | null;
   customSchedule?: unknown;
-  categoryItems?: Array<{ category: { id: string } }>;
+  categoryItems?: Array<{ displayOrder?: number | null; category: { id: string } }>;
   itemTags?: Array<{ tag: { name: string; i18n?: unknown } }>;
   itemCustomizations?: Array<{ group: { id: string } }>;
 };
@@ -119,7 +119,7 @@ function buildGuestMenuItems(
     : rawCategories.map(mapCategory);
 
   const visibleCategoryIdSet = new Set(visibleCategories.map((category) => category.id));
-  const guestItems: GuestMenuItem[] = [];
+  const guestItemsWithOrder: Array<{ item: GuestMenuItem; order: number }> = [];
 
   // rawItems are already ordered by displayOrder desc, createdAt desc
   for (const item of rawItems) {
@@ -141,8 +141,14 @@ function buildGuestMenuItems(
 
     const groupIds = item.itemCustomizations?.map((ic) => ic.group.id) ?? [];
     const featured = Boolean(item.featured) && item.status === "live";
+    const displayOrder =
+      item.categoryItems?.find((ci) => ci.category.id === categoryId)?.displayOrder ??
+      item.displayOrder ??
+      0;
 
-    guestItems.push({
+    guestItemsWithOrder.push({
+      order: displayOrder,
+      item: {
       id: item.id,
       categoryId,
       name: item.name,
@@ -158,8 +164,17 @@ function buildGuestMenuItems(
       featured,
       customizationGroupIds: groupIds,
       i18n: normalizeCatalogI18n(item.i18n),
+    },
     });
   }
+
+  guestItemsWithOrder.sort((a, b) => {
+    if (a.item.categoryId !== b.item.categoryId) {
+      return a.item.categoryId.localeCompare(b.item.categoryId)
+    }
+    return a.order - b.order
+  })
+  const guestItems = guestItemsWithOrder.map((entry) => entry.item)
 
   const categoriesWithItems = new Set(guestItems.map((item) => item.categoryId));
   const filteredCategories = visibleCategories.filter((category) =>

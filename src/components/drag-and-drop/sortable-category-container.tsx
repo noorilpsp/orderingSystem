@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-import { useDroppable } from "@dnd-kit/core"
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/lib/utils"
@@ -53,28 +52,15 @@ export function SortableCategoryContainer({
     },
   })
 
-  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: category.id,
-    data: {
-      type: "category",
-      category,
-    },
-  })
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   }
 
-  const setRefs = (node: HTMLDivElement | null) => {
-    setSortableRef(node)
-    setDroppableRef(node)
-  }
-
   if (renderCategory) {
     return (
       <div
-        ref={setRefs}
+        ref={setSortableRef}
         style={style}
         className={cn(
           "transition-all duration-200",
@@ -91,7 +77,7 @@ export function SortableCategoryContainer({
 
   return (
     <div
-      ref={setRefs}
+      ref={setSortableRef}
       style={style}
       className={cn(
         "border border-border rounded-xl bg-card overflow-hidden transition-all duration-200",

@@ -170,24 +170,9 @@ export default function MenuOverviewPage() {
 
   const handleReorderItems = useCallback(
     (categoryId: string, reorderedItems: MenuItem[]) => {
-      const otherItems = items.filter((item) => !reorderedItems.some((reorderedItem) => reorderedItem.id === item.id))
-
-      const firstCategoryItemIndex = items.findIndex((item) => item.categories?.includes(categoryId))
-
-      const newItems = [...items]
-
-      reorderedItems.forEach((reorderedItem) => {
-        const index = newItems.findIndex((item) => item.id === reorderedItem.id)
-        if (index !== -1) {
-          newItems.splice(index, 1)
-        }
-      })
-
-      newItems.splice(firstCategoryItemIndex, 0, ...reorderedItems)
-
-      reorderItems(newItems)
+      reorderItems(reorderedItems, categoryId)
     },
-    [items, reorderItems],
+    [reorderItems],
   )
 
   const handleMoveItemToCategory = React.useCallback(

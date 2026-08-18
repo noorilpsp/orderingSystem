@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
-import { items } from "@/lib/db/schema/menus"
-import { eq } from "drizzle-orm"
+import { items, categoryItems } from "@/db/schema"
+import { and, eq } from "drizzle-orm"
 import { supabaseServer } from "@/lib/supabaseServer"
 import { revalidatePublicMenuForLocation } from "@/lib/public-menu/publicMenuCache"
 
 export async function PUT(request: NextRequest) {
   try {
-    // Auth check
     const supabase = await supabaseServer()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -22,26 +21,46 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { items: itemUpdates } = body
+    const { items: itemUpdates, categoryId } = body as {
+      items?: Array<{ id?: string; displayOrder?: number }>
+      categoryId?: string | null
+    }
 
     if (!Array.isArray(itemUpdates)) {
       return NextResponse.json({ error: "items array is required" }, { status: 400 })
     }
 
-    // Update all items in parallel (Neon HTTP doesn't support transactions)
-    await Promise.all(
-      itemUpdates
-        .filter((update) => update.id && typeof update.displayOrder === 'number')
-        .map((update) =>
+    const validUpdates = itemUpdates.filter(
+      (update) => update.id && typeof update.displayOrder === "number",
+    )
+
+    if (typeof categoryId === "string" && categoryId.length > 0) {
+      await Promise.all(
+        validUpdates.map((update) =>
+          db
+            .update(categoryItems)
+            .set({ displayOrder: update.displayOrder })
+            .where(
+              and(
+                eq(categoryItems.itemId, update.id as string),
+                eq(categoryItems.categoryId, categoryId),
+              ),
+            ),
+        ),
+      )
+    } else {
+      await Promise.all(
+        validUpdates.map((update) =>
           db
             .update(items)
-            .set({ 
+            .set({
               displayOrder: update.displayOrder,
               updatedAt: new Date(),
             })
-            .where(eq(items.id, update.id))
-        )
-    )
+            .where(eq(items.id, update.id as string)),
+        ),
+      )
+    }
 
     await revalidatePublicMenuForLocation(locationId)
     return NextResponse.json({ success: true })
@@ -49,7 +68,7 @@ export async function PUT(request: NextRequest) {
     console.error("Error reordering items:", error)
     return NextResponse.json(
       { error: "Failed to reorder items" },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

@@ -8,7 +8,6 @@ import {
   Store,
   ShoppingCart,
   Menu,
-  UserCircle,
   BarChart3,
   Settings,
   ChevronDown,
@@ -20,7 +19,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import {
   DropdownMenu,
@@ -34,16 +33,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { unlockIncomingOrderAlertAudio } from "@/lib/orders/incoming-order-alert-sound"
+import { useDashboardUser } from "@/lib/hooks/useDashboardUser"
+import { useTenant } from "@/lib/contexts/TenantContext"
 
 const operationsItems = [
   { title: "Home", href: "/dashboard", icon: Home },
-  {
-    title: "Orders",
-    href: "/orders",
-    icon: ShoppingCart,
-    badge: "5",
-    badgeColor: "bg-red-500/10 text-red-700 border-red-500/20",
-  },
+  { title: "Orders", href: "/orders", icon: ShoppingCart },
 ]
 
 const businessItems = [
@@ -88,15 +83,11 @@ const systemSettingsCollapsible: Array<{
   items: Array<{ title: string; href: string }>
 }> = []
 
-const locations = [
-  { name: "Downtown Location", orders: 3, tables: "8/15", status: "online", address: "123 Main St, Downtown" },
-  { name: "Mall Branch", orders: 5, tables: "12/20", status: "online", address: "456 Mall Ave, Shopping District" },
-  { name: "Airport Store", orders: 2, tables: "5/10", status: "closed", address: "789 Airport Rd, Terminal 2" },
-]
-
 export function MobileSidebar() {
   const pathname = usePathname()
-  const [selectedLocation, setSelectedLocation] = React.useState(locations[0])
+  const { name, roleLabel, initials } = useDashboardUser()
+  const { getCurrentMembership } = useTenant()
+  const storeName = getCurrentMembership()?.merchantName?.trim() || "Store"
   const [open, setOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [searchExpanded, setSearchExpanded] = React.useState(false)
@@ -138,66 +129,27 @@ export function MobileSidebar() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="w-[320px] p-0 flex flex-col h-full overflow-hidden">
-        <SheetHeader className="p-4 border-b shrink-0">
-          <SheetTitle>Restaurant Dashboard</SheetTitle>
-        </SheetHeader>
-
-        <div className="p-4 border-b shrink-0 space-y-2">
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex-1 justify-between bg-transparent">
-                  <span className="text-sm font-medium truncate">{selectedLocation.name}</span>
-                  <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-72">
-                {locations.map((location) => (
-                  <DropdownMenuItem
-                    key={location.name}
-                    onClick={() => setSelectedLocation(location)}
-                    className="flex flex-col items-start gap-1 py-3"
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={cn(
-                            "h-2 w-2 rounded-full",
-                            location.status === "online" ? "bg-green-500" : "bg-gray-400",
-                          )}
-                        />
-                        <span className="font-medium">{location.name}</span>
-                      </div>
-                      {selectedLocation.name === location.name && (
-                        <Badge variant="secondary" className="text-xs">
-                          Current
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground pl-4">{location.address}</div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
+        <SheetHeader className="p-4 border-b shrink-0 space-y-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <SheetTitle className="min-w-0 flex-1 truncate text-left">{storeName}</SheetTitle>
             <Button
               variant="outline"
               size="icon"
               onClick={() => setSearchExpanded(!searchExpanded)}
               className="shrink-0"
+              aria-label="Search menu"
             >
               <Search className="h-4 w-4" />
             </Button>
           </div>
-
           {searchExpanded && (
-            <div className="relative animate-in slide-in-from-top-2 duration-200 mx-auto max-w-full">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search menu..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-9 h-9 w-full" // Added pr-9 for clear button space
+                className={cn("pl-9 h-9 w-full", searchQuery && "pr-9")}
                 autoFocus
               />
               {searchQuery && (
@@ -212,7 +164,7 @@ export function MobileSidebar() {
               )}
             </div>
           )}
-        </div>
+        </SheetHeader>
 
         <ScrollArea className="flex-1 overflow-y-auto">
           <nav className="px-3 py-2 space-y-1">
@@ -451,13 +403,15 @@ export function MobileSidebar() {
               >
                 <div className="relative shrink-0">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src="/placeholder.svg?height=40&width=40" alt="John Doe" />
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
                 </div>
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium">John Doe · Owner</p>
+                  <p className="text-sm font-medium truncate">
+                    {name}
+                    {roleLabel ? ` · ${roleLabel}` : ""}
+                  </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
                     Online
@@ -467,15 +421,16 @@ export function MobileSidebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">John Doe</p>
-                <p className="text-xs text-muted-foreground">Owner</p>
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{name}</p>
+                  {roleLabel ? <p className="text-xs text-muted-foreground">{roleLabel}</p> : null}
+                </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <UserCircle className="h-4 w-4 mr-2" />
-                Profile
-              </DropdownMenuItem>
               <DropdownMenuItem>
                 <Settings className="h-4 w-4 mr-2" />
                 Account Settings

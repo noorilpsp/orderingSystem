@@ -17,6 +17,7 @@ export type MerchantMembership = {
 export type SessionPermissions = {
   userId: string
   email: string | null
+  fullName: string | null
   
   // Platform admin (only included if true, undefined otherwise to save space)
   isPlatformAdmin?: boolean

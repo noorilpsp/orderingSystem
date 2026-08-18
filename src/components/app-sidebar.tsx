@@ -8,11 +8,9 @@ import {
   Store,
   ShoppingCart,
   Menu,
-  UserCircle,
   BarChart3,
   Settings,
   ChevronDown,
-  MapPin,
   Search,
   X,
   Megaphone,
@@ -21,7 +19,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,16 +52,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
+import { useDashboardUser } from "@/lib/hooks/useDashboardUser"
+import { useTenant } from "@/lib/contexts/TenantContext"
 
 const operationsItems = [
   { title: "Home", href: "/dashboard", icon: Home },
-  {
-    title: "Orders",
-    href: "/dashboard/orders",
-    icon: ShoppingCart,
-    badge: "5",
-    badgeVariant: "destructive" as const,
-  },
+  { title: "Orders", href: "/dashboard/orders", icon: ShoppingCart },
   { title: "Kitchen Display", href: "/kds", icon: ChefHat },
   { title: "KDS Settings", href: "/dashboard/kds", icon: Settings },
 ]
@@ -114,20 +108,16 @@ const systemSettingsCollapsible: Array<{
   items: Array<{ title: string; href: string }>
 }> = []
 
-const locations = [
-  { name: "Downtown Location", orders: 3, tables: "8/15", status: "online", address: "123 Main St, Downtown" },
-  { name: "Mall Branch", orders: 5, tables: "12/20", status: "online", address: "456 Mall Ave, Shopping District" },
-  { name: "Airport Store", orders: 2, tables: "5/10", status: "closed", address: "789 Airport Rd, Terminal 2" },
-]
-
 export function AppSidebar() {
   const pathname = usePathname()
-  const [selectedLocation, setSelectedLocation] = React.useState(locations[0])
-  const [searchQuery, setSearchQuery] = React.useState("")
-  const [searchExpanded, setSearchExpanded] = React.useState(false)
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
   const { kdsEnabled } = useMerchantKdsEnabled()
+  const { name, roleLabel, initials } = useDashboardUser()
+  const { getCurrentMembership } = useTenant()
+  const storeName = getCurrentMembership()?.merchantName?.trim() || "Store"
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [searchExpanded, setSearchExpanded] = React.useState(false)
 
   const [openTooltips, setOpenTooltips] = React.useState<Set<string>>(new Set())
 
@@ -183,82 +173,25 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
+      {!isCollapsed && (
       <SidebarHeader>
-        <div className={cn("flex items-center gap-1", isCollapsed && "mx-0")}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "bg-transparent flex-1",
-                        isCollapsed ? "justify-center px-0 h-8 w-8" : "justify-between",
-                      )}
-                    >
-                      {!isCollapsed && (
-                        <>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <MapPin className="h-4 w-4 shrink-0" />
-                            <span className="text-sm font-medium truncate">{selectedLocation.name}</span>
-                          </div>
-                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                        </>
-                      )}
-                      {isCollapsed && <MapPin className="h-3.5 w-3.5 shrink-0" />}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-72">
-                    {locations.map((location) => (
-                      <DropdownMenuItem
-                        key={location.name}
-                        onClick={() => setSelectedLocation(location)}
-                        className="flex flex-col items-start gap-1 py-3"
-                      >
-                        <div className="flex items-center justify-between w-full">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={cn(
-                                "h-2 w-2 rounded-full",
-                                location.status === "online" ? "bg-green-500" : "bg-gray-400",
-                              )}
-                            />
-                            <span className="font-medium">{location.name}</span>
-                          </div>
-                          {selectedLocation.name === location.name && (
-                            <Badge variant="secondary" className="text-xs">
-                              Current
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground pl-4">{location.address}</div>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TooltipTrigger>
-              {isCollapsed && (
-                <TooltipContent side="right">
-                  <p>{selectedLocation.name}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-
-          {!isCollapsed && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 shrink-0 bg-transparent"
-              onClick={() => setSearchExpanded(!searchExpanded)}
-            >
-              <Search className="h-4 w-4" />
-            </Button>
-          )}
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1">
+            <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate text-sm font-semibold">{storeName}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0 bg-transparent"
+            onClick={() => setSearchExpanded(!searchExpanded)}
+            aria-label="Search menu"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
         </div>
 
-        {!isCollapsed && searchExpanded && (
+        {searchExpanded && (
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -281,6 +214,7 @@ export function AppSidebar() {
           </div>
         )}
       </SidebarHeader>
+      )}
 
       <SidebarContent>
         <SidebarGroup>
@@ -654,13 +588,15 @@ export function AppSidebar() {
                 <>
                   <div className="relative shrink-0">
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src="/placeholder.svg?height=36&width=36" alt="John Doe" />
-                      <AvatarFallback>JD</AvatarFallback>
+                      <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-sidebar" />
                   </div>
                   <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium">John Doe · Owner</p>
+                    <p className="text-sm font-medium truncate">
+                      {name}
+                      {roleLabel ? ` · ${roleLabel}` : ""}
+                    </p>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
                       Online
@@ -671,8 +607,7 @@ export function AppSidebar() {
               {isCollapsed && (
                 <div className="relative">
                   <Avatar className="h-7 w-7">
-                    <AvatarImage src="/placeholder.svg?height=28&width=28" alt="John Doe" />
-                    <AvatarFallback className="text-xs">JD</AvatarFallback>
+                    <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500 border border-sidebar" />
                 </div>
@@ -680,15 +615,16 @@ export function AppSidebar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">John Doe</p>
-              <p className="text-xs text-muted-foreground">Owner</p>
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{name}</p>
+                {roleLabel ? <p className="text-xs text-muted-foreground">{roleLabel}</p> : null}
+              </div>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <UserCircle className="h-4 w-4 mr-2" />
-              Profile
-            </DropdownMenuItem>
             <DropdownMenuItem>
               <Settings className="h-4 w-4 mr-2" />
               Account Settings

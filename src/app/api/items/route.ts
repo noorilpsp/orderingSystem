@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
       orderBy: [desc(items.displayOrder), desc(items.createdAt)],
       with: {
         categoryItems: {
+          orderBy: (categoryItemsTable, { asc: ascOrder }) => [ascOrder(categoryItemsTable.displayOrder)],
           with: {
             category: {
               columns: {

@@ -128,7 +128,7 @@ export function ItemCard({
       <Card
         className={cn(
           "w-[300px] overflow-hidden rounded-xl border transition-all duration-200 hover:shadow-lg cursor-pointer",
-          isSelected && "border-2 border-gray-900 bg-gray-900 dark:bg-gray-900 scale-[0.98]", // changed to gray-900 for super dark theme
+          isSelected && "border-primary bg-primary/5 ring-1 ring-primary/20",
           isSoldOut && "opacity-70",
           selectionMode && "hover:border-slate-700",
         )}
@@ -336,7 +336,7 @@ export function ItemCard({
       <Card
         className={cn(
           "w-full overflow-hidden rounded-lg border transition-all duration-200 hover:shadow-md cursor-pointer group", // Added group class for hover effects
-          isSelected && "border-2 border-gray-900 bg-gray-900 dark:bg-gray-900 scale-[0.98]", // changed to gray-900 for super dark theme
+          isSelected && "border-primary bg-primary/5 ring-1 ring-primary/20",
           isSoldOut && "opacity-70",
           selectionMode && "hover:border-slate-700",
         )}
@@ -487,7 +487,7 @@ export function ItemCard({
       <Card
         className={cn(
           "w-full overflow-hidden rounded-lg border transition-all duration-200 hover:shadow-md cursor-pointer",
-          isSelected && "border-2 border-gray-900 bg-gray-900 dark:bg-gray-900 scale-[0.98]", // changed to gray-900 for super dark theme
+          isSelected && "border-primary bg-primary/5 ring-1 ring-primary/20",
           isSoldOut && "opacity-70",
           selectionMode && "hover:border-slate-700",
         )}
@@ -629,7 +629,7 @@ export function ItemCard({
     <Card
       className={cn(
         "w-full overflow-hidden rounded-xl border transition-all duration-200",
-        isSelected && "border-2 border-gray-900 bg-gray-900 dark:bg-gray-900 scale-[0.98]", // changed to gray-900 for super dark theme
+        isSelected && "border-primary bg-primary/5 ring-1 ring-primary/20",
         isSoldOut && "opacity-70",
       )}
       onClick={handleCardClick}

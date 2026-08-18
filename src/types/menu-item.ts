@@ -11,6 +11,8 @@ export interface MenuItem {
   image?: string
   status: "live" | "draft" | "hidden" | "soldout"
   categories: string[]
+  /** Per-category item order from `category_items.display_order`. */
+  categoryOrders?: Record<string, number>
   tags: string[]
   dietaryTags: Array<"vegetarian" | "vegan" | "gluten-free">
   customizationGroups: string[]

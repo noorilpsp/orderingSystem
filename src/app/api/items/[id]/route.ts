@@ -274,17 +274,22 @@ export async function PUT(
 
     // Update relations if provided
     if (body.categoryIds !== undefined && Array.isArray(body.categoryIds)) {
-      // Delete existing category items
-      await db.delete(categoryItems).where(eq(categoryItems.itemId, itemId));
-      // Insert new ones
       if (body.categoryIds.length > 0) {
+        const existingLinks = await db.query.categoryItems.findMany({
+          where: eq(categoryItems.itemId, itemId),
+          columns: { categoryId: true, displayOrder: true },
+        })
+        const existingOrder = new Map(existingLinks.map((link) => [link.categoryId, link.displayOrder]))
+        await db.delete(categoryItems).where(eq(categoryItems.itemId, itemId));
         await db.insert(categoryItems).values(
           body.categoryIds.map((categoryId: string, index: number) => ({
             categoryId,
             itemId,
-            displayOrder: index,
+            displayOrder: existingOrder.get(categoryId) ?? index,
           }))
         );
+      } else {
+        await db.delete(categoryItems).where(eq(categoryItems.itemId, itemId));
       }
     }
 

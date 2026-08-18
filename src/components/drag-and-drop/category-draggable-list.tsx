@@ -6,10 +6,12 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
@@ -30,6 +32,16 @@ interface CategoryDraggableListProps {
   renderCategory?: (category: Category, isDragging: boolean) => React.ReactNode
   onCategoryToggle: (categoryId: string) => void
   onAddItemToCategory: (categoryId: string) => void
+}
+
+function preferItemCollisions(args: Parameters<CollisionDetection>[0]) {
+  const pointerHits = pointerWithin(args)
+  const collisions = pointerHits.length > 0 ? pointerHits : closestCorners(args)
+  const itemHit = collisions.find((collision) => {
+    const container = args.droppableContainers.find((droppable) => droppable.id === collision.id)
+    return container?.data.current?.type === "item"
+  })
+  return itemHit ? [itemHit] : collisions
 }
 
 export function CategoryDraggableList({
@@ -67,9 +79,17 @@ export function CategoryDraggableList({
     }),
   )
 
-  // Get items for a specific category
   const getItemsForCategory = (categoryId: string) => {
-    return safeItems.filter((item) => item.categories?.includes(categoryId))
+    return safeItems
+      .filter((item) => item.categories?.includes(categoryId))
+      .sort((a, b) => {
+        const aOrder = a.categoryOrders?.[categoryId]
+        const bOrder = b.categoryOrders?.[categoryId]
+        if (typeof aOrder === "number" && typeof bOrder === "number" && aOrder !== bOrder) {
+          return aOrder - bOrder
+        }
+        return 0
+      })
   }
 
   // Find which category an item belongs to
@@ -168,12 +188,23 @@ export function CategoryDraggableList({
       const targetCategory = safeCategories.find((cat) => cat.id === overId)
       
       if (targetCategory) {
-        // Dropped on a category container
         if (targetCategory.id !== activeCategory) {
-          // Moving to a different category
           onMoveItemToCategory(activeId, activeCategory, targetCategory.id)
+        } else {
+          const categoryItemList = getItemsForCategory(activeCategory)
+          const categoryItemIds = new Set(categoryItemList.map((item) => item.id))
+          const overItemId = event.collisions
+            ?.map((collision) => String(collision.id))
+            .find((id) => categoryItemIds.has(id) && id !== activeId)
+
+          if (overItemId) {
+            const activeIndex = categoryItemList.findIndex((item) => item.id === activeId)
+            const overIndex = categoryItemList.findIndex((item) => item.id === overItemId)
+            if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
+              onReorderItemsInCategory(activeCategory, arrayMove(categoryItemList, activeIndex, overIndex))
+            }
+          }
         }
-        // If dropped on the same category, do nothing (no reorder needed)
       } else {
         // Check if dropped on an item
         const overItem = safeItems.find((item) => item.id === overId)
@@ -257,7 +288,7 @@ export function CategoryDraggableList({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={preferItemCollisions}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
