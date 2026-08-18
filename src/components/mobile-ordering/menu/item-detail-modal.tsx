@@ -134,6 +134,18 @@ export function ItemDetailModal({
     };
     return emojiMap[key] ?? null;
   };
+  const getRegularTagEmoji = (name: string): string | null => {
+    const key = name.trim().toLowerCase();
+    const emojiMap: Record<string, string> = {
+      spicy: "🌶️",
+      popular: "🔥",
+      new: "✨",
+      "chef-pick": "👨‍🍳",
+      "chef's pick": "👨‍🍳",
+      "chefs pick": "👨‍🍳",
+    };
+    return emojiMap[key] ?? null;
+  };
   const customizationGroups =
     customizationGroupsProp ??
     (item?.id && publicMenu
@@ -599,7 +611,8 @@ export function ItemDetailModal({
                     );
                   })}
                   {(item?.tags ?? []).map((tag: { name: string; i18n?: CatalogI18n | null }) => {
-                    const tagKey = tag.name.trim().toLowerCase();
+                    const normalizedTagName = splitLeadingEmoji(tag.name).label;
+                    const tagKey = normalizedTagName.trim().toLowerCase();
                     let toneClass =
                       "border-zinc-400/35 bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 vivid:text-zinc-100";
 
@@ -609,6 +622,12 @@ export function ItemDetailModal({
                     } else if (tagKey === "spicy") {
                       toneClass =
                         "border-rose-400/45 bg-rose-500/20 text-rose-800 dark:text-rose-200 vivid:text-rose-100";
+                    } else if (tagKey === "popular") {
+                      toneClass =
+                        "border-orange-500/55 bg-orange-500/20 text-orange-900 dark:text-orange-200 vivid:text-orange-100";
+                    } else if (tagKey === "new") {
+                      toneClass =
+                        "border-violet-400/45 bg-fuchsia-500/20 text-fuchsia-900 dark:text-fuchsia-200 vivid:text-fuchsia-100";
                     } else if (tagKey === "gluten-free" || tagKey === "gluten free") {
                       toneClass =
                         "border-sky-400/45 bg-sky-500/20 text-sky-800 dark:text-sky-200 vivid:text-sky-100";
@@ -620,7 +639,7 @@ export function ItemDetailModal({
                       `tag-${tag.name}`,
                       parsed.label,
                       toneClass,
-                      (tag as { emoji?: string | null }).emoji || parsed.emoji || undefined,
+                      (tag as { emoji?: string | null }).emoji || parsed.emoji || getRegularTagEmoji(normalizedTagName) || undefined,
                     );
                   })}
                 </div>
