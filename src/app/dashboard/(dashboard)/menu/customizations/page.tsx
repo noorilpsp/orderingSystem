@@ -18,6 +18,7 @@ import type { CustomizationGroup } from "@/types/customization"
 export default function MenuCustomizationsPage() {
   const {
     customizationGroups,
+    loading,
     createCustomizationGroup,
     updateCustomizationGroup,
     deleteCustomizationGroup,
@@ -188,6 +189,7 @@ export default function MenuCustomizationsPage() {
 
           <CustomizationsContent
             groups={filteredGroups}
+            isLoading={loading}
             onCreateGroup={handleCreateGroup}
             onEditGroup={handleEditGroup}
             onDeleteGroup={handleDeleteGroup}

@@ -15,10 +15,8 @@ import type { MenuItem } from "@/types/menu-item"
 const availableTags = ["Vegan", "Vegetarian", "Gluten-Free", "Spicy", "Popular", "New", "Chef's Pick"]
 
 export default function MenuOverviewPage() {
-  const { items, categories, updateItem, reorderCategories, createItem, reorderItems } = useMenu()
+  const { items, categories, loading, updateItem, reorderCategories, createItem, reorderItems } = useMenu()
   const searchParams = useSearchParams()
-
-  const [isLoading, setIsLoading] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(categories.map((c) => c.id)))
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("All")
@@ -228,7 +226,7 @@ export default function MenuOverviewPage() {
             categories={categoriesWithExpanded}
             items={filteredItems}
             view="list"
-            isLoading={isLoading}
+            isLoading={loading}
             onItemClick={handleItemClick}
             onCategoryToggle={handleCategoryToggle}
             onAddItemToCategory={handleAddItemToCategory}

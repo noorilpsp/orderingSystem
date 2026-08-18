@@ -16,7 +16,7 @@ const mockHolidays: HolidayHours[] = [
 ]
 
 export default function MenuMenusPage() {
-  const { menus, createMenu, updateMenu, deleteMenu, toggleMenuActive, duplicateMenu } = useMenu()
+  const { menus, loading, createMenu, updateMenu, deleteMenu, toggleMenuActive, duplicateMenu } = useMenu()
   const [holidayHours, setHolidayHours] = useState<HolidayHours[]>(mockHolidays)
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
@@ -186,6 +186,7 @@ export default function MenuMenusPage() {
       <div className="container mx-auto py-8 px-4 max-w-7xl">
         <MenusContent
           menus={filteredMenus}
+          isLoading={loading}
           holidayHours={holidayHours}
           onCreateMenu={handleCreateMenu}
           onEditMenu={handleEditMenu}

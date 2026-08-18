@@ -35,6 +35,7 @@ export interface CustomizationGroup {
 
 export interface CustomizationsContentProps {
   groups: CustomizationGroup[]
+  isLoading?: boolean
   onCreateGroup: () => void
   onEditGroup: (id: string) => void
   onDeleteGroup: (id: string) => void

@@ -36,9 +36,11 @@ import type { CustomizationGroup, CustomizationsContentProps } from "@/types/cus
 import { CUSTOMIZATION_TEMPLATES } from "@/lib/menu/customization-templates"
 import { CUSTOMIZATION_TEMPLATE_PACKS } from "@/lib/menu/customization-template-packs"
 import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function CustomizationsContent({
   groups,
+  isLoading = false,
   onCreateGroup,
   onEditGroup,
   onDeleteGroup,
@@ -192,6 +194,25 @@ export function CustomizationsContent({
     </div>
   )
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        {[1, 2, 3].map((i) => (
+          <Card key={i} className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-3 flex-1">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-72" />
+                <Skeleton className="h-4 w-56" />
+              </div>
+              <Skeleton className="h-9 w-9 rounded-md" />
+            </div>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
   if (groups.length === 0) {
     return (
       <div className="space-y-8">
@@ -222,7 +243,7 @@ export function CustomizationsContent({
         {showInfoBanner && (
           <div className="bg-blue-50 dark:bg-blue-950/40 border-l-4 border-blue-400 dark:border-blue-600 p-4 rounded-lg">
             <div className="flex items-start gap-3">
-              <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
                   <strong>Customization groups are reusable.</strong> Create once, attach to multiple items.

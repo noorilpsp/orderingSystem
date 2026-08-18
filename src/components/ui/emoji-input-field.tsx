@@ -5,6 +5,94 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react"
 
+export interface EmojiPickerButtonProps {
+  value: string
+  onChange: (emoji: string) => void
+  /** Use inside drawers/sheets where Radix portals can conflict */
+  forcePortal?: boolean
+}
+
+/**
+ * A standalone emoji-picker button.
+ * Unlike EmojiInputField this does NOT render a bundled text input —
+ * use it alongside your own <Input> when emoji and name are separate fields.
+ */
+export function EmojiPickerButton({ value, onChange, forcePortal = false }: EmojiPickerButtonProps) {
+  const [open, setOpen] = React.useState(false)
+  const display = value || "😀"
+
+  const handlePick = (data: EmojiClickData) => {
+    onChange(data.emoji)
+    setOpen(false)
+  }
+
+  if (forcePortal) {
+    return (
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          aria-label="Pick emoji"
+          className="h-9 w-9 rounded-md border border-input bg-background flex items-center justify-center text-lg transition-colors hover:bg-accent cursor-pointer"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o) }}
+        >
+          {display}
+        </button>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
+            <div
+              className="absolute top-full left-0 mt-1 z-[9999] rounded-lg shadow-lg border overflow-hidden bg-white"
+              style={{ width: 320, height: 400 }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <EmojiPicker
+                onEmojiClick={handlePick}
+                theme={Theme.AUTO}
+                width={320}
+                height={400}
+                searchPlaceHolder="Search emojis…"
+                previewConfig={{ showPreview: false }}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Pick emoji"
+          className="h-9 w-9 shrink-0 rounded-md border border-input bg-background flex items-center justify-center text-lg transition-colors hover:bg-accent cursor-pointer"
+        >
+          {display}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-auto p-0 border-0 z-[9999]"
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        style={{ zIndex: 9999 }}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <EmojiPicker
+          onEmojiClick={handlePick}
+          theme={Theme.AUTO}
+          width={320}
+          height={400}
+          searchPlaceHolder="Search emojis…"
+          previewConfig={{ showPreview: false }}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export interface EmojiInputFieldProps {
   value: string
   onChange: (value: string) => void

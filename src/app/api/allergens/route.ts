@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { locationId, name, icon } = body;
+    const { locationId, name, emoji, icon } = body;
 
     if (!locationId || !name) {
       return NextResponse.json(
@@ -176,6 +176,7 @@ export async function POST(request: NextRequest) {
       .values({
         locationId,
         name,
+        emoji: emoji || null,
         icon: icon || null,
       })
       .returning();

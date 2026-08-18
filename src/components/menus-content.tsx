@@ -31,9 +31,11 @@ import type { MenusContentProps } from "@/types/menu"
 import { formatSchedule, formatTime, formatDate } from "@/lib/menu-utils"
 import { DeleteConfirmationDialog } from "@/components/modals/delete-confirmation-dialog"
 import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function MenusContent({
   menus,
+  isLoading = false,
   holidayHours = [],
   onCreateMenu,
   onEditMenu,
@@ -102,6 +104,34 @@ export function MenusContent({
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 mb-12">
+        {[1, 2, 3].map((i) => (
+          <Card key={i} className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <Skeleton className="h-7 w-40" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-64" />
+              <Skeleton className="h-4 w-56" />
+              <div className="flex gap-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <Skeleton className="h-px w-full" />
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-9 w-28" />
+                <Skeleton className="h-9 w-9" />
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
   if (menus.length === 0) {
     return (
       <>
@@ -153,7 +183,7 @@ export function MenusContent({
             {/* Schedule */}
             <div className="space-y-2 mb-4">
               <div className="flex items-start gap-2 text-gray-600">
-                <Clock className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <Clock className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   {formatSchedule(menu.schedule).map((line, index) => (
                     <p key={index} className="text-sm">

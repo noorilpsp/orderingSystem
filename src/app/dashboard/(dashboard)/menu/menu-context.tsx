@@ -41,8 +41,8 @@ interface MenuContextType {
   categories: Category[]
   customizationGroups: CustomizationGroup[]
   menus: Menu[]
-  tags: Array<{ id: string; name: string }>
-  allergens: Array<{ id: string; name: string }>
+  tags: Array<{ id: string; name: string; emoji?: string | null }>
+  allergens: Array<{ id: string; name: string; emoji?: string | null }>
   loading: boolean
   error: string | null
   locationId: string | null
@@ -106,6 +106,10 @@ interface MenuContextType {
 
   // Refresh data
   refetch: () => Promise<void>
+
+  // Tag/allergen helpers
+  addTag: (tag: { id: string; name: string; emoji?: string | null }) => void
+  addAllergen: (allergen: { id: string; name: string; emoji?: string | null }) => void
 }
 
 const MenuContext = createContext<MenuContextType | undefined>(undefined)
@@ -250,11 +254,25 @@ function transformItem(dbItem: any): MenuItem {
     (it.tag.name || "").toLowerCase()
   ) || []
   
-  // Dietary tags are: vegetarian, vegan, gluten-free
-  const dietaryTagValues = ["vegetarian", "vegan", "gluten-free"]
+  const dietaryTagValues = [
+    "vegetarian",
+    "vegan",
+    "gluten-free",
+    "dairy-free",
+    "nut-free",
+    "sugar-free",
+    "keto",
+    "paleo",
+    "low-carb",
+    "high-protein",
+    "organic",
+    "raw",
+    "halal",
+    "kosher",
+  ]
   const dietaryTags = allTags.filter((tag: string) => 
     dietaryTagValues.includes(tag)
-  ) as Array<"vegetarian" | "vegan" | "gluten-free">
+  )
   
   // Regular tags are: spicy, popular, new, chef-pick (and any others)
   const regularTags = allTags.filter((tag: string) => 
@@ -470,8 +488,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [customizationGroups, setCustomizationGroups] = useState<CustomizationGroup[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
-  const [tags, setTags] = useState<Array<{ id: string; name: string }>>([])
-  const [allergens, setAllergens] = useState<Array<{ id: string; name: string }>>([])
+  const [tags, setTags] = useState<Array<{ id: string; name: string; emoji?: string | null }>>([])
+  const [allergens, setAllergens] = useState<Array<{ id: string; name: string; emoji?: string | null }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -510,7 +528,31 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           const newTag = await response.json()
           tagIds.push(newTag.id)
           // Update local tags state
-          setTags(prev => [...prev, { id: newTag.id, name: newTag.name }])
+          setTags(prev => [...prev, { id: newTag.id, name: newTag.name, emoji: newTag.emoji ?? null }])
+        } else {
+          // Common race: tag was created moments ago but local context hasn't refreshed yet.
+          // Re-read the location tag list and match by name so the item can still save.
+          const existingTagsRes = await fetch(`/api/tags?locationId=${locationId}`, {
+            credentials: 'include',
+            cache: 'no-store',
+          })
+          if (existingTagsRes.ok) {
+            const payload = await existingTagsRes.json()
+            const rows = Array.isArray((payload as any)?.data)
+              ? (payload as any).data
+              : Array.isArray(payload)
+                ? payload
+                : []
+            const matched = rows.find((row: { id: string; name: string }) =>
+              row.name?.toLowerCase?.() === name.toLowerCase()
+            )
+            if (matched?.id) {
+              tagIds.push(matched.id)
+              setTags(prev => prev.some((t) => t.id === matched.id)
+                ? prev
+                : [...prev, { id: matched.id, name: matched.name, emoji: (matched as any).emoji ?? null }])
+            }
+          }
         }
       } catch (err) {
         console.error(`Failed to create tag: ${name}`, err)
@@ -555,7 +597,29 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           const newAllergen = await response.json()
           allergenIds.push(newAllergen.id)
           // Update local allergens state
-          setAllergens(prev => [...prev, { id: newAllergen.id, name: newAllergen.name }])
+          setAllergens(prev => [...prev, { id: newAllergen.id, name: newAllergen.name, emoji: newAllergen.emoji ?? null }])
+        } else {
+          const existingAllergensRes = await fetch(`/api/allergens?locationId=${locationId}`, {
+            credentials: 'include',
+            cache: 'no-store',
+          })
+          if (existingAllergensRes.ok) {
+            const payload = await existingAllergensRes.json()
+            const rows = Array.isArray((payload as any)?.data)
+              ? (payload as any).data
+              : Array.isArray(payload)
+                ? payload
+                : []
+            const matched = rows.find((row: { id: string; name: string }) =>
+              row.name?.toLowerCase?.() === name.toLowerCase()
+            )
+            if (matched?.id) {
+              allergenIds.push(matched.id)
+              setAllergens(prev => prev.some((a) => a.id === matched.id)
+                ? prev
+                : [...prev, { id: matched.id, name: matched.name, emoji: (matched as any).emoji ?? null }])
+            }
+          }
         }
       } catch (err) {
         console.error(`Failed to create allergen: ${name}`, err)
@@ -659,11 +723,12 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         unwrap<unknown>(customizationsJson, "customizations").map(transformCustomizationGroup)
       )
       setMenus(unwrap<unknown>(menusJson, "menus").map(transformMenu))
-      setTags(unwrap<unknown>(tagsJson, "tags").map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })))
+      setTags(unwrap<unknown>(tagsJson, "tags").map((t: { id: string; name: string; emoji?: string | null }) => ({ id: t.id, name: t.name, emoji: t.emoji ?? null })))
       setAllergens(
-        unwrap<unknown>(allergensJson, "allergens").map((a: { id: string; name: string }) => ({
+        unwrap<unknown>(allergensJson, "allergens").map((a: { id: string; name: string; emoji?: string | null }) => ({
           id: a.id,
           name: a.name,
+          emoji: a.emoji ?? null,
         }))
       )
     } catch (err) {
@@ -1595,6 +1660,14 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     toggleMenuActive,
     duplicateMenu,
     refetch: fetchData,
+    addTag: (tag) => setTags((prev) => {
+      if (prev.some((t) => t.id === tag.id)) return prev
+      return [...prev, tag]
+    }),
+    addAllergen: (allergen) => setAllergens((prev) => {
+      if (prev.some((a) => a.id === allergen.id)) return prev
+      return [...prev, allergen]
+    }),
   }
 
   return <MenuContext.Provider value={value}>{children}</MenuContext.Provider>

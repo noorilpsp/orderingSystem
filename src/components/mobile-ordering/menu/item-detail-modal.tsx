@@ -84,11 +84,74 @@ export function ItemDetailModal({
       item?.i18n,
     );
   const publicMenu = usePublicMenuOptional();
+  const splitLeadingEmoji = (value: string): { emoji: string | null; label: string } => {
+    const match = value.match(/^(\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)\s*/u);
+    if (!match) return { emoji: null, label: value };
+    return {
+      emoji: match[1] ?? match[0].trim(),
+      label: value.slice(match[0].length).trim() || value,
+    };
+  };
+  const getDietaryEmoji = (name: string): string | null => {
+    const key = name.trim().toLowerCase();
+    const emojiMap: Record<string, string> = {
+      vegetarian: "🥬",
+      vegan: "🌱",
+      "gluten-free": "🌾",
+      "dairy-free": "🥛",
+      "nut-free": "🥜",
+      "sugar-free": "🍯",
+      keto: "🥑",
+      paleo: "🥩",
+      "low-carb": "🥗",
+      "high-protein": "💪",
+      organic: "🌿",
+      raw: "🥕",
+      halal: "☪️",
+      kosher: "✡️",
+    };
+    return emojiMap[key] ?? null;
+  };
+  const getAllergenEmoji = (name: string): string | null => {
+    const key = name.trim().toLowerCase();
+    const emojiMap: Record<string, string> = {
+      nuts: "🥜",
+      peanuts: "🥜",
+      dairy: "🥛",
+      milk: "🥛",
+      shellfish: "🦐",
+      gluten: "🌾",
+      soy: "🫘",
+      eggs: "🥚",
+      "tree nuts": "🌰",
+      fish: "🐟",
+      sesame: "🌰",
+      mustard: "🌶️",
+      celery: "🥬",
+      lupin: "🫘",
+      molluscs: "🐚",
+    };
+    return emojiMap[key] ?? null;
+  };
   const customizationGroups =
     customizationGroupsProp ??
     (item?.id && publicMenu
       ? publicMenu.getCustomizationGroupsForItem(item.id)
       : staticCustomizationGroups);
+  const renderTagChip = (
+    key: string,
+    label: string,
+    toneClass: string,
+    emoji?: string,
+  ) => (
+    <span
+      key={key}
+      className={`sheen-overlay relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium backdrop-blur-md ring-1 ring-white/10 ${toneClass}`}
+    >
+      {emoji ? <span>{emoji}</span> : null}
+      {label}
+    </span>
+  );
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string[]>
   >({});
@@ -485,9 +548,8 @@ export function ItemDetailModal({
                 {localizedName}
               </h1>
 
-              {/* Price and Tags Row */}
-              <div className="mt-2 flex items-center gap-2">
-                {/* Base Price */}
+              {/* Price / calories */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 {item?.price != null && (
                   <PromoPrice
                     price={item.price}
@@ -498,42 +560,66 @@ export function ItemDetailModal({
                     className="text-sm text-foreground"
                   />
                 )}
-
-                {/* Tags */}
-                {item?.tags && item.tags.length > 0 && (
-                  <div className="flex gap-1">
-                    {item.tags.map((tag: { name: string; i18n?: CatalogI18n | null }) => {
-                      const tagKey = tag.name.trim().toLowerCase();
-                      let toneClass =
-                        "border-zinc-400/35 bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 vivid:text-zinc-100";
-
-                      if (tagKey === "vegetarian") {
-                        toneClass =
-                          "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100";
-                      } else if (tagKey === "spicy") {
-                        toneClass =
-                          "border-rose-400/45 bg-rose-500/20 text-rose-800 dark:text-rose-200 vivid:text-rose-100";
-                      } else if (tagKey === "gluten-free" || tagKey === "gluten free") {
-                        toneClass =
-                          "border-sky-400/45 bg-sky-500/20 text-sky-800 dark:text-sky-200 vivid:text-sky-100";
-                      }
-
-                      return (
-                        <span
-                          key={tag.name}
-                          className={`sheen-overlay relative inline-flex rounded-full border px-2 py-0.5 text-xs font-medium backdrop-blur-md ring-1 ring-white/10 ${toneClass}`}
-                        >
-                          {resolveTagLabel(locale, tag.name, tag.i18n)}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
+                {item?.calories ? (
+                  <span className="text-xs text-muted-foreground">{item.calories} cal</span>
+                ) : null}
               </div>
 
               <p className="mt-2 text-sm text-muted-foreground">
                 {localizedDescription}
               </p>
+
+              {/* Tags */}
+              {(item?.tags?.length > 0 || item?.dietaryTags?.length > 0 || item?.allergens?.length > 0) && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(item?.dietaryTags ?? []).map((tag: { name: string; emoji?: string | null; i18n?: CatalogI18n | null }) => {
+                    const label = resolveTagLabel(locale, tag.name, tag.i18n);
+                    const parsed = splitLeadingEmoji(label);
+                    return renderTagChip(
+                      `dietary-${tag.name}`,
+                      parsed.label,
+                      "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100",
+                      tag.emoji || parsed.emoji || getDietaryEmoji(tag.name) || undefined,
+                    );
+                  })}
+                  {(item?.allergens ?? []).map((allergen: { name: string; emoji?: string | null } | string) => {
+                    const name = typeof allergen === "string" ? allergen : allergen.name;
+                    const emoji = typeof allergen === "string" ? null : allergen.emoji;
+                    const parsed = splitLeadingEmoji(name);
+                    return renderTagChip(
+                      `allergen-${name}`,
+                      parsed.label,
+                      "border-amber-400/45 bg-amber-500/20 text-amber-900 dark:text-amber-200 vivid:text-amber-100",
+                      emoji || parsed.emoji || getAllergenEmoji(name) || "⚠️",
+                    );
+                  })}
+                  {(item?.tags ?? []).map((tag: { name: string; i18n?: CatalogI18n | null }) => {
+                    const tagKey = tag.name.trim().toLowerCase();
+                    let toneClass =
+                      "border-zinc-400/35 bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 vivid:text-zinc-100";
+
+                    if (tagKey === "vegetarian") {
+                      toneClass =
+                        "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100";
+                    } else if (tagKey === "spicy") {
+                      toneClass =
+                        "border-rose-400/45 bg-rose-500/20 text-rose-800 dark:text-rose-200 vivid:text-rose-100";
+                    } else if (tagKey === "gluten-free" || tagKey === "gluten free") {
+                      toneClass =
+                        "border-sky-400/45 bg-sky-500/20 text-sky-800 dark:text-sky-200 vivid:text-sky-100";
+                    }
+
+                    const label = resolveTagLabel(locale, tag.name, tag.i18n);
+                    const parsed = splitLeadingEmoji(label);
+                    return renderTagChip(
+                      `tag-${tag.name}`,
+                      parsed.label,
+                      toneClass,
+                      (tag as { emoji?: string | null }).emoji || parsed.emoji || undefined,
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Customization Groups */}

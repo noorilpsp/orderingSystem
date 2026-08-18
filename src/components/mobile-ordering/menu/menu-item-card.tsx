@@ -41,6 +41,77 @@ export function MenuItemCard({
   const isSoldOut = item.status === "soldout";
   const isInCart = quantity > 0;
   const isTile = variant === "tile";
+  const caloriesLabel = item.calories ? `${item.calories} cal` : null;
+  const dietaryTags = item.dietaryTags ?? [];
+  const allergens = item.allergens ?? [];
+  const regularTags = item.tags ?? [];
+
+  const splitLeadingEmoji = (value: string): { emoji: string | null; label: string } => {
+    const match = value.match(/^(\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)\s*/u);
+    if (!match) return { emoji: null, label: value };
+    return {
+      emoji: match[1] ?? match[0].trim(),
+      label: value.slice(match[0].length).trim() || value,
+    };
+  };
+
+  const getDietaryEmoji = (name: string): string | null => {
+    const key = name.trim().toLowerCase();
+    const emojiMap: Record<string, string> = {
+      vegetarian: "🥬",
+      vegan: "🌱",
+      "gluten-free": "🌾",
+      "dairy-free": "🥛",
+      "nut-free": "🥜",
+      "sugar-free": "🍯",
+      keto: "🥑",
+      paleo: "🥩",
+      "low-carb": "🥗",
+      "high-protein": "💪",
+      organic: "🌿",
+      raw: "🥕",
+      halal: "☪️",
+      kosher: "✡️",
+    };
+    return emojiMap[key] ?? null;
+  };
+
+  const getAllergenEmoji = (name: string): string | null => {
+    const key = name.trim().toLowerCase();
+    const emojiMap: Record<string, string> = {
+      nuts: "🥜",
+      peanuts: "🥜",
+      dairy: "🥛",
+      milk: "🥛",
+      shellfish: "🦐",
+      gluten: "🌾",
+      soy: "🫘",
+      eggs: "🥚",
+      "tree nuts": "🌰",
+      fish: "🐟",
+      sesame: "🌰",
+      mustard: "🌶️",
+      celery: "🥬",
+      lupin: "🫘",
+      molluscs: "🐚",
+    };
+    return emojiMap[key] ?? null;
+  };
+
+  const renderTagChip = (
+    key: string,
+    label: string,
+    toneClass: string,
+    emoji?: string,
+  ) => (
+    <span
+      key={key}
+      className={`sheen-overlay relative inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium backdrop-blur-md ring-1 ring-white/10 ${toneClass}`}
+    >
+      {emoji ? <span>{emoji}</span> : null}
+      {label}
+    </span>
+  );
 
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -158,9 +229,30 @@ export function MenuItemCard({
   ) : null;
 
   const tags =
-    item.tags.length > 0 ? (
+    regularTags.length > 0 || dietaryTags.length > 0 || allergens.length > 0 ? (
       <div className="flex flex-wrap gap-1">
-        {item.tags.map((tag) => {
+        {dietaryTags.map((tag) => {
+          const label = resolveTagLabel(locale, tag.name, tag.i18n);
+          const parsed = splitLeadingEmoji(label);
+          return renderTagChip(
+            `dietary-${tag.name}`,
+            parsed.label,
+            "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100",
+            tag.emoji || parsed.emoji || getDietaryEmoji(tag.name) || undefined,
+          );
+        })}
+        {allergens.map((allergen) => {
+          const name = typeof allergen === "string" ? allergen : allergen.name;
+          const emoji = typeof allergen === "string" ? null : allergen.emoji;
+          const parsed = splitLeadingEmoji(name);
+          return renderTagChip(
+            `allergen-${name}`,
+            parsed.label,
+            "border-amber-400/45 bg-amber-500/20 text-amber-900 dark:text-amber-200 vivid:text-amber-100",
+            emoji || parsed.emoji || getAllergenEmoji(name) || "⚠️",
+          );
+        })}
+        {regularTags.map((tag) => {
           let toneClass =
             "border-zinc-400/35 bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 vivid:text-zinc-100";
           const tagKey = tag.name.trim().toLowerCase();
@@ -179,15 +271,12 @@ export function MenuItemCard({
           }
 
           const label = resolveTagLabel(locale, tag.name, tag.i18n);
-
-          return (
-            <span
-              key={tag.name}
-              className={`sheen-overlay relative inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium backdrop-blur-md ring-1 ring-white/10 ${toneClass}`}
-            >
-              {tagEmoji}
-              {label}
-            </span>
+          const parsed = splitLeadingEmoji(label);
+          return renderTagChip(
+            `tag-${tag.name}`,
+            parsed.label,
+            toneClass,
+            tag.emoji || parsed.emoji || tagEmoji || undefined,
           );
         })}
       </div>
@@ -232,15 +321,20 @@ export function MenuItemCard({
           </p>
           {tags}
           <div className="mt-auto flex items-center justify-between gap-3 pt-2">
-            <p className="font-semibold text-foreground">
-              <PromoPrice
-                price={item.price}
-                compareAtPrice={item.compareAtPrice}
-                promoKind={item.promoKind}
-                formatMoney={formatMoney}
-                bogoLabel={t("menu.bogo")}
-              />
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-foreground">
+                <PromoPrice
+                  price={item.price}
+                  compareAtPrice={item.compareAtPrice}
+                  promoKind={item.promoKind}
+                  formatMoney={formatMoney}
+                  bogoLabel={t("menu.bogo")}
+                />
+              </p>
+              {caloriesLabel ? (
+                <span className="text-xs text-muted-foreground">{caloriesLabel}</span>
+              ) : null}
+            </div>
             {tileQuantityControls}
           </div>
         </div>
@@ -267,15 +361,20 @@ export function MenuItemCard({
             {localizedDescription}
           </p>
           {tags}
-          <p className="font-semibold text-foreground">
-            <PromoPrice
-              price={item.price}
-              compareAtPrice={item.compareAtPrice}
-              promoKind={item.promoKind}
-              formatMoney={formatMoney}
-              bogoLabel={t("menu.bogo")}
-            />
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-foreground">
+              <PromoPrice
+                price={item.price}
+                compareAtPrice={item.compareAtPrice}
+                promoKind={item.promoKind}
+                formatMoney={formatMoney}
+                bogoLabel={t("menu.bogo")}
+              />
+            </p>
+            {caloriesLabel ? (
+              <span className="text-xs text-muted-foreground">{caloriesLabel}</span>
+            ) : null}
+          </div>
         </div>
       </div>
 

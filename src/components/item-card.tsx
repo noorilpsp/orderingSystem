@@ -46,6 +46,7 @@ export function ItemCard({
   const [imageHovered, setImageHovered] = useState(false)
   const [cardHovered, setCardHovered] = useState(false) // Track card hover state
   const isSoldOut = item.status === "soldout"
+  const caloriesLabel = item.nutrition?.calories ? `${item.nutrition.calories} cal` : null
 
   // Helper function to get category name from ID
   const getCategoryName = (categoryId: string) => {
@@ -104,6 +105,21 @@ export function ItemCard({
       "chefs pick": "👨‍🍳",
     }
     return emojiMap[tag.toLowerCase()] || "🏷️"
+  }
+
+  /**
+   * If the tag/allergen name starts with an emoji (e.g. "🔥 Hot"),
+   * split it into { icon, label }. Otherwise fall back to the map lookup.
+   */
+  const parseTagDisplay = (
+    name: string,
+    fallbackIcon: (s: string) => string,
+  ): { icon: string; label: string } => {
+    const match = name.match(/^(\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)\s*/u)
+    if (match) {
+      return { icon: match[1] ?? match[0].trim(), label: name.slice(match[0].length).trim() || name }
+    }
+    return { icon: fallbackIcon(name), label: name }
   }
 
   const handleCardClick = (e: React.MouseEvent) => {
@@ -252,30 +268,24 @@ export function ItemCard({
           <div className="flex flex-wrap gap-1.5">
             {/* Dietary Tags */}
             {item.dietaryTags &&
-              item.dietaryTags.map((tag, index) => (
-                <TagChip key={`dietary-${index}`} label={tag} variant="dietary" icon={getDietaryEmoji(tag)} />
-              ))}
+              item.dietaryTags.map((tag, index) => {
+                const { icon, label } = parseTagDisplay(tag, getDietaryEmoji)
+                return <TagChip key={`dietary-${index}`} label={label} variant="dietary" icon={icon} />
+              })}
 
             {/* Allergens */}
             {item.nutrition?.allergens &&
-              item.nutrition.allergens.map((allergen, index) => (
-                <TagChip
-                  key={`allergen-${index}`}
-                  label={allergen}
-                  variant="allergen"
-                  icon={getAllergenEmoji(allergen)}
-                />
-              ))}
+              item.nutrition.allergens.map((allergen, index) => {
+                const { icon, label } = parseTagDisplay(allergen, getAllergenEmoji)
+                return <TagChip key={`allergen-${index}`} label={label} variant="allergen" icon={icon} />
+              })}
 
             {/* Attribute Tags */}
-            {item.tags.slice(0, 3).map((tag, index) => (
-              <TagChip
-                key={`tag-${index}`}
-                label={typeof tag === "string" ? tag : (tag as any).label}
-                variant="attribute"
-                icon={getAttributeEmoji(typeof tag === "string" ? tag : (tag as any).label)}
-              />
-            ))}
+            {item.tags.slice(0, 3).map((tag, index) => {
+              const raw = typeof tag === "string" ? tag : (tag as any).label
+              const { icon, label } = parseTagDisplay(raw, getAttributeEmoji)
+              return <TagChip key={`tag-${index}`} label={label} variant="attribute" icon={icon} />
+            })}
 
             {/* Show more if there are additional tags */}
             {item.tags.length > 3 && <TagChip label={`+${item.tags.length - 3} more`} variant="custom" />}
@@ -283,7 +293,10 @@ export function ItemCard({
 
           {/* Footer */}
           <div className="flex items-center justify-between pt-2">
-            <PriceBadge price={item.price} currency={item.currency} />
+            <div className="flex items-center gap-2">
+              <PriceBadge price={item.price} currency={item.currency} />
+              {caloriesLabel && <span className="text-xs text-muted-foreground">{caloriesLabel}</span>}
+            </div>
 
             {/* Actions Menu */}
             <DropdownMenu>
@@ -406,30 +419,24 @@ export function ItemCard({
               <div className="flex gap-1 flex-wrap">
                 {/* Dietary Tags */}
                 {item.dietaryTags &&
-                  item.dietaryTags.map((tag, index) => (
-                    <TagChip key={`dietary-${index}`} label={tag} variant="dietary" icon={getDietaryEmoji(tag)} />
-                  ))}
+                  item.dietaryTags.map((tag, index) => {
+                    const { icon, label } = parseTagDisplay(tag, getDietaryEmoji)
+                    return <TagChip key={`dietary-${index}`} label={label} variant="dietary" icon={icon} />
+                  })}
 
                 {/* Allergens */}
                 {item.nutrition?.allergens &&
-                  item.nutrition.allergens.map((allergen, index) => (
-                    <TagChip
-                      key={`allergen-${index}`}
-                      label={allergen}
-                      variant="allergen"
-                      icon={getAllergenEmoji(allergen)}
-                    />
-                  ))}
+                  item.nutrition.allergens.map((allergen, index) => {
+                    const { icon, label } = parseTagDisplay(allergen, getAllergenEmoji)
+                    return <TagChip key={`allergen-${index}`} label={label} variant="allergen" icon={icon} />
+                  })}
 
                 {/* Attribute Tags */}
-                {item.tags.slice(0, 3).map((tag, index) => (
-                  <TagChip
-                    key={`tag-${index}`}
-                    label={typeof tag === "string" ? tag : (tag as any).label}
-                    variant="attribute"
-                    icon={getAttributeEmoji(typeof tag === "string" ? tag : (tag as any).label)}
-                  />
-                ))}
+                {item.tags.slice(0, 3).map((tag, index) => {
+                  const raw = typeof tag === "string" ? tag : (tag as any).label
+                  const { icon, label } = parseTagDisplay(raw, getAttributeEmoji)
+                  return <TagChip key={`tag-${index}`} label={label} variant="attribute" icon={icon} />
+                })}
 
                 {/* Show more if there are additional tags */}
                 {item.tags.length > 3 && <TagChip label={`+${item.tags.length - 3} more`} variant="custom" />}
@@ -439,7 +446,10 @@ export function ItemCard({
 
           <div className="flex-shrink-0 flex flex-col items-end gap-2 self-center">
             <StatusChip status={item.status} size="sm" />
-            <PriceBadge price={item.price} currency={item.currency} />
+            <div className="flex items-center gap-2">
+              <PriceBadge price={item.price} currency={item.currency} />
+              {caloriesLabel && <span className="text-xs text-muted-foreground">{caloriesLabel}</span>}
+            </div>
           </div>
 
           <DropdownMenu>
@@ -550,30 +560,24 @@ export function ItemCard({
               <div className="flex gap-1 flex-wrap">
                 {/* Dietary Tags */}
                 {item.dietaryTags &&
-                  item.dietaryTags.map((tag, index) => (
-                    <TagChip key={`dietary-${index}`} label={tag} variant="dietary" icon={getDietaryEmoji(tag)} />
-                  ))}
+                  item.dietaryTags.map((tag, index) => {
+                    const { icon, label } = parseTagDisplay(tag, getDietaryEmoji)
+                    return <TagChip key={`dietary-${index}`} label={label} variant="dietary" icon={icon} />
+                  })}
 
                 {/* Allergens */}
                 {item.nutrition?.allergens &&
-                  item.nutrition.allergens.map((allergen, index) => (
-                    <TagChip
-                      key={`allergen-${index}`}
-                      label={allergen}
-                      variant="allergen"
-                      icon={getAllergenEmoji(allergen)}
-                    />
-                  ))}
+                  item.nutrition.allergens.map((allergen, index) => {
+                    const { icon, label } = parseTagDisplay(allergen, getAllergenEmoji)
+                    return <TagChip key={`allergen-${index}`} label={label} variant="allergen" icon={icon} />
+                  })}
 
                 {/* Attribute Tags */}
-                {item.tags.slice(0, 2).map((tag, index) => (
-                  <TagChip
-                    key={`tag-${index}`}
-                    label={typeof tag === "string" ? tag : (tag as any).label}
-                    variant="attribute"
-                    icon={getAttributeEmoji(typeof tag === "string" ? tag : (tag as any).label)}
-                  />
-                ))}
+                {item.tags.slice(0, 2).map((tag, index) => {
+                  const raw = typeof tag === "string" ? tag : (tag as any).label
+                  const { icon, label } = parseTagDisplay(raw, getAttributeEmoji)
+                  return <TagChip key={`tag-${index}`} label={label} variant="attribute" icon={icon} />
+                })}
               </div>
             </div>
           </div>
@@ -581,7 +585,10 @@ export function ItemCard({
           {/* Price and Status */}
           <div className="flex-shrink-0 flex flex-col items-end gap-2">
             <StatusChip status={item.status} size="sm" />
-            <PriceBadge price={item.price} currency={item.currency} />
+            <div className="flex items-center gap-2">
+              <PriceBadge price={item.price} currency={item.currency} />
+              {caloriesLabel && <span className="text-xs text-muted-foreground">{caloriesLabel}</span>}
+            </div>
           </div>
 
           {/* Actions Menu */}
@@ -688,7 +695,10 @@ export function ItemCard({
 
         {/* Price and Categories */}
         <div className="flex items-center justify-between pt-2">
-          <PriceBadge price={item.price} currency={item.currency} />
+          <div className="flex items-center gap-2">
+            <PriceBadge price={item.price} currency={item.currency} />
+            {caloriesLabel && <span className="text-xs text-muted-foreground">{caloriesLabel}</span>}
+          </div>
 
           {/* Categories - placed next to price */}
           {item.categories && item.categories.length > 0 && (
@@ -713,30 +723,24 @@ export function ItemCard({
         <div className="flex flex-wrap gap-1.5">
           {/* Dietary Tags */}
           {item.dietaryTags &&
-            item.dietaryTags.map((tag, index) => (
-              <TagChip key={`dietary-${index}`} label={tag} variant="dietary" icon={getDietaryEmoji(tag)} />
-            ))}
+            item.dietaryTags.map((tag, index) => {
+              const { icon, label } = parseTagDisplay(tag, getDietaryEmoji)
+              return <TagChip key={`dietary-${index}`} label={label} variant="dietary" icon={icon} />
+            })}
 
           {/* Allergens */}
           {item.nutrition?.allergens &&
-            item.nutrition.allergens.map((allergen, index) => (
-              <TagChip
-                key={`allergen-${index}`}
-                label={allergen}
-                variant="allergen"
-                icon={getAllergenEmoji(allergen)}
-              />
-            ))}
+            item.nutrition.allergens.map((allergen, index) => {
+              const { icon, label } = parseTagDisplay(allergen, getAllergenEmoji)
+              return <TagChip key={`allergen-${index}`} label={label} variant="allergen" icon={icon} />
+            })}
 
           {/* Attribute Tags */}
-          {item.tags.slice(0, 3).map((tag, index) => (
-            <TagChip
-              key={`tag-${index}`}
-              label={typeof tag === "string" ? tag : (tag as any).label}
-              variant="attribute"
-              icon={getAttributeEmoji(typeof tag === "string" ? tag : (tag as any).label)}
-            />
-          ))}
+          {item.tags.slice(0, 3).map((tag, index) => {
+            const raw = typeof tag === "string" ? tag : (tag as any).label
+            const { icon, label } = parseTagDisplay(raw, getAttributeEmoji)
+            return <TagChip key={`tag-${index}`} label={label} variant="attribute" icon={icon} />
+          })}
 
           {/* Show more if there are additional tags */}
           {item.tags.length > 3 && <TagChip label={`+${item.tags.length - 3} more`} variant="custom" />}

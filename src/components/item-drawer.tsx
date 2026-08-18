@@ -43,6 +43,7 @@ import { useMenu } from "@/app/dashboard/(dashboard)/menu/menu-context"
 import { useStationSettingsView } from "@/lib/hooks/useStationSettingsView"
 import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 import { normalizeCatalogI18n } from "@/lib/catalog-i18n"
+import { EmojiPickerButton } from "@/components/ui/emoji-input-field"
 
 const menuItemSchema = z
   .object({
@@ -58,7 +59,7 @@ const menuItemSchema = z
     featured: z.boolean().optional().default(false),
     categories: z.array(z.string()).min(1, "At least one category is required"),
     tags: z.array(z.string()).optional().default([]),
-    dietaryTags: z.array(z.enum(["vegetarian", "vegan", "gluten-free"])).optional().default([]),
+    dietaryTags: z.array(z.string()).optional().default([]),
     customizationGroups: z.array(z.string()).optional().default([]),
     availabilityMode: z.enum(["menu-hours", "custom"]),
     customSchedule: z
@@ -144,12 +145,18 @@ function formatMenuSchedulePreview(
 }
 
 export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories }: ItemDrawerProps) {
-  const { locationId, customizationGroups, menus, categories: locationCategories, createCustomizationGroup, updateCustomizationGroup, deleteCustomizationGroup } = useMenu()
+  const { locationId, tags: locationTags, allergens, customizationGroups, menus, categories: locationCategories, createCustomizationGroup, updateCustomizationGroup, deleteCustomizationGroup, addTag, addAllergen } = useMenu()
   const { kdsEnabled } = useMerchantKdsEnabled()
   const { view: stationView } = useStationSettingsView(kdsEnabled ? locationId : null)
   const activeStations = stationView?.stations?.filter((s) => s.isActive) ?? []
   const [activeTab, setActiveTab] = React.useState("basic")
   const [isSaving, setIsSaving] = React.useState(false)
+
+  // Custom tag creation state — one mini-form per tag section
+  const [newAttributeTag, setNewAttributeTag] = React.useState({ emoji: "", text: "" })
+  const [newDietaryTag, setNewDietaryTag] = React.useState({ emoji: "", text: "" })
+  const [newAllergenTag, setNewAllergenTag] = React.useState({ emoji: "", text: "" })
+  const [isCreatingTag, setIsCreatingTag] = React.useState<"attribute" | "dietary" | "allergen" | null>(null)
   const [isUploading, setIsUploading] = React.useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
   const [showUnsavedModal, setShowUnsavedModal] = React.useState(false)
@@ -515,6 +522,7 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
   const availabilityModeValue = form.watch("availabilityMode")
   const dietaryTagsValue = form.watch("dietaryTags")
   const tagsValue = form.watch("tags")
+  const allergensValue = form.watch("nutrition.allergens")
   const customScheduleValue = form.watch("customSchedule")
   const selectedCategoryIds = form.watch("categories") ?? []
 
@@ -575,6 +583,232 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
     }
     return emojiMap[allergen.toLowerCase()] || "⚠️"
   }
+
+  const formatTagLabel = React.useCallback((value: string) => {
+    return value
+      .split("-")
+      .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+      .join(" ")
+  }, [])
+
+  const splitLeadingEmoji = React.useCallback((value: string): { emoji: string | null; label: string } => {
+    const match = value.match(/^(\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)\s*/u)
+    if (!match) return { emoji: null, label: value }
+    const label = value.slice(match[0].length).trim() || value
+    return { emoji: match[1] ?? match[0].trim(), label }
+  }, [])
+
+  // Build a display name that embeds the emoji so it travels with the tag string everywhere
+  const buildTagName = (emoji: string, text: string) =>
+    emoji ? `${emoji} ${text}` : text
+
+  const handleAddCustomAttributeTag = React.useCallback(async () => {
+    const text = newAttributeTag.text.trim()
+    if (!text || !locationId) return
+    setIsCreatingTag("attribute")
+    const fullName = buildTagName(newAttributeTag.emoji, text)
+    try {
+      const response = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationId, name: fullName, emoji: newAttributeTag.emoji || null }),
+      })
+      if (response.ok) {
+        const newTag = await response.json()
+        addTag({ id: newTag.id, name: newTag.name, emoji: newTag.emoji ?? null })
+        const current = form.getValues("tags") || []
+        if (!current.includes(fullName)) {
+          form.setValue("tags", [...current, fullName], { shouldDirty: true, shouldValidate: true })
+        }
+        setNewAttributeTag({ emoji: "", text: "" })
+      } else {
+        toast.error("Failed to create tag")
+      }
+    } catch {
+      toast.error("Failed to create tag")
+    } finally {
+      setIsCreatingTag(null)
+    }
+  }, [locationId, newAttributeTag, form, addTag])
+
+  const handleAddCustomDietaryTag = React.useCallback(async () => {
+    const text = newDietaryTag.text.trim()
+    if (!text || !locationId) return
+    setIsCreatingTag("dietary")
+    const fullName = buildTagName(newDietaryTag.emoji, text)
+    try {
+      const response = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationId, name: fullName, emoji: newDietaryTag.emoji || null }),
+      })
+      if (response.ok) {
+        const newTag = await response.json()
+        addTag({ id: newTag.id, name: newTag.name, emoji: newTag.emoji ?? null })
+        const current = form.getValues("dietaryTags") || []
+        if (!current.includes(fullName)) {
+          form.setValue("dietaryTags", [...current, fullName], { shouldDirty: true, shouldValidate: true })
+        }
+        setNewDietaryTag({ emoji: "", text: "" })
+      } else {
+        toast.error("Failed to create dietary tag")
+      }
+    } catch {
+      toast.error("Failed to create dietary tag")
+    } finally {
+      setIsCreatingTag(null)
+    }
+  }, [locationId, newDietaryTag, form, addTag])
+
+  const handleAddCustomAllergen = React.useCallback(async () => {
+    const text = newAllergenTag.text.trim()
+    if (!text || !locationId) return
+    setIsCreatingTag("allergen")
+    const fullName = buildTagName(newAllergenTag.emoji, text)
+    try {
+      const response = await fetch("/api/allergens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationId, name: fullName, emoji: newAllergenTag.emoji || null }),
+      })
+      if (response.ok) {
+        const newAllergenRecord = await response.json()
+        addAllergen({ id: newAllergenRecord.id, name: newAllergenRecord.name, emoji: newAllergenRecord.emoji ?? null })
+        const current = form.getValues("nutrition.allergens") || []
+        if (!current.includes(fullName)) {
+          form.setValue("nutrition.allergens", [...current, fullName], { shouldDirty: true, shouldValidate: true })
+        }
+        setNewAllergenTag({ emoji: "", text: "" })
+      } else {
+        toast.error("Failed to create allergen")
+      }
+    } catch {
+      toast.error("Failed to create allergen")
+    } finally {
+      setIsCreatingTag(null)
+    }
+  }, [locationId, newAllergenTag, form, addAllergen])
+
+  const dietaryTagOptions = React.useMemo(() => {
+    const defaultValues = [
+      "vegetarian",
+      "vegan",
+      "gluten-free",
+      "dairy-free",
+      "nut-free",
+      "sugar-free",
+      "keto",
+      "paleo",
+      "low-carb",
+      "high-protein",
+      "organic",
+      "raw",
+      "halal",
+      "kosher",
+    ]
+
+    const options = new Map(
+      defaultValues.map((value) => [
+        value,
+        { value, label: formatTagLabel(value), emoji: getDietaryEmoji(value) },
+      ]),
+    )
+
+    const selectedDietaryTags = form.getValues("dietaryTags") || []
+    for (const tag of selectedDietaryTags) {
+      const value = tag.trim().toLowerCase()
+      if (!value) continue
+      if (!options.has(value)) {
+        const parsed = splitLeadingEmoji(tag)
+        options.set(value, {
+          value,
+          label: parsed.emoji ? parsed.label : formatTagLabel(value),
+          emoji: parsed.emoji || getDietaryEmoji(value),
+        })
+      }
+    }
+
+    return Array.from(options.values())
+  }, [form, formatTagLabel, getDietaryEmoji, splitLeadingEmoji, dietaryTagsValue])
+
+  const allergenOptions = React.useMemo(() => {
+    const defaultValues = ["nuts", "dairy", "shellfish", "gluten", "soy", "eggs"]
+    const options = new Map(
+      defaultValues.map((value) => [
+        value,
+        { value, label: formatTagLabel(value), emoji: getAllergenEmoji(value) },
+      ]),
+    )
+
+    for (const allergen of allergens) {
+      const value = allergen.name.trim().toLowerCase()
+      if (!value) continue
+      if (!options.has(value)) {
+        const parsed = splitLeadingEmoji(allergen.name.trim())
+        options.set(value, {
+          value,
+          label: parsed.label,
+          emoji: allergen.emoji || parsed.emoji || getAllergenEmoji(value),
+        })
+      }
+    }
+
+    const selectedAllergens = form.getValues("nutrition.allergens") || []
+    for (const allergen of selectedAllergens) {
+      const value = allergen.trim().toLowerCase()
+      if (!value) continue
+      if (!options.has(value)) {
+        const parsed = splitLeadingEmoji(allergen)
+        options.set(value, {
+          value,
+          label: parsed.emoji ? parsed.label : formatTagLabel(value),
+          emoji: parsed.emoji || getAllergenEmoji(value),
+        })
+      }
+    }
+
+    return Array.from(options.values())
+  }, [allergens, allergensValue, form, formatTagLabel, splitLeadingEmoji])
+
+  const attributeTagOptions = React.useMemo(() => {
+    const defaultOptions = [
+      { value: "spicy", label: "Spicy", emoji: "🌶️" },
+      { value: "popular", label: "Popular", emoji: "🔥" },
+      { value: "new", label: "New", emoji: "✨" },
+      { value: "chef-pick", label: "Chef's Pick", emoji: "👨‍🍳" },
+    ]
+
+    const options = new Map(defaultOptions.map((tag) => [tag.value, tag]))
+    const selectedTags = form.getValues("tags") || []
+
+    for (const tag of locationTags) {
+      const value = tag.name.trim().toLowerCase()
+      if (!value) continue
+      if (!options.has(value)) {
+        const parsed = splitLeadingEmoji(tag.name.trim())
+        options.set(value, {
+          value,
+          label: parsed.label,
+          emoji: tag.emoji || parsed.emoji || "🏷️",
+        })
+      }
+    }
+
+    for (const tag of selectedTags) {
+      const value = tag.trim().toLowerCase()
+      if (!value) continue
+      if (!options.has(value)) {
+        const parsed = splitLeadingEmoji(tag)
+        options.set(value, {
+          value,
+          label: parsed.emoji ? parsed.label : tag ? formatTagLabel(tag) : tag,
+          emoji: parsed.emoji || "🏷️",
+        })
+      }
+    }
+
+    return Array.from(options.values())
+  }, [form, formatTagLabel, locationTags, splitLeadingEmoji, tagsValue])
 
   return (
     <Sheet open={isOpen} onOpenChange={handleClose}>
@@ -900,49 +1134,66 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                   <div className="space-y-3">
                     <Label>Dietary Tags</Label>
                     <div className="flex flex-wrap gap-2">
-                      {(["vegetarian", "vegan", "gluten-free"] as const).map((tag) => (
+                      {dietaryTagOptions.map((tag) => (
                         <Button
-                          key={tag}
+                          key={tag.value}
                           type="button"
                           variant="outline"
                           size="sm"
                           className={cn(
-                            dietaryTagsValue?.includes(tag) && "border-green-500 bg-green-100 text-green-700",
+                            dietaryTagsValue?.includes(tag.value) && "border-green-500 bg-green-100 text-green-700",
                           )}
                           onClick={() => {
-                            // Get fresh value from form to avoid stale closure
                             const current = form.getValues("dietaryTags") || []
-                            if (current.includes(tag)) {
+                            if (current.includes(tag.value)) {
                               form.setValue(
                                 "dietaryTags",
-                                current.filter((t) => t !== tag),
+                                current.filter((t) => t !== tag.value),
                                 { shouldDirty: true, shouldValidate: true },
                               )
                             } else {
-                              form.setValue("dietaryTags", [...current, tag], {
+                              form.setValue("dietaryTags", [...current, tag.value], {
                                 shouldDirty: true,
                                 shouldValidate: true,
                               })
                             }
                           }}
                         >
-                          {dietaryTagsValue?.includes(tag) && <Check className="mr-0.5 size-3" />}
-                          <span className="mr-0.5">{getDietaryEmoji(tag)}</span>
-                          {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                          {dietaryTagsValue?.includes(tag.value) && <Check className="mr-0.5 size-3" />}
+                          <span className="mr-0.5">{tag.emoji}</span>
+                          {tag.label}
                         </Button>
                       ))}
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <EmojiPickerButton
+                        value={newDietaryTag.emoji}
+                        onChange={(v) => setNewDietaryTag((prev) => ({ ...prev, emoji: v }))}
+                        forcePortal
+                      />
+                      <Input
+                        placeholder="Custom dietary tag…"
+                        value={newDietaryTag.text}
+                        onChange={(e) => setNewDietaryTag((prev) => ({ ...prev, text: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAddCustomDietaryTag() } }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!newDietaryTag.text.trim() || isCreatingTag === "dietary"}
+                        onClick={() => void handleAddCustomDietaryTag()}
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <Label>Attributes</Label>
                     <div className="flex flex-wrap gap-2">
-                      {[
-                        { value: "spicy", label: "Spicy", emoji: "🌶️" },
-                        { value: "popular", label: "Popular", emoji: "🔥" },
-                        { value: "new", label: "New", emoji: "✨" },
-                        { value: "chef-pick", label: "Chef's Pick", emoji: "👨‍🍳" },
-                      ].map((tag) => (
+                      {attributeTagOptions.map((tag) => (
                         <Button
                           key={tag.value}
                           type="button"
@@ -974,6 +1225,29 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                         </Button>
                       ))}
                     </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <EmojiPickerButton
+                        value={newAttributeTag.emoji}
+                        onChange={(v) => setNewAttributeTag((prev) => ({ ...prev, emoji: v }))}
+                        forcePortal
+                      />
+                      <Input
+                        placeholder="Custom attribute tag…"
+                        value={newAttributeTag.text}
+                        onChange={(e) => setNewAttributeTag((prev) => ({ ...prev, text: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAddCustomAttributeTag() } }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!newAttributeTag.text.trim() || isCreatingTag === "attribute"}
+                        onClick={() => void handleAddCustomAttributeTag()}
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -1002,29 +1276,26 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                   <div className="space-y-2">
                     <Label>Allergens</Label>
                     <div className="flex flex-wrap gap-2">
-                      {["Nuts", "Dairy", "Shellfish", "Gluten", "Soy", "Eggs"].map((allergen) => {
-                        const allergens = form.watch("nutrition.allergens") || []
-                        const isSelected = allergens.includes(allergen.toLowerCase())
+                      {allergenOptions.map((allergen) => {
+                        const isSelected = (allergensValue || []).includes(allergen.value)
 
                         return (
                           <Button
-                            key={allergen}
+                            key={allergen.value}
                             type="button"
                             variant="outline"
                             size="sm"
                             className={cn(isSelected && "border-red-500 bg-red-50 text-red-700")}
                             onClick={() => {
-                              // Get fresh value from form to avoid stale closure
                               const currentAllergens = form.getValues("nutrition.allergens") || []
-                              const allergenLower = allergen.toLowerCase()
-                              if (currentAllergens.includes(allergenLower)) {
+                              if (currentAllergens.includes(allergen.value)) {
                                 form.setValue(
                                   "nutrition.allergens",
-                                  currentAllergens.filter((a) => a !== allergenLower),
+                                  currentAllergens.filter((a) => a !== allergen.value),
                                   { shouldDirty: true, shouldValidate: true },
                                 )
                               } else {
-                                form.setValue("nutrition.allergens", [...currentAllergens, allergenLower], {
+                                form.setValue("nutrition.allergens", [...currentAllergens, allergen.value], {
                                   shouldDirty: true,
                                   shouldValidate: true,
                                 })
@@ -1032,11 +1303,34 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                             }}
                           >
                             {isSelected && <Check className="mr-0.5 size-3" />}
-                            <span className="mr-0.5">{getAllergenEmoji(allergen)}</span>
-                            {allergen}
+                            <span className="mr-0.5">{allergen.emoji}</span>
+                            {allergen.label}
                           </Button>
                         )
                       })}
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <EmojiPickerButton
+                        value={newAllergenTag.emoji}
+                        onChange={(v) => setNewAllergenTag((prev) => ({ ...prev, emoji: v }))}
+                        forcePortal
+                      />
+                      <Input
+                        placeholder="Custom allergen…"
+                        value={newAllergenTag.text}
+                        onChange={(e) => setNewAllergenTag((prev) => ({ ...prev, text: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAddCustomAllergen() } }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!newAllergenTag.text.trim() || isCreatingTag === "allergen"}
+                        onClick={() => void handleAddCustomAllergen()}
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
                     </div>
                   </div>
                 </div>

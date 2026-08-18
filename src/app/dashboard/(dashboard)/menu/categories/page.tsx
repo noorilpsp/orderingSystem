@@ -17,13 +17,13 @@ export default function MenuCategoriesPage() {
     categories,
     items,
     menus = [],
+    loading,
     createCategory,
     updateCategory,
     deleteCategory,
     reorderCategories,
     importCategories,
   } = useMenu()
-  const [isLoading] = useState(false)
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -190,7 +190,7 @@ export default function MenuCategoriesPage() {
             onDeleteCategory={handleDeleteCategory}
             onReorder={handleReorder}
             uncategorizedCount={uncategorizedCount}
-            isLoading={isLoading}
+            isLoading={loading}
           />
         </div>
       </div>

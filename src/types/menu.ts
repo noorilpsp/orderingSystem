@@ -21,6 +21,7 @@ export interface HolidayHours {
 
 export interface MenusContentProps {
   menus: Menu[]
+  isLoading?: boolean
   holidayHours?: HolidayHours[]
   onCreateMenu: () => void
   onEditMenu: (id: string) => void

@@ -96,6 +96,7 @@ type RawItem = {
   description: string | null;
   i18n?: unknown;
   price: string;
+  calories?: number | null;
   photoUrl: string | null;
   status: string | null;
   featured?: boolean | null;
@@ -103,9 +104,27 @@ type RawItem = {
   useCustomHours?: boolean | null;
   customSchedule?: unknown;
   categoryItems?: Array<{ displayOrder?: number | null; category: { id: string } }>;
-  itemTags?: Array<{ tag: { name: string; i18n?: unknown } }>;
+  itemTags?: Array<{ tag: { name: string; emoji?: string | null; i18n?: unknown } }>;
+  itemAllergens?: Array<{ allergen: { name: string; emoji?: string | null } }>;
   itemCustomizations?: Array<{ group: { id: string } }>;
 };
+
+const dietaryTagValues = new Set([
+  "vegetarian",
+  "vegan",
+  "gluten-free",
+  "dairy-free",
+  "nut-free",
+  "sugar-free",
+  "keto",
+  "paleo",
+  "low-carb",
+  "high-protein",
+  "organic",
+  "raw",
+  "halal",
+  "kosher",
+]);
 
 function buildGuestMenuItems(
   rawItems: RawItem[],
@@ -145,6 +164,18 @@ function buildGuestMenuItems(
       item.categoryItems?.find((ci) => ci.category.id === categoryId)?.displayOrder ??
       item.displayOrder ??
       0;
+    const allTags =
+      item.itemTags?.map((it) => ({
+        name: it.tag.name,
+        emoji: it.tag.emoji ?? null,
+        i18n: normalizeCatalogI18n(it.tag.i18n),
+      })) ?? [];
+    const dietaryTags = allTags.filter((tag) =>
+      dietaryTagValues.has(tag.name.trim().toLowerCase()),
+    );
+    const regularTags = allTags.filter(
+      (tag) => !dietaryTagValues.has(tag.name.trim().toLowerCase()),
+    );
 
     guestItemsWithOrder.push({
       order: displayOrder,
@@ -154,12 +185,15 @@ function buildGuestMenuItems(
       name: item.name,
       description: item.description ?? "",
       price: Number.parseFloat(item.price),
+      calories: item.calories ?? null,
       image: item.photoUrl ?? "",
-      tags:
-        item.itemTags?.map((it) => ({
-          name: it.tag.name,
-          i18n: normalizeCatalogI18n(it.tag.i18n),
-        })) ?? [],
+      tags: regularTags,
+      dietaryTags,
+      allergens:
+        item.itemAllergens?.map((ia) => ({
+          name: ia.allergen.name,
+          emoji: ia.allergen.emoji ?? null,
+        })).filter((allergen) => Boolean(allergen.name)) ?? [],
       status: mapGuestStatus(item.status),
       featured,
       customizationGroupIds: groupIds,
@@ -360,6 +394,7 @@ async function buildPublicMenuViewOnce(
       description: true,
       i18n: true,
       price: true,
+      calories: true,
       photoUrl: true,
       status: true,
       featured: true,
@@ -371,7 +406,8 @@ async function buildPublicMenuViewOnce(
       categoryItems: {
         with: { category: { columns: { id: true } } },
       },
-      itemTags: { with: { tag: { columns: { name: true, i18n: true } } } },
+      itemTags: { with: { tag: { columns: { name: true, emoji: true, i18n: true } } } },
+      itemAllergens: { with: { allergen: { columns: { name: true, emoji: true } } } },
       itemCustomizations: {
         orderBy: [asc(itemCustomizations.displayOrder), asc(itemCustomizations.createdAt)],
         with: { group: { columns: { id: true } } },

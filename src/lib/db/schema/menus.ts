@@ -119,6 +119,7 @@ import {
         .notNull()
         .references(() => merchantLocations.id, { onDelete: "cascade" }),
       name: varchar("name", { length: 100 }).notNull(),
+      emoji: varchar("emoji", { length: 10 }),
       color: varchar("color", { length: 7 }), // Hex color like #FF5733
       /** Optional locale overrides (e.g. Arabic). Primary name stays English. */
       i18n: jsonb("i18n").$type<CatalogI18n>(),
@@ -142,6 +143,7 @@ import {
         .notNull()
         .references(() => merchantLocations.id, { onDelete: "cascade" }),
       name: varchar("name", { length: 100 }).notNull(),
+      emoji: varchar("emoji", { length: 10 }),
       icon: varchar("icon", { length: 50 }), // Icon identifier
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },

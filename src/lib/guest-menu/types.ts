@@ -34,7 +34,13 @@ export type GuestCategory = {
 
 export type GuestTag = {
   name: string;
+  emoji?: string | null;
   i18n?: CatalogI18n | null;
+};
+
+export type GuestAllergen = {
+  name: string;
+  emoji?: string | null;
 };
 
 export type GuestMenuItem = {
@@ -43,11 +49,14 @@ export type GuestMenuItem = {
   name: string;
   description: string;
   price: number;
+  calories?: number | null;
   /** Original price when a sale is live. */
   compareAtPrice?: number | null;
   promoKind?: "sale_price" | "bogo" | null;
   image: string;
   tags: GuestTag[];
+  dietaryTags: GuestTag[];
+  allergens: GuestAllergen[];
   status: "live" | "soldout";
   featured?: boolean;
   customizationGroupIds?: string[];

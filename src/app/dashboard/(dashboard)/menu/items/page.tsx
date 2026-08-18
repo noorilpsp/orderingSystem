@@ -15,10 +15,8 @@ import { toast } from "sonner"
 import { downloadMenuItemsCsv } from "@/lib/menu/export-items"
 import { useMerchantKdsEnabled } from "@/lib/hooks/useMerchantKdsEnabled"
 
-const availableTags = ["Vegan", "Vegetarian", "Gluten-Free", "Spicy", "Popular", "New", "Chef's Pick"]
-
 export default function MenuItemsPage() {
-  const { items, categories, menus, locationId, createItem, updateItem, deleteItem, bulkUpdateItems, bulkDeleteItems, importItems } = useMenu()
+  const { items, categories, menus, tags, locationId, loading, createItem, updateItem, deleteItem, bulkUpdateItems, bulkDeleteItems, importItems } = useMenu()
   const { kdsEnabled } = useMerchantKdsEnabled()
   const searchParams = useSearchParams()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -302,6 +300,33 @@ export default function MenuItemsPage() {
   }, [items, categories, kdsEnabled])
 
   const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+  const availableBulkTags = useMemo(() => {
+    const options = new Map<string, string>()
+
+    for (const tag of tags) {
+      const value = tag.name.trim().toLowerCase()
+      if (!value) continue
+      options.set(value, tag.name.trim())
+    }
+
+    for (const item of selectedItems) {
+      for (const tag of item.tags || []) {
+        const value = tag.trim().toLowerCase()
+        if (!value) continue
+        if (!options.has(value)) {
+          options.set(
+            value,
+            tag
+              .split("-")
+              .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+              .join(" "),
+          )
+        }
+      }
+    }
+
+    return Array.from(options.values())
+  }, [selectedItems, tags])
 
   return (
     <div className="min-h-screen bg-background">
@@ -333,7 +358,11 @@ export default function MenuItemsPage() {
           />
 
           {/* Items Grid/List */}
-          {filteredItems.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Loading items...</p>
+            </div>
+          ) : filteredItems.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">
                 {searchQuery || selectedStatus !== "All" || selectedCategories.length > 0 || selectedTags.length > 0
@@ -418,7 +447,7 @@ export default function MenuItemsPage() {
         action={bulkActionModal.action}
         selectedCount={selectedIds.length}
         selectedItems={selectedItems.map((item) => ({ id: item.id, name: item.name }))}
-        availableTags={availableTags}
+        availableTags={availableBulkTags}
         availableCategories={categories}
         onConfirm={handleBulkActionConfirm}
       />

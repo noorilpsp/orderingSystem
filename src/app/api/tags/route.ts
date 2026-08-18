@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { locationId, name, color, i18n } = body;
+    const { locationId, name, emoji, color, i18n } = body;
 
     if (!locationId || !name) {
       return NextResponse.json(
@@ -178,6 +178,7 @@ export async function POST(request: NextRequest) {
       .values({
         locationId,
         name,
+        emoji: emoji || null,
         color: color || null,
         i18n: normalizeCatalogI18n(i18n),
       })

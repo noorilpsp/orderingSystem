@@ -14,7 +14,7 @@ export interface MenuItem {
   /** Per-category item order from `category_items.display_order`. */
   categoryOrders?: Record<string, number>
   tags: string[]
-  dietaryTags: Array<"vegetarian" | "vegan" | "gluten-free">
+  dietaryTags: string[]
   customizationGroups: string[]
   availabilityMode: "menu-hours" | "custom"
   customSchedule?: Array<{
