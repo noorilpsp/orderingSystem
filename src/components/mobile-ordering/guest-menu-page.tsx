@@ -35,7 +35,7 @@ import {
 } from "@/lib/public-menu/guest-welcome-storage";
 import type { GuestOrderTrackStatus } from "@/lib/public-menu/deriveGuestOrderTrackStatus";
 import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
-import { resolveCatalogText, resolveTagLabel } from "@/lib/catalog-i18n";
+import { resolveAllergenLabel, resolveCatalogText, resolveTagLabel } from "@/lib/catalog-i18n";
 
 type ToastType = "success" | "warning";
 
@@ -44,6 +44,8 @@ interface ToastState {
   message: string;
   type: ToastType;
 }
+
+type GuestAllergenOption = { name: string; emoji?: string | null };
 
 export function GuestMenuPage() {
   const t = useGuestT();
@@ -84,6 +86,7 @@ export function GuestMenuPage() {
   const [cartOpenSignal, setCartOpenSignal] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [menuTheme, setMenuTheme] = useState<ThemePreview>("classic");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [tick, setTick] = useState(0);
@@ -375,9 +378,32 @@ export function GuestMenuPage() {
 
   const cartTotal = sumGuestCartItems(cart, customizationGroups);
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const allergenOptions = useMemo<GuestAllergenOption[]>(() => {
+    const map = new Map<string, GuestAllergenOption>();
+    for (const item of items) {
+      for (const allergen of item.allergens ?? []) {
+        const name = typeof allergen === "string" ? allergen : allergen.name;
+        const emoji = typeof allergen === "string" ? null : allergen.emoji ?? null;
+        if (!name.trim()) continue;
+        const key = name.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, { name, emoji });
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
   const filteredMenuItems = useMemo(
     () =>
       items.filter((item) => {
+        if (selectedAllergens.length > 0) {
+          const itemAllergenNames = (item.allergens ?? []).map((allergen) =>
+            (typeof allergen === "string" ? allergen : allergen.name).trim().toLowerCase(),
+          );
+          if (selectedAllergens.some((name) => itemAllergenNames.includes(name.toLowerCase()))) {
+            return false;
+          }
+        }
         if (!normalizedQuery) return true;
         const category = categories.find((c) => c.id === item.categoryId);
         const localizedItem = resolveCatalogText(
@@ -402,12 +428,18 @@ export function GuestMenuPage() {
           ...item.tags.map((tag) =>
             resolveTagLabel(locale, tag.name, tag.i18n),
           ),
+          ...(item.allergens ?? []).map((allergen) =>
+            resolveAllergenLabel(
+              locale,
+              typeof allergen === "string" ? allergen : allergen.name,
+            ),
+          ),
         ]
           .join(" ")
           .toLowerCase();
         return haystack.includes(normalizedQuery);
       }),
-    [categories, items, locale, normalizedQuery],
+    [categories, items, locale, normalizedQuery, selectedAllergens],
   );
 
   const visibleCategories = useMemo(
@@ -547,6 +579,9 @@ export function GuestMenuPage() {
             orderType={orderType}
             tableNumber={tableNumber}
             checkRequested={checkRequested}
+            allergenOptions={allergenOptions}
+            selectedAllergens={selectedAllergens}
+            onSelectedAllergensChange={setSelectedAllergens}
             theme={menuTheme}
             onThemeChange={setMenuTheme}
             onOrderTypeChange={(next) => {

@@ -28,6 +28,7 @@ export const arMessages: Record<EnMessageKey, string> = {
   "common.free": "مجاني",
   "common.included": "مشمول",
   "common.apply": "تطبيق",
+  "common.clear": "مسح",
   "common.sending": "جاري الإرسال…",
   "common.available": "متاح",
 
@@ -61,6 +62,7 @@ export const arMessages: Record<EnMessageKey, string> = {
   "context.themeClassicEnabled": "تم تفعيل المظهر الكلاسيكي",
   "context.themeNightEnabled": "تم تفعيل المظهر الليلي",
   "context.themeVividEnabled": "تم تفعيل المظهر الحيوي",
+  "context.allergyFilter": "فلتر الحساسية",
 
   "menu.searchPlaceholder": "ابحث في القائمة",
   "menu.featured": "مميز",

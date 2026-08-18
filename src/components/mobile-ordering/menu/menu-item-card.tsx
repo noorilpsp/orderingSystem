@@ -43,7 +43,6 @@ export function MenuItemCard({
   const isTile = variant === "tile";
   const caloriesLabel = item.calories ? `${item.calories} cal` : null;
   const dietaryTags = item.dietaryTags ?? [];
-  const allergens = item.allergens ?? [];
   const regularTags = item.tags ?? [];
 
   const splitLeadingEmoji = (value: string): { emoji: string | null; label: string } => {
@@ -72,28 +71,6 @@ export function MenuItemCard({
       raw: "🥕",
       halal: "☪️",
       kosher: "✡️",
-    };
-    return emojiMap[key] ?? null;
-  };
-
-  const getAllergenEmoji = (name: string): string | null => {
-    const key = name.trim().toLowerCase();
-    const emojiMap: Record<string, string> = {
-      nuts: "🥜",
-      peanuts: "🥜",
-      dairy: "🥛",
-      milk: "🥛",
-      shellfish: "🦐",
-      gluten: "🌾",
-      soy: "🫘",
-      eggs: "🥚",
-      "tree nuts": "🌰",
-      fish: "🐟",
-      sesame: "🌰",
-      mustard: "🌶️",
-      celery: "🥬",
-      lupin: "🫘",
-      molluscs: "🐚",
     };
     return emojiMap[key] ?? null;
   };
@@ -229,7 +206,7 @@ export function MenuItemCard({
   ) : null;
 
   const tags =
-    regularTags.length > 0 || dietaryTags.length > 0 || allergens.length > 0 ? (
+    regularTags.length > 0 || dietaryTags.length > 0 ? (
       <div className="flex flex-wrap gap-1">
         {dietaryTags.map((tag) => {
           const label = resolveTagLabel(locale, tag.name, tag.i18n);
@@ -239,17 +216,6 @@ export function MenuItemCard({
             parsed.label,
             "border-emerald-400/45 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 vivid:text-emerald-100",
             tag.emoji || parsed.emoji || getDietaryEmoji(tag.name) || undefined,
-          );
-        })}
-        {allergens.map((allergen) => {
-          const name = typeof allergen === "string" ? allergen : allergen.name;
-          const emoji = typeof allergen === "string" ? null : allergen.emoji;
-          const parsed = splitLeadingEmoji(name);
-          return renderTagChip(
-            `allergen-${name}`,
-            parsed.label,
-            "border-amber-400/45 bg-amber-500/20 text-amber-900 dark:text-amber-200 vivid:text-amber-100",
-            emoji || parsed.emoji || getAllergenEmoji(name) || "⚠️",
           );
         })}
         {regularTags.map((tag) => {
@@ -322,7 +288,7 @@ export function MenuItemCard({
           {tags}
           <div className="mt-auto flex items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-2">
-              <p className="font-semibold text-foreground">
+              <p className="inline-flex items-center font-semibold leading-none text-foreground">
                 <PromoPrice
                   price={item.price}
                   compareAtPrice={item.compareAtPrice}
@@ -332,7 +298,9 @@ export function MenuItemCard({
                 />
               </p>
               {caloriesLabel ? (
-                <span className="text-xs text-muted-foreground">{caloriesLabel}</span>
+                <span className="inline-flex items-center self-center whitespace-nowrap text-xs leading-none text-muted-foreground">
+                  {caloriesLabel}
+                </span>
               ) : null}
             </div>
             {tileQuantityControls}
@@ -362,7 +330,7 @@ export function MenuItemCard({
           </p>
           {tags}
           <div className="flex items-center gap-2">
-            <p className="font-semibold text-foreground">
+            <p className="inline-flex items-center font-semibold leading-none text-foreground">
               <PromoPrice
                 price={item.price}
                 compareAtPrice={item.compareAtPrice}
@@ -372,7 +340,9 @@ export function MenuItemCard({
               />
             </p>
             {caloriesLabel ? (
-              <span className="text-xs text-muted-foreground">{caloriesLabel}</span>
+              <span className="inline-flex items-center self-center whitespace-nowrap text-xs leading-none text-muted-foreground">
+                {caloriesLabel}
+              </span>
             ) : null}
           </div>
         </div>

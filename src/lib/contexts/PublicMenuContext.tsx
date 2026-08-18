@@ -420,8 +420,10 @@ export function PublicMenuProvider({
     }
   }, [orderType, storeSlug, tableNumber]);
 
-  const fetchMenu = useCallback(async () => {
-    setLoading(true);
+  const fetchMenu = useCallback(async (options?: { background?: boolean }) => {
+    if (!options?.background) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const response = await fetch(
@@ -453,13 +455,14 @@ export function PublicMenuProvider({
       );
       setView(null);
     } finally {
-      setLoading(false);
+      if (!options?.background) {
+        setLoading(false);
+      }
     }
   }, [storeSlug]);
 
   useEffect(() => {
-    if (hasServerView) return;
-    void fetchMenu();
+    void fetchMenu({ background: hasServerView });
   }, [fetchMenu, hasServerView]);
 
   const customizationGroupMap = useMemo(

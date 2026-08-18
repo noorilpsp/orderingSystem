@@ -7,6 +7,7 @@ import { ChevronDown, MoonStar, Package, Sparkles, Sun, UtensilsCrossed, X } fro
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { useGuestLocale, translateGuestMessage, type GuestLocale } from "@/lib/guest-i18n";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
+import { resolveAllergenLabel } from "@/lib/catalog-i18n";
 
 type OrderType = "dine-in" | "pickup";
 export type ThemePreview = "classic" | "night" | "vivid";
@@ -15,6 +16,9 @@ interface ContextPillProps {
   orderType: OrderType;
   tableNumber: string;
   checkRequested: boolean;
+  allergenOptions?: Array<{ name: string; emoji?: string | null }>;
+  selectedAllergens?: string[];
+  onSelectedAllergensChange?: (value: string[]) => void;
   theme?: ThemePreview;
   onThemeChange?: (value: ThemePreview) => void;
   onOrderTypeChange: (value: OrderType) => void;
@@ -28,6 +32,9 @@ export function ContextPill({
   orderType,
   tableNumber,
   checkRequested,
+  allergenOptions = [],
+  selectedAllergens = [],
+  onSelectedAllergensChange,
   theme,
   onThemeChange,
   onOrderTypeChange,
@@ -102,6 +109,43 @@ export function ContextPill({
   // Self-pickup: guests may switch between counter dine-in and pickup.
   const canSwitchToDineIn = !isDineIn && dineInEnabled && isSelfService;
   const secondaryLabelClass = "font-normal text-white/75 dark:text-blue-200/80 vivid:text-white/80";
+  const getAllergenEmoji = (name: string): string | null => {
+    const key = name.trim().toLowerCase();
+    const emojiMap: Record<string, string> = {
+      nuts: "🥜",
+      peanuts: "🥜",
+      dairy: "🥛",
+      milk: "🥛",
+      shellfish: "🦐",
+      gluten: "🌾",
+      soy: "🫘",
+      eggs: "🥚",
+      "tree nuts": "🌰",
+      fish: "🐟",
+      sesame: "🌰",
+      mustard: "🌶️",
+      celery: "🥬",
+      lupin: "🫘",
+      molluscs: "🐚",
+    };
+    return emojiMap[key] ?? null;
+  };
+  const splitLeadingEmoji = (value: string): { emoji: string | null; label: string } => {
+    const match = value.match(/^(\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*)\s*/u);
+    if (!match) return { emoji: null, label: value };
+    return {
+      emoji: match[1] ?? match[0].trim(),
+      label: value.slice(match[0].length).trim() || value,
+    };
+  };
+  const toggleAllergen = (name: string) => {
+    const exists = selectedAllergens.includes(name);
+    onSelectedAllergensChange?.(
+      exists
+        ? selectedAllergens.filter((entry) => entry !== name)
+        : [...selectedAllergens, name],
+    );
+  };
 
   return (
     <div
@@ -402,6 +446,53 @@ export function ContextPill({
             {!isDineIn && pickupInstructions ? (
               <div className="mt-1 rounded-lg px-2 py-2 text-sm text-white/75 dark:text-blue-200/80 vivid:text-white/80">
                 {t("context.pickupInstructions")} {pickupInstructions}
+              </div>
+            ) : null}
+
+            {allergenOptions.length > 0 ? (
+              <div className="mt-2 rounded-lg border border-white/22 bg-black/34 p-2 dark:border-blue-300/22 dark:bg-blue-950/35 vivid:border-white/45 vivid:bg-black/35">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-white/75 dark:text-blue-200/80 vivid:text-white/80">
+                    {t("context.allergyFilter")}
+                  </div>
+                  {selectedAllergens.length > 0 ? (
+                    <button
+                      type="button"
+                      className="text-[11px] text-white/70 hover:text-white"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectedAllergensChange?.([]);
+                      }}
+                    >
+                      {t("common.clear")}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {allergenOptions.map((allergen) => {
+                    const selected = selectedAllergens.includes(allergen.name);
+                    const parsed = splitLeadingEmoji(allergen.name);
+                    return (
+                      <button
+                        key={allergen.name}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleAllergen(allergen.name);
+                        }}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                          selected
+                            ? "border-amber-300/55 bg-amber-500/25 text-amber-50"
+                            : "border-white/20 bg-white/8 text-white/85 hover:bg-white/12",
+                        )}
+                      >
+                        <span>{allergen.emoji || parsed.emoji || getAllergenEmoji(allergen.name) || "⚠️"}</span>
+                        <span>{resolveAllergenLabel(locale, parsed.label)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
           </div>

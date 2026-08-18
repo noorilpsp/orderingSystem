@@ -103,6 +103,26 @@ const DEFAULT_TAG_AR: Record<string, string> = {
   "nut-free": "خالي من المكسرات",
 };
 
+/** Built-in Arabic labels for common allergen names (case-insensitive key). */
+const DEFAULT_ALLERGEN_AR: Record<string, string> = {
+  dairy: "ألبان",
+  milk: "حليب",
+  gluten: "غلوتين",
+  eggs: "بيض",
+  egg: "بيض",
+  soy: "صويا",
+  nuts: "مكسرات",
+  peanuts: "فول سوداني",
+  "tree nuts": "مكسرات شجرية",
+  shellfish: "محار",
+  fish: "سمك",
+  sesame: "سمسم",
+  mustard: "خردل",
+  celery: "كرفس",
+  lupin: "ترمس",
+  molluscs: "رخويات",
+};
+
 export function resolveTagLabel(
   locale: "en" | "ar",
   tagName: string,
@@ -113,4 +133,13 @@ export function resolveTagLabel(
   if (fromDb) return fromDb;
   const key = tagName.trim().toLowerCase();
   return DEFAULT_TAG_AR[key] ?? tagName;
+}
+
+export function resolveAllergenLabel(
+  locale: "en" | "ar",
+  allergenName: string,
+): string {
+  if (locale !== "ar") return allergenName;
+  const key = allergenName.trim().toLowerCase();
+  return DEFAULT_ALLERGEN_AR[key] ?? allergenName;
 }

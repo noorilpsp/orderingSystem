@@ -27,6 +27,7 @@ export const enMessages = {
   "common.free": "Free",
   "common.included": "Included",
   "common.apply": "Apply",
+  "common.clear": "Clear",
   "common.sending": "Sending…",
   "common.available": "Available",
 
@@ -62,6 +63,7 @@ export const enMessages = {
   "context.themeClassicEnabled": "Classic theme enabled",
   "context.themeNightEnabled": "Night theme enabled",
   "context.themeVividEnabled": "Vivid theme enabled",
+  "context.allergyFilter": "Allergy filter",
 
   // Menu
   "menu.searchPlaceholder": "Search menu",

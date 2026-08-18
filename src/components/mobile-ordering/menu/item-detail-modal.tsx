@@ -21,6 +21,7 @@ import { lineTotalWithPromo } from "@/lib/promotions/pricing";
 import {
   resolveCatalogInstructions,
   resolveCatalogText,
+  resolveAllergenLabel,
   resolveTagLabel,
   type CatalogI18n,
 } from "@/lib/catalog-i18n";
@@ -551,17 +552,21 @@ export function ItemDetailModal({
               {/* Price / calories */}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {item?.price != null && (
-                  <PromoPrice
-                    price={item.price}
-                    compareAtPrice={item.compareAtPrice}
-                    promoKind={item.promoKind}
-                    formatMoney={formatMoney}
-                    bogoLabel={t("menu.bogo")}
-                    className="text-sm text-foreground"
-                  />
+                  <div className="inline-flex items-center leading-none">
+                    <PromoPrice
+                      price={item.price}
+                      compareAtPrice={item.compareAtPrice}
+                      promoKind={item.promoKind}
+                      formatMoney={formatMoney}
+                      bogoLabel={t("menu.bogo")}
+                    className="items-center text-sm text-foreground"
+                    />
+                  </div>
                 )}
                 {item?.calories ? (
-                  <span className="text-xs text-muted-foreground">{item.calories} cal</span>
+                  <span className="relative top-px inline-flex items-center self-center whitespace-nowrap text-xs leading-none text-muted-foreground">
+                    {item.calories} cal
+                  </span>
                 ) : null}
               </div>
 
@@ -588,7 +593,7 @@ export function ItemDetailModal({
                     const parsed = splitLeadingEmoji(name);
                     return renderTagChip(
                       `allergen-${name}`,
-                      parsed.label,
+                      resolveAllergenLabel(locale, parsed.label),
                       "border-amber-400/45 bg-amber-500/20 text-amber-900 dark:text-amber-200 vivid:text-amber-100",
                       emoji || parsed.emoji || getAllergenEmoji(name) || "⚠️",
                     );

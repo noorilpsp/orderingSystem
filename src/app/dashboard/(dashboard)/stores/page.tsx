@@ -1825,7 +1825,7 @@ export default function StoresPage() {
                 {/* Banner */}
                 <div className="space-y-3">
                   <Label>Store Banner</Label>
-                  <div className="relative h-32 w-full rounded-lg border-2 border-dashed border-border overflow-hidden bg-muted">
+                  <div className="relative aspect-video min-h-48 w-full overflow-hidden rounded-lg border-2 border-dashed border-border bg-muted lg:min-h-56">
                     <img
                       src={bannerPreview || "/placeholder.svg"}
                       alt="Banner preview"
