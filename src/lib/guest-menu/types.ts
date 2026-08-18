@@ -53,6 +53,7 @@ export type GuestMenuItem = {
   /** Original price when a sale is live. */
   compareAtPrice?: number | null;
   promoKind?: "sale_price" | "bogo" | null;
+  promoDisplayOrder?: number;
   image: string;
   tags: GuestTag[];
   dietaryTags: GuestTag[];

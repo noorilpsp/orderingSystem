@@ -223,6 +223,7 @@ export async function buildCounterView(
       price: promo.price,
       compareAtPrice: promo.compareAtPrice,
       promoKind: promo.kind,
+      promoDisplayOrder: promo.displayOrder,
     };
   });
 

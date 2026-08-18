@@ -111,6 +111,7 @@ function testBuiltLineBogo() {
         kind: "bogo" as const,
         price: 10,
         compareAtPrice: null,
+        displayOrder: 0,
       },
     ],
   ]);

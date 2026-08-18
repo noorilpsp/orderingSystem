@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Gift, Loader2, Pencil, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,12 +70,27 @@ function kindLabel(kind: LoyaltyRewardKind): string {
   }
 }
 
+function formatStoredAmount(value: string | number | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return amount.toFixed(2).replace(/\.00$/, "");
+}
+
 function summary(reward: LoyaltyRewardDto): string {
   switch (reward.kind) {
-    case "fixed_off":
-      return `$${Number(reward.discountAmount ?? 0).toFixed(2)} off`;
-    case "percent_off":
-      return `${reward.percentOff}% off (max $${Number(reward.maxDiscountAmount ?? 0).toFixed(2)})`;
+    case "fixed_off": {
+      const amount = formatStoredAmount(reward.discountAmount);
+      return amount ? `$${amount} off` : "Fixed $ off";
+    }
+    case "percent_off": {
+      const percent =
+        reward.percentOff != null && Number.isFinite(reward.percentOff)
+          ? `${reward.percentOff}% off`
+          : "% off";
+      const max = formatStoredAmount(reward.maxDiscountAmount);
+      return max ? `${percent} (max $${max})` : percent;
+    }
     case "free_item":
       return reward.menuItemName ? `Free ${reward.menuItemName}` : "Free menu item";
     default: {
@@ -83,6 +98,13 @@ function summary(reward: LoyaltyRewardDto): string {
       return _exhaustive;
     }
   }
+}
+
+function storedNumberInput(value: string | number | null | undefined): string {
+  if (value == null || value === "") return "";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value);
+  return String(amount);
 }
 
 export function LoyaltyRewardsManager() {
@@ -97,7 +119,20 @@ export function LoyaltyRewardsManager() {
   const [menuItems, setMenuItems] = useState<MenuItemOption[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
 
-  const locationId = locations[0]?.id ?? null;
+  const locationIds = useMemo(
+    () => locations.map((location) => location.id).filter(Boolean),
+    [locations],
+  );
+  const locationId = locationIds[0] ?? null;
+
+  const rewardsByPoints = useMemo(
+    () =>
+      [...rewards].sort((a, b) => {
+        if (a.pointsCost !== b.pointsCost) return a.pointsCost - b.pointsCost;
+        return a.name.localeCompare(b.name);
+      }),
+    [rewards],
+  );
 
   const fetchRewards = useCallback(async () => {
     if (!currentMerchantId) {
@@ -127,20 +162,32 @@ export function LoyaltyRewardsManager() {
   }, [fetchRewards]);
 
   useEffect(() => {
-    if (!locationId || !dialogOpen) return;
+    if (locationIds.length === 0 || !dialogOpen) return;
     let cancelled = false;
     setItemsLoading(true);
     void (async () => {
       try {
-        const response = await fetch(
-          `/api/items?locationId=${encodeURIComponent(locationId)}`,
-          { credentials: "include" },
+        const responses = await Promise.all(
+          locationIds.map((id) =>
+            fetch(`/api/items?locationId=${encodeURIComponent(id)}`, {
+              credentials: "include",
+            }),
+          ),
         );
-        if (!response.ok) throw new Error("Failed to load menu items");
-        const payload = await response.json();
-        const list = (payload.data ?? payload.items ?? payload) as MenuItemOption[];
+        const lists = await Promise.all(
+          responses.map(async (response) => {
+            if (!response.ok) return [] as MenuItemOption[];
+            const payload = await response.json();
+            const list = (payload.data ?? payload.items ?? payload) as MenuItemOption[];
+            return Array.isArray(list) ? list : [];
+          }),
+        );
+        const byId = new Map<string, MenuItemOption>();
+        for (const item of lists.flat()) {
+          if (item?.id) byId.set(item.id, item);
+        }
         if (!cancelled) {
-          setMenuItems(Array.isArray(list) ? list : []);
+          setMenuItems([...byId.values()].sort((a, b) => a.name.localeCompare(b.name)));
         }
       } catch {
         if (!cancelled) setMenuItems([]);
@@ -151,7 +198,7 @@ export function LoyaltyRewardsManager() {
     return () => {
       cancelled = true;
     };
-  }, [dialogOpen, locationId]);
+  }, [dialogOpen, locationIds]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -166,9 +213,10 @@ export function LoyaltyRewardsManager() {
       description: reward.description ?? "",
       kind: reward.kind,
       pointsCost: String(reward.pointsCost),
-      discountAmount: reward.discountAmount ?? "5",
-      percentOff: String(reward.percentOff ?? 10),
-      maxDiscountAmount: reward.maxDiscountAmount ?? "8",
+      discountAmount: storedNumberInput(reward.discountAmount) || emptyForm().discountAmount,
+      percentOff: storedNumberInput(reward.percentOff) || emptyForm().percentOff,
+      maxDiscountAmount:
+        storedNumberInput(reward.maxDiscountAmount) || emptyForm().maxDiscountAmount,
       menuItemId: reward.menuItemId ?? "",
       status: reward.status,
     });
@@ -275,7 +323,7 @@ export function LoyaltyRewardsManager() {
           </p>
         ) : (
           <div className="space-y-3">
-            {rewards.map((reward) => (
+            {rewardsByPoints.map((reward) => (
               <div
                 key={reward.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
@@ -288,6 +336,9 @@ export function LoyaltyRewardsManager() {
                       {reward.status}
                     </Badge>
                   </div>
+                  {reward.description ? (
+                    <p className="text-sm text-muted-foreground">{reward.description}</p>
+                  ) : null}
                   <p className="text-sm text-muted-foreground">
                     {summary(reward)} · {reward.pointsCost.toLocaleString()} pts
                   </p>

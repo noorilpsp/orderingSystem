@@ -62,7 +62,7 @@ export async function getCachedPublicMenuView(
   const revisionMs = await getPublicMenuCatalogRevision(slug);
   const readEntry = unstable_cache(
     () => loadPublicMenuCacheEntry(slug),
-    ["public-menu-view", slug],
+    ["public-menu-view", slug, String(revisionMs ?? 0)],
     {
       revalidate: 3600,
       tags: [publicMenuCacheTag(slug)],
@@ -70,16 +70,12 @@ export async function getCachedPublicMenuView(
   );
 
   const entry = await readEntry();
-  const cacheIsCurrent =
-    (revisionMs == null || entry.sourceUpdatedAtMs >= revisionMs) &&
-    Date.now() < entry.validUntilMs;
-  if (cacheIsCurrent) {
+  if (Date.now() < entry.validUntilMs) {
     return entry.view;
   }
 
-  revalidateTag(publicMenuCacheTag(slug), { expire: 0 });
-  const fresh = await loadPublicMenuCacheEntry(slug);
-  return fresh.view;
+  // Promo/menu hours expired. Do not revalidateTag during render (Next.js 16).
+  return (await loadPublicMenuCacheEntry(slug)).view;
 }
 
 export async function revalidatePublicMenuForSlug(storeSlug: string | null | undefined) {

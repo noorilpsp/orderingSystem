@@ -26,6 +26,7 @@ interface ApiItem {
     kind: "sale_price" | "bogo";
     price: number;
     compareAtPrice: number | null;
+    displayOrder?: number;
   } | null;
   [key: string]: unknown;
 }
@@ -125,6 +126,7 @@ function mapItem(
     price: Number.isFinite(price) ? price : 0,
     compareAtPrice: promo?.compareAtPrice ?? null,
     promoKind: promo?.kind ?? null,
+    promoDisplayOrder: promo?.displayOrder,
     category: categoryId,
     image: api.photoUrl ?? "",
     dietary,

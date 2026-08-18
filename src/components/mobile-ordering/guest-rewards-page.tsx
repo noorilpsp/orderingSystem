@@ -23,6 +23,56 @@ import {
 } from "@/lib/loyalty/loyaltyPointLots";
 import { useGuestT } from "@/lib/guest-i18n";
 
+function RewardPointsOverlay({
+  pointsCost,
+  balance,
+  signedIn,
+  compact,
+}: {
+  pointsCost: number;
+  balance: number;
+  signedIn: boolean;
+  compact?: boolean;
+}) {
+  const remaining = signedIn ? Math.max(0, pointsCost - balance) : 0;
+  const unlocked = signedIn && remaining <= 0;
+  const ratio =
+    !signedIn || pointsCost <= 0
+      ? 0
+      : Math.min(1, Math.max(0, (pointsCost - remaining) / pointsCost));
+
+  return (
+    <div className="absolute inset-x-0 bottom-0 bg-black/35 backdrop-blur-[2px]">
+      <div className={compact ? "px-2 py-1.5 text-center" : "px-3 py-2 text-center"}>
+        <p
+          className={
+            compact
+              ? "inline-flex items-center justify-center gap-1 text-sm font-bold tabular-nums text-white drop-shadow-sm md:text-xs"
+              : "inline-flex items-center justify-center gap-1.5 text-base font-bold tabular-nums text-white drop-shadow-sm"
+          }
+        >
+          {signedIn && !unlocked ? (
+            <Lock className={compact ? "h-3.5 w-3.5 shrink-0" : "h-4 w-4 shrink-0"} aria-hidden />
+          ) : null}
+          {pointsCost.toLocaleString()} pts
+        </p>
+      </div>
+      <div
+        className="h-1 w-full bg-white/20"
+        role={signedIn ? "progressbar" : undefined}
+        aria-valuemin={signedIn ? 0 : undefined}
+        aria-valuemax={signedIn ? pointsCost : undefined}
+        aria-valuenow={signedIn ? Math.min(balance, pointsCost) : undefined}
+      >
+        <div
+          className="h-full bg-orange-400 transition-[width] duration-300"
+          style={{ width: `${Math.round(ratio * 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function getRewardImageUrl(
   reward: PublicMenuReward,
   items: GuestMenuItem[],
@@ -157,7 +207,6 @@ export function GuestRewardsPage() {
           </div>
           <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 lg:grid-cols-4 lg:gap-6 xl:grid-cols-5">
             {rewards.map((reward) => {
-              const canAfford = !!customer && balance >= reward.pointsCost;
               const isSelected = selectedRewardId === reward.id;
               const { imageUrl, showDiscountFallback } = getRewardCardImage(reward);
 
@@ -170,34 +219,30 @@ export function GuestRewardsPage() {
                       isSelected
                         ? "border-orange-500 ring-2 ring-orange-500/30"
                         : "border-border/70"
-                    } ${!canAfford && customer ? "opacity-80" : ""}`}
+                    }`}
                   >
                     <div className="relative aspect-square w-full overflow-hidden bg-muted md:aspect-[4/3]">
                       {showDiscountFallback ? (
                         <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-linear-to-br from-orange-500/15 to-amber-500/25 px-3 text-center">
                           <Gift className="h-8 w-8 text-orange-500 md:h-6 md:w-6" />
                           <p className="text-xs font-semibold text-foreground md:text-[11px]">
-                            {reward.summary}
+                            {reward.name}
                           </p>
                         </div>
                       ) : (
                         <img
                           src={imageUrl}
                           alt={reward.menuItemName ?? reward.name}
-                          className={`h-full w-full object-cover ${
-                            !canAfford && customer ? "grayscale" : ""
-                          }`}
+                          className="h-full w-full object-cover"
                         />
                       )}
 
-                      <div className="absolute inset-x-0 bottom-0 bg-black/20 px-2 py-1.5 text-center backdrop-blur-[2px]">
-                        <p className="inline-flex items-center justify-center gap-1 text-sm font-bold tabular-nums text-white drop-shadow-sm md:text-xs">
-                          {customer && !canAfford ? (
-                            <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          ) : null}
-                          {reward.pointsCost.toLocaleString()} pts
-                        </p>
-                      </div>
+                      <RewardPointsOverlay
+                        compact
+                        pointsCost={reward.pointsCost}
+                        balance={balance}
+                        signedIn={!!customer}
+                      />
 
                       {isSelected ? (
                         <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm">
@@ -210,11 +255,9 @@ export function GuestRewardsPage() {
                       <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground md:text-[13px]">
                         {reward.name}
                       </p>
-                      {!showDiscountFallback ? (
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground md:mt-0.5 md:line-clamp-1">
-                          {reward.summary}
-                        </p>
-                      ) : null}
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground md:mt-0.5 md:line-clamp-1">
+                        {reward.description?.trim() || reward.summary}
+                      </p>
                     </div>
                   </button>
                 </li>
@@ -244,19 +287,14 @@ export function GuestRewardsPage() {
                   <img
                     src={modalImage.imageUrl}
                     alt={modalReward.menuItemName ?? modalReward.name}
-                    className={`h-full w-full object-cover ${
-                      customer && !modalCanAfford ? "grayscale" : ""
-                    }`}
+                    className="h-full w-full object-cover"
                   />
                 )}
-                <div className="absolute inset-x-0 bottom-0 bg-black/20 px-3 py-2 text-center backdrop-blur-[2px]">
-                  <p className="inline-flex items-center justify-center gap-1.5 text-base font-bold tabular-nums text-white drop-shadow-sm">
-                    {customer && !modalCanAfford ? (
-                      <Lock className="h-4 w-4 shrink-0" aria-hidden />
-                    ) : null}
-                    {modalReward.pointsCost.toLocaleString()} pts
-                  </p>
-                </div>
+                <RewardPointsOverlay
+                  pointsCost={modalReward.pointsCost}
+                  balance={balance}
+                  signedIn={!!customer}
+                />
               </div>
 
               <div className="space-y-3 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4">

@@ -74,7 +74,7 @@ function toDto(
 export async function listLoyaltyRewards(merchantId: string): Promise<LoyaltyRewardDto[]> {
   const rows = await db.query.loyaltyRewards.findMany({
     where: eq(loyaltyRewards.merchantId, merchantId),
-    orderBy: [asc(loyaltyRewards.name)],
+    orderBy: [asc(loyaltyRewards.pointsCost), asc(loyaltyRewards.name)],
   });
 
   const itemIds = rows

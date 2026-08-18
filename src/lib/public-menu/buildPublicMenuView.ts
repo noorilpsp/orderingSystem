@@ -138,6 +138,9 @@ function buildGuestMenuItems(
     : rawCategories.map(mapCategory);
 
   const visibleCategoryIdSet = new Set(visibleCategories.map((category) => category.id));
+  const categoryOrder = new Map(
+    visibleCategories.map((category, index) => [category.id, index]),
+  );
   const guestItemsWithOrder: Array<{ item: GuestMenuItem; order: number }> = [];
 
   // rawItems are already ordered by displayOrder desc, createdAt desc
@@ -203,11 +206,12 @@ function buildGuestMenuItems(
   }
 
   guestItemsWithOrder.sort((a, b) => {
-    if (a.item.categoryId !== b.item.categoryId) {
-      return a.item.categoryId.localeCompare(b.item.categoryId)
-    }
-    return a.order - b.order
-  })
+    const aCategory = categoryOrder.get(a.item.categoryId) ?? Number.MAX_SAFE_INTEGER;
+    const bCategory = categoryOrder.get(b.item.categoryId) ?? Number.MAX_SAFE_INTEGER;
+    if (aCategory !== bCategory) return aCategory - bCategory;
+    if (a.order !== b.order) return a.order - b.order;
+    return a.item.name.localeCompare(b.item.name);
+  });
   const guestItems = guestItemsWithOrder.map((entry) => entry.item)
 
   const categoriesWithItems = new Set(guestItems.map((item) => item.categoryId));
@@ -447,6 +451,7 @@ async function buildPublicMenuViewOnce(
       price: promo.price,
       compareAtPrice: promo.compareAtPrice,
       promoKind: promo.kind,
+      promoDisplayOrder: promo.displayOrder,
     };
   });
 

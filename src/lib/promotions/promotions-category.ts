@@ -31,9 +31,11 @@ export function hasActivePromo(item: {
 
 /** Keep the item in its original category and also list it under Promotions. */
 export function withPromotionsCategoryEntries<
-  T extends { promoKind?: "sale_price" | "bogo" | null },
+  T extends { promoKind?: "sale_price" | "bogo" | null; promoDisplayOrder?: number },
 >(items: T[], clone: (item: T) => T): T[] {
-  const promoted = items.filter(hasActivePromo);
+  const promoted = items
+    .filter(hasActivePromo)
+    .sort((a, b) => (a.promoDisplayOrder ?? 0) - (b.promoDisplayOrder ?? 0));
   if (promoted.length === 0) return items;
   return [...promoted.map(clone), ...items];
 }
@@ -51,6 +53,7 @@ export function attachGuestPromotionsCategory<
   T extends {
     categoryId: string;
     promoKind?: "sale_price" | "bogo" | null;
+    promoDisplayOrder?: number;
   },
 >(
   categories: GuestCategory[],
@@ -74,6 +77,7 @@ export function attachPosPromotionsCategory<
   I extends {
     category: string;
     promoKind?: "sale_price" | "bogo" | null;
+    promoDisplayOrder?: number;
   },
 >(
   categories: C[],

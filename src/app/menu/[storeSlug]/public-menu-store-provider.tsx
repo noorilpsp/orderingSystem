@@ -88,10 +88,10 @@ export function PublicMenuStoreProvider({
       initialOrderType="pickup"
     >
       <GuestLocaleFromMerchant>
+        {children}
         <Suspense fallback={null}>
           <GuestMenuSearchParamsSync />
         </Suspense>
-        {children}
       </GuestLocaleFromMerchant>
     </PublicMenuProvider>
   );

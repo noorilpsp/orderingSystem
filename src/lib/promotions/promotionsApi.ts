@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, max, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { items, merchantLocations } from "@/db/schema";
 import { promotionItems, promotions } from "@/lib/db/schema/promotions";
@@ -84,6 +84,7 @@ function toDto(
     startTime: row.startTime,
     endTime: row.endTime,
     activeDays: row.activeDays,
+    displayOrder: row.displayOrder ?? 0,
     items: itemRows,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -119,7 +120,7 @@ export async function listPromotionsForLocation(
 ): Promise<PromotionDto[]> {
   const rows = await db.query.promotions.findMany({
     where: and(eq(promotions.merchantId, merchantId), eq(promotions.locationId, locationId)),
-    orderBy: [asc(promotions.name)],
+    orderBy: [asc(promotions.displayOrder), asc(promotions.createdAt)],
   });
   const result: PromotionDto[] = [];
   for (const row of rows) {
@@ -240,6 +241,11 @@ export async function createPromotion(
   const validation = await validateUpsert(input);
   if (!validation.ok) return validation;
 
+  const [maxRow] = await db
+    .select({ maxOrder: max(promotions.displayOrder) })
+    .from(promotions)
+    .where(eq(promotions.locationId, input.locationId));
+
   const [created] = await db
     .insert(promotions)
     .values({
@@ -253,6 +259,7 @@ export async function createPromotion(
       startTime: normalizeTime(input.startTime),
       endTime: normalizeTime(input.endTime),
       activeDays: normalizeDays(input.activeDays),
+      displayOrder: (maxRow?.maxOrder ?? -1) + 1,
       updatedAt: new Date(),
     })
     .returning();
@@ -355,6 +362,43 @@ export async function deletePromotion(
   if (!existing) return { ok: false, error: "Promotion not found" };
   await db.delete(promotions).where(eq(promotions.id, promotionId));
   await revalidatePublicMenuForLocation(existing.locationId);
+  return { ok: true };
+}
+
+export async function reorderPromotions(
+  merchantId: string,
+  locationId: string,
+  updates: Array<{ id: string; displayOrder: number }>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const location = await db.query.merchantLocations.findFirst({
+    where: and(
+      eq(merchantLocations.id, locationId),
+      eq(merchantLocations.merchantId, merchantId),
+    ),
+    columns: { id: true },
+  });
+  if (!location) return { ok: false, error: "Location not found" };
+
+  const owned = await db
+    .select({ id: promotions.id })
+    .from(promotions)
+    .where(
+      and(eq(promotions.merchantId, merchantId), eq(promotions.locationId, locationId)),
+    );
+  const allowed = new Set(owned.map((row) => row.id));
+  const validUpdates = updates.filter(
+    (update) => allowed.has(update.id) && typeof update.displayOrder === "number",
+  );
+
+  await Promise.all(
+    validUpdates.map((update) =>
+      db
+        .update(promotions)
+        .set({ displayOrder: update.displayOrder, updatedAt: new Date() })
+        .where(eq(promotions.id, update.id)),
+    ),
+  );
+  await revalidatePublicMenuForLocation(locationId);
   return { ok: true };
 }
 

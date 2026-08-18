@@ -5,6 +5,7 @@ export type AppliedItemPromo = {
   kind: PromotionKind;
   price: number;
   compareAtPrice: number | null;
+  displayOrder: number;
 };
 
 export function roundMoney(value: number): number {
@@ -23,10 +24,12 @@ export function applyCatalogPromo(
     promotionId: string;
     kind: PromotionKind;
     salePrice: number | null;
+    displayOrder?: number;
   } | null,
 ): AppliedItemPromo | null {
   const catalog = roundMoney(Number(catalogPrice) || 0);
   if (!promo) return null;
+  const displayOrder = promo.displayOrder ?? 0;
 
   switch (promo.kind) {
     case "sale_price": {
@@ -37,6 +40,7 @@ export function applyCatalogPromo(
         kind: "sale_price",
         price: salePrice,
         compareAtPrice: catalog,
+        displayOrder,
       };
     }
     case "bogo":
@@ -45,6 +49,7 @@ export function applyCatalogPromo(
         kind: "bogo",
         price: catalog,
         compareAtPrice: null,
+        displayOrder,
       };
     default: {
       const _exhaustive: never = promo.kind;

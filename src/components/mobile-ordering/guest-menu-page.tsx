@@ -16,9 +16,9 @@ import { CheckCircle2, Bell, Loader2 } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { GuestCartItem, GuestMenuItem } from "@/lib/guest-menu/types";
+import { featuredItemsInCategoryOrder } from "@/lib/guest-menu/featuredItems";
 import { sumGuestCartItems } from "@/lib/public-menu/guest-cart-pricing";
 import { itemNeedsCustomizationBeforeQuickAdd } from "@/lib/public-menu/item-needs-customization";
-import { uniqueById } from "@/lib/promotions/promotions-category";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 import { cartQuantityForCatalogItem } from "@/lib/public-menu/guest-cart-lines";
 import { isRewardCartLine } from "@/lib/public-menu/guest-reward-cart";
@@ -461,6 +461,11 @@ export function GuestMenuPage() {
     [categories, filteredMenuItems],
   );
 
+  const featuredItems = useMemo(
+    () => featuredItemsInCategoryOrder(categories, items),
+    [categories, items],
+  );
+
   useEffect(() => {
     if (visibleCategories.length === 0) return;
     if (!visibleCategories.some((category) => category.id === activeCategory)) {
@@ -632,9 +637,9 @@ export function GuestMenuPage() {
       </div>
 
       <div className="px-0 pt-2 lg:px-8 lg:pt-2">
-        {!isSearchOpen && items.some((entry) => entry.featured) ? (
+        {!isSearchOpen && featuredItems.length > 0 ? (
           <FeaturedSection
-            items={uniqueById(items.filter((entry) => entry.featured))}
+            items={featuredItems}
             cartItems={cart}
             onAddToCart={handleQuickAddToCart}
             onRemoveFromCart={removeFromCart}

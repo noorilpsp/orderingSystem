@@ -10,7 +10,7 @@ export default function PromotionsPage() {
           <div>
             <h1 className="text-2xl font-bold">Promotions</h1>
             <p className="text-sm text-muted-foreground">
-              Strike through sale prices on the menu, or run buy 1 get 1. Loyalty still stacks at checkout.
+              Strike through sale prices on the menu, or run buy 1 get 1. Drag to set the order guests see under Promotions.
             </p>
           </div>
           <PromotionsManager />

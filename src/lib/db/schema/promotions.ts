@@ -3,6 +3,7 @@ import {
   decimal,
   index,
   pgEnum,
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -43,6 +44,7 @@ export const promotions = pgTable(
     startTime: varchar("start_time", { length: 5 }),
     endTime: varchar("end_time", { length: 5 }),
     activeDays: text("active_days").array(),
+    displayOrder: integer("display_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

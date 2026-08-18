@@ -15,6 +15,7 @@ type PendingItemPromo = {
   promotionId: string;
   kind: PromotionKind;
   salePrice: number | null;
+  displayOrder: number;
 };
 
 export async function listActiveItemPromos(
@@ -43,6 +44,7 @@ export async function listActiveItemPromos(
     .select({
       promotionId: promotions.id,
       kind: promotions.kind,
+      displayOrder: promotions.displayOrder,
       startsOn: promotions.startsOn,
       endsOn: promotions.endsOn,
       startTime: promotions.startTime,
@@ -78,6 +80,7 @@ export async function listActiveItemPromos(
       promotionId: row.promotionId,
       kind: row.kind,
       salePrice: row.salePrice != null ? Number(row.salePrice) : null,
+      displayOrder: row.displayOrder ?? 0,
     };
     const existing = result.get(row.itemId);
     if (!existing || (existing.kind !== "sale_price" && next.kind === "sale_price")) {

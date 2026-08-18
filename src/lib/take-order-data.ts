@@ -21,6 +21,7 @@ export interface MenuItem {
   price: number
   compareAtPrice?: number | null
   promoKind?: "sale_price" | "bogo" | null
+  promoDisplayOrder?: number
   category: string
   image: string
   dietary: string[]

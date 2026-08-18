@@ -29,6 +29,7 @@ import type {
 } from "@/lib/promotions/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { SortablePromotionsList } from "@/components/promotions/sortable-promotions-list";
 
 type MenuItemOption = { id: string; name: string; price: number; status: string };
 
@@ -333,6 +334,35 @@ export function PromotionsManager() {
     }
   };
 
+  const reorder = async (reordered: PromotionDto[]) => {
+    if (!currentMerchantId || !currentLocationId) return;
+    const previous = promotions;
+    const updated = reordered.map((promo, index) => ({
+      ...promo,
+      displayOrder: index,
+    }));
+    setPromotions(updated);
+    try {
+      const response = await fetch("/api/promotions/reorder", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantId: currentMerchantId,
+          locationId: currentLocationId,
+          promotions: updated.map((promo) => ({
+            id: promo.id,
+            displayOrder: promo.displayOrder,
+          })),
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to reorder");
+    } catch {
+      setPromotions(previous);
+      toast.error("Could not save promotion order");
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -342,7 +372,7 @@ export function PromotionsManager() {
             <div>
               <CardTitle>Item promotions</CardTitle>
               <CardDescription>
-                One item per promotion. Sale prices show a strikethrough. Buy 1 get 1 is free on every second unit.
+                One item per promotion. Drag to set the order guests see under Promotions on the menu.
               </CardDescription>
             </div>
           </div>
@@ -367,13 +397,12 @@ export function PromotionsManager() {
             No promotions yet. Create a sale or buy 1 get 1 for one item.
           </p>
         ) : (
-          <div className="space-y-3">
-            {promotions.map((promo) => (
-              <div
-                key={promo.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
-              >
-                <div className="min-w-0 space-y-1">
+          <SortablePromotionsList
+            promotions={promotions}
+            onReorder={(next) => void reorder(next)}
+            renderPromotion={(promo) => (
+              <>
+                <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{promo.name}</span>
                     <Badge variant="outline">{kindLabel(promo.kind)}</Badge>
@@ -401,9 +430,9 @@ export function PromotionsManager() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
-            ))}
-          </div>
+              </>
+            )}
+          />
         )}
       </CardContent>
 

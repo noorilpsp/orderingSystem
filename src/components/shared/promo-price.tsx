@@ -25,7 +25,7 @@ export function PromoPrice({
     compareAtPrice > price;
 
   return (
-    <span className={cn("inline-flex flex-wrap items-baseline gap-x-1.5", className)}>
+    <span className={cn("inline-flex flex-wrap items-center gap-x-1.5 leading-none", className)}>
       {showCompare ? (
         <span className="text-muted-foreground line-through font-normal">
           {formatMoney(compareAtPrice)}
@@ -33,7 +33,7 @@ export function PromoPrice({
       ) : null}
       <span className="font-semibold">{formatMoney(price)}</span>
       {promoKind === "bogo" && bogoLabel ? (
-        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+        <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold uppercase leading-none tracking-wide text-emerald-800 dark:text-emerald-200">
           {bogoLabel}
         </span>
       ) : null}

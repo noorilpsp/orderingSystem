@@ -50,6 +50,7 @@
     "db:migrate:0029": "npx tsx scripts/run-migration-0029.ts",
     "db:migrate:0030": "npx tsx scripts/run-migration-0030.ts",
     "db:migrate:0031": "npx tsx scripts/run-migration-0031.ts",
+    "db:migrate:0032": "npx tsx scripts/run-migration-0032.ts",
     "check:promotions": "npx tsx scripts/check-promotions.ts",
     "db:studio": "drizzle-kit studio",
     "seed:menu": "npx tsx scripts/seed-menu.ts",

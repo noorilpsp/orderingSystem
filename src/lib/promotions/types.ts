@@ -23,6 +23,7 @@ export type PromotionDto = {
   startTime: string | null;
   endTime: string | null;
   activeDays: string[] | null;
+  displayOrder: number;
   items: PromotionItemDto[];
   createdAt: string;
   updatedAt: string;
