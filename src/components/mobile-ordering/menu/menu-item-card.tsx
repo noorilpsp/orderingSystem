@@ -226,7 +226,7 @@ export function MenuItemCard({
 
   const tags =
     regularTags.length > 0 || dietaryTags.length > 0 ? (
-      <div className="flex flex-wrap gap-1">
+      <div className="mt-1 flex flex-wrap gap-1">
         {dietaryTags.map((tag) => {
           const label = resolveTagLabel(locale, tag.name, tag.i18n);
           const parsed = splitLeadingEmoji(label);
@@ -313,25 +313,27 @@ export function MenuItemCard({
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {localizedDescription}
           </p>
-          {tags}
-          <div className="mt-auto flex items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-2">
-              <p className="inline-flex items-center font-semibold leading-none text-foreground">
-                <PromoPrice
-                  price={item.price}
-                  compareAtPrice={item.compareAtPrice}
-                  promoKind={item.promoKind}
-                  formatMoney={formatMoney}
-                  bogoLabel={t("menu.bogo")}
-                />
-              </p>
-              {caloriesLabel ? (
-                <span className="inline-flex items-center self-center whitespace-nowrap text-xs leading-none text-muted-foreground">
-                  {caloriesLabel}
-                </span>
-              ) : null}
+          <div className="mt-auto flex flex-col gap-1.5 pt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <p className="inline-flex items-center font-semibold leading-none text-foreground">
+                  <PromoPrice
+                    price={item.price}
+                    compareAtPrice={item.compareAtPrice}
+                    promoKind={item.promoKind}
+                    formatMoney={formatMoney}
+                    bogoLabel={t("menu.bogo")}
+                  />
+                </p>
+                {caloriesLabel ? (
+                  <span className="inline-flex items-center self-center whitespace-nowrap text-xs leading-none text-muted-foreground">
+                    {caloriesLabel}
+                  </span>
+                ) : null}
+              </div>
+              {tileQuantityControls}
             </div>
-            {tileQuantityControls}
+            {tags}
           </div>
         </div>
       </div>
@@ -360,7 +362,6 @@ export function MenuItemCard({
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {localizedDescription}
           </p>
-          {tags}
           <div className="flex items-center gap-2">
             <p className="inline-flex items-center font-semibold leading-none text-foreground">
               <PromoPrice
@@ -377,6 +378,7 @@ export function MenuItemCard({
               </span>
             ) : null}
           </div>
+          {tags}
         </div>
       </div>
 
