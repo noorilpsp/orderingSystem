@@ -188,6 +188,7 @@ export function GuestBillSplitDialog({
   const [localPayers, setLocalPayers] = useState<LocalPayer[]>([]);
   const [expandedSplitLineId, setExpandedSplitLineId] = useState<string | null>(null);
   const [sendPending, setSendPending] = useState(false);
+  const [sendFeedback, setSendFeedback] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const assignmentRollbackRef = useRef(new Map<string, GuestBillSplitItem>());
   const assignmentEpochRef = useRef(new Map<string, number>());
@@ -360,6 +361,7 @@ export function GuestBillSplitDialog({
       setSplitMode("item");
       setExpandedSplitLineId(null);
       setSendPending(false);
+      setSendFeedback(null);
       setLocalPayers([]);
       setLocalItems([]);
       splitCountSeededRef.current = false;
@@ -927,11 +929,17 @@ export function GuestBillSplitDialog({
   };
 
   const sendToTable = async () => {
-    if (!storeSlug || !tableNumber || !deviceId || !splitData) return;
-    if (splitMode === "item" && unclaimedLines.length > 0) {
-      onToast?.(t("actions.splitClaimAllFirst"), "warning");
+    if (!storeSlug || !tableNumber || !deviceId || !splitData) {
+      setSendFeedback(t("actions.requestFailed"));
       return;
     }
+    if (splitMode === "item" && unclaimedLines.length > 0) {
+      const message = t("actions.splitClaimAllFirst");
+      setSendFeedback(message);
+      onToast?.(message, "warning");
+      return;
+    }
+    setSendFeedback(null);
     setSendPending(true);
     try {
       const response = await fetch("/api/public/table-bill/propose", {
@@ -957,19 +965,21 @@ export function GuestBillSplitDialog({
         error?: { message?: string };
       } | null;
       if (!response.ok || payload?.ok === false) {
-        onToast?.(
-          toUserFacingErrorMessage(
-            payload?.error?.message?.trim() || t("actions.requestFailed"),
-            t("actions.requestFailed"),
-          ),
-          "warning",
+        const message = toUserFacingErrorMessage(
+          payload?.error?.message?.trim() || t("actions.requestFailed"),
+          t("actions.requestFailed"),
         );
+        setSendFeedback(message);
+        onToast?.(message, "warning");
         return;
       }
       onToast?.(t("actions.splitSentToTable"), "success");
       requestRefresh();
+      onOpenChange(false);
     } catch {
-      onToast?.(t("actions.requestFailed"), "warning");
+      const message = t("actions.requestFailed");
+      setSendFeedback(message);
+      onToast?.(message, "warning");
     } finally {
       setSendPending(false);
     }
@@ -1362,7 +1372,13 @@ export function GuestBillSplitDialog({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 flex-row flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
+        <div className="flex shrink-0 flex-col gap-2 border-t border-border/70 pt-3">
+          {sendFeedback ? (
+            <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
+              {sendFeedback}
+            </p>
+          ) : null}
+          <div className="flex flex-row flex-wrap justify-end gap-2">
           <Button
             variant="outline"
             className="border-border text-foreground"
@@ -1382,10 +1398,11 @@ export function GuestBillSplitDialog({
                   {t("common.sending")}
                 </>
               ) : (
-                t("actions.splitSendToTable")
+                t("actions.splitConfirmSplit")
               )}
             </Button>
           ) : null}
+          </div>
         </div>
         </div>
       </div>

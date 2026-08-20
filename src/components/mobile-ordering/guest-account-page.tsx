@@ -49,6 +49,7 @@ export function GuestAccountPage() {
       href: `/account?store=${encodeURIComponent(storeSlug)}`,
       labelKey: "account.allRestaurants" as const,
       icon: Globe,
+      disabled: true,
     },
   ];
 
@@ -112,16 +113,29 @@ export function GuestAccountPage() {
         <ul className="divide-y divide-border/60">
           {links.map((link) => {
             const Icon = link.icon;
+            const rowClassName =
+              "flex items-center gap-3 px-4 py-3.5 text-sm font-medium";
             return (
               <li key={link.href}>
-                <Link
-                  href={link.href}
-                  className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-foreground hover:bg-foreground/5"
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="flex-1">{t(link.labelKey)}</span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" />
-                </Link>
+                {link.disabled ? (
+                  <div
+                    aria-disabled="true"
+                    className={`${rowClassName} cursor-not-allowed text-muted-foreground/70`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+                    <span className="flex-1">{t(link.labelKey)}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40 rtl:rotate-180" />
+                  </div>
+                ) : (
+                  <Link
+                    href={link.href}
+                    className={`${rowClassName} text-foreground hover:bg-foreground/5`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">{t(link.labelKey)}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" />
+                  </Link>
+                )}
               </li>
             );
           })}

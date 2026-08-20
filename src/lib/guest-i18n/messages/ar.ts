@@ -165,6 +165,7 @@ export const arMessages: Record<EnMessageKey, string> = {
   "actions.splitNoClaimsYet": "لا تعيينات بعد — اضغط مقعدك على أصنافك.",
   "actions.splitUnclaimedItems": "ما زال مفتوحًا",
   "actions.splitSendToTable": "أرسل للطاولة",
+  "actions.splitConfirmSplit": "تأكيد التقسيم",
   "actions.splitSentToTable": "أُرسل إلى المقاعد الأخرى ✓",
   "actions.splitDone": "تم",
   "actions.splitProposalTitle": "تقسيم من مقعد {number}",

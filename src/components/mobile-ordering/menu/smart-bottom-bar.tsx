@@ -104,6 +104,8 @@ export function SmartBottomBar({
   const handleRef = useRef<HTMLButtonElement>(null);
   const firstActionRef = useRef<HTMLButtonElement>(null);
   const splitFetchGenRef = useRef(0);
+  const splitOpenRef = useRef(false);
+  const proposalIdAtSplitOpenRef = useRef<string | null>(null);
 
   const loadSplitBill = useCallback(async (options?: { silent?: boolean }) => {
     const silent = Boolean(options?.silent);
@@ -165,13 +167,19 @@ export function SmartBottomBar({
 
       const proposal = payload.data.proposal ?? null;
       const sessionKey = payload.data.sessionId ?? `${storeSlug}:${table}`;
-      if (
-        proposal &&
-        proposal.fromSeatId !== guestSeat.seatId &&
-        readDismissedProposalId(sessionKey) !== proposal.id
-      ) {
+      if (proposal && readDismissedProposalId(sessionKey) !== proposal.id) {
         setProposalBanner(proposal);
-      } else if (!proposal || proposal.fromSeatId === guestSeat.seatId) {
+        // A new confirm from another seat: close Split so the banner is visible.
+        if (
+          proposal.fromSeatId !== guestSeat.seatId &&
+          splitOpenRef.current &&
+          proposal.id !== proposalIdAtSplitOpenRef.current
+        ) {
+          setSplitOpen(false);
+          setSplitInitialMode(null);
+          setTrayOpen(false);
+        }
+      } else if (!proposal) {
         setProposalBanner(null);
       }
     } catch {
@@ -202,6 +210,22 @@ export function SmartBottomBar({
   }, [orderType]);
 
   useEffect(() => {
+    if (!trayOpen) return;
+    void loadSplitBill({ silent: true });
+    // Prefetch once when the table drawer opens — not when loadSplitBill identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [trayOpen]);
+
+  useEffect(() => {
+    splitOpenRef.current = splitOpen;
+    if (splitOpen) {
+      proposalIdAtSplitOpenRef.current = proposalBanner?.id ?? splitData?.proposal?.id ?? null;
+    }
+    // Snapshot the proposal that was already on screen when Split opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [splitOpen]);
+
+  useEffect(() => {
     if (!splitOpen) return;
     void loadSplitBill();
     // Only reload when the dialog opens — not when loadSplitBill identity changes.
@@ -216,7 +240,7 @@ export function SmartBottomBar({
     if (!linkedTableNumber.trim() || !guestDeviceId || !guestSeat?.seatId) return;
     const id = window.setInterval(() => {
       void loadSplitBill({ silent: true });
-    }, 8000);
+    }, 2000);
     return () => window.clearInterval(id);
   }, [
     splitOpen,

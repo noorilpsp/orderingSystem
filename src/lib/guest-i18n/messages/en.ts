@@ -170,6 +170,7 @@ export const enMessages = {
   "actions.splitNoClaimsYet": "Nothing assigned yet — tap your seat on your items.",
   "actions.splitUnclaimedItems": "Still open",
   "actions.splitSendToTable": "Send to table",
+  "actions.splitConfirmSplit": "Confirm split",
   "actions.splitSentToTable": "Sent to the other seats ✓",
   "actions.splitDone": "Done",
   "actions.splitProposalTitle": "Split from seat {number}",
