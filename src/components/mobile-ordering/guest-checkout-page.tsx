@@ -72,6 +72,7 @@ export function GuestCheckoutPage() {
     guestSeat,
     guestDeviceId,
     claimGuestSeat,
+    updateGuestSeatName,
   } = usePublicMenu();
 
   const [pickupTimingMode, setPickupTimingMode] = useState<PickupTimingMode>("now");
@@ -79,6 +80,7 @@ export function GuestCheckoutPage() {
   const [orderNotes, setOrderNotes] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestPhoneError, setGuestPhoneError] = useState(false);
+  const [guestName, setGuestName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<GuestPaymentMethodId>("pay_at_pickup");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const placingRef = useRef(false);
@@ -92,6 +94,12 @@ export function GuestCheckoutPage() {
     const stored = readStoredGuestPhone();
     if (stored) setGuestPhone(stored);
   }, [customer]);
+
+  useEffect(() => {
+    const fromSeat = guestSeat?.guestName?.trim();
+    if (!fromSeat) return;
+    setGuestName((prev) => (prev.trim() ? prev : fromSeat));
+  }, [guestSeat?.guestName]);
 
   // Walk-in checkout starts on pickup once; table QR keeps dine-in.
   useEffect(() => {
@@ -233,6 +241,7 @@ export function GuestCheckoutPage() {
             : [];
 
       const guestNotes = orderNotes.trim() || null;
+      const tableGuestName = usesTableSession ? guestName.trim().slice(0, 255) || null : null;
       if (needsGuestPhone) {
         writeStoredGuestPhone(guestPhone);
       }
@@ -242,6 +251,10 @@ export function GuestCheckoutPage() {
       if (usesTableSession && guestDeviceId && !seatId) {
         const claimed = await claimGuestSeat();
         seatId = claimed?.seatId ?? null;
+      }
+
+      if (usesTableSession && tableGuestName) {
+        void updateGuestSeatName(tableGuestName);
       }
 
       const placementKey = placeGuestOrder({
@@ -258,6 +271,7 @@ export function GuestCheckoutPage() {
             : null,
         rewardId: selectedReward?.id,
         phone: needsGuestPhone ? guestPhone.trim() : null,
+        guestName: tableGuestName,
         items,
       });
 
@@ -405,6 +419,27 @@ export function GuestCheckoutPage() {
               )}
             </div>
           </div>
+          {!customer && usesTableSession ? (
+            <label className="mt-4 block text-sm text-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("checkout.nameOptional")}
+              </span>
+              <input
+                id="guest-checkout-name"
+                type="text"
+                autoComplete="name"
+                value={guestName}
+                onChange={(event) => setGuestName(event.target.value)}
+                placeholder={t("checkout.namePlaceholder")}
+                maxLength={255}
+                className="mt-1.5 h-11 w-full rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <span className="mt-1.5 block text-xs text-muted-foreground">
+                {t("checkout.nameHint")}
+              </span>
+            </label>
+          ) : null}
           {!needsGuestPhone ? null : (
             <label className="mt-4 block text-sm text-foreground">
               <span className="inline-flex items-center gap-1.5">

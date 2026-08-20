@@ -215,7 +215,12 @@ export function ContextPill({
                     <span className="font-semibold text-white dark:text-blue-100 vivid:text-white">
                       {t("context.tableNumber", { number: tableNumber })}
                     </span>
-                    {guestSeat?.seatNumber != null && guestSeat.seatNumber > 0 ? (
+                    {guestSeat?.guestName?.trim() ? (
+                      <span className="font-semibold text-white dark:text-blue-100 vivid:text-white">
+                        {" · "}
+                        {guestSeat.guestName.trim()}
+                      </span>
+                    ) : guestSeat?.seatNumber != null && guestSeat.seatNumber > 0 ? (
                       <span className="font-semibold text-white dark:text-blue-100 vivid:text-white">
                         {" · "}
                         {t("context.seatNumber", { number: guestSeat.seatNumber })}
@@ -382,7 +387,12 @@ export function ContextPill({
 
             {isDineIn && tableLocked && hasTableSelected ? (
               <p className="mt-2 rounded-xl border border-white/22 bg-black/34 px-3 py-2.5 text-xs text-white/75 dark:border-blue-300/22 dark:bg-blue-950/35 dark:text-blue-200/80 vivid:border-white/45 vivid:bg-black/35 vivid:text-white/80">
-                {guestSeat?.seatNumber != null && guestSeat.seatNumber > 0
+                {guestSeat?.guestName?.trim()
+                  ? t("context.tableLockedHintNamed", {
+                      number: tableNumber.trim(),
+                      name: guestSeat.guestName.trim(),
+                    })
+                  : guestSeat?.seatNumber != null && guestSeat.seatNumber > 0
                   ? t("context.tableLockedHint", {
                       number: tableNumber.trim(),
                       seat: guestSeat.seatNumber,

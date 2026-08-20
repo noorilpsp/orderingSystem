@@ -24,6 +24,7 @@ export type GuestOrderPlacementRequest = {
   pointsToRedeem?: number;
   rewardId?: string;
   phone?: string | null;
+  guestName?: string | null;
   items: GuestOrderPlacementItem[];
 };
 

@@ -64,6 +64,7 @@ type LocalPayer = GuestSplitExtraPayer;
 type PayerTarget = {
   seatId: string;
   seatNumber: number | null;
+  guestName?: string | null;
   isYours?: boolean;
   isLocal: boolean;
 };
@@ -213,12 +214,14 @@ export function GuestBillSplitDialog({
       ...assignableSeats.map((seat) => ({
         seatId: seat.seatId,
         seatNumber: seat.seatNumber,
+        guestName: seat.guestName,
         isYours: seat.isYours,
         isLocal: false,
       })),
       ...localPayers.map((payer) => ({
         seatId: payer.id,
         seatNumber: payer.seatNumber,
+        guestName: null,
         isYours: false,
         isLocal: true,
       })),
@@ -230,9 +233,15 @@ export function GuestBillSplitDialog({
   const yourSeatNumber = yourSeat?.seatNumber ?? null;
   const yourSeatId = yourSeat?.seatId ?? null;
 
-  const seatChipLabel = (seat: { seatNumber: number | null; isYours?: boolean }) => {
-    const base =
-      seat.seatNumber != null
+  const seatChipLabel = (seat: {
+    seatNumber: number | null;
+    guestName?: string | null;
+    isYours?: boolean;
+  }) => {
+    const name = seat.guestName?.trim();
+    const base = name
+      ? name
+      : seat.seatNumber != null
         ? t("actions.splitSeatChip", { number: seat.seatNumber })
         : t("actions.splitYourSeat");
     return seat.isYours ? `${base} · ${t("actions.splitYouTag")}` : base;
@@ -1042,7 +1051,11 @@ export function GuestBillSplitDialog({
                     {" · "}
                     {t("actions.splitItemCount", { count: splitData.itemCount })}
                   </p>
-                  {yourSeatNumber != null ? (
+                  {yourSeat?.guestName?.trim() ? (
+                    <p className="mt-0.5 text-xs font-medium text-foreground/75">
+                      {t("actions.splitYouAreNamed", { name: yourSeat.guestName.trim() })}
+                    </p>
+                  ) : yourSeatNumber != null ? (
                     <p className="mt-0.5 text-xs font-medium text-foreground/75">
                       {t("actions.splitYouAreSeat", { number: yourSeatNumber })}
                     </p>
@@ -1151,15 +1164,21 @@ export function GuestBillSplitDialog({
                       Boolean(sole && yourSeatId && sole.seatId === yourSeatId) &&
                       !line.isAssignmentSplit;
                     const splitOpen = expandedSplitLineId === line.id;
+                    const claimedPayer = sole
+                      ? payerTargets.find((payer) => payer.seatId === sole.seatId)
+                      : null;
+                    const claimedName = claimedPayer?.guestName?.trim();
                     const statusLabel = line.isAssignmentSplit
                       ? t("actions.splitItemShare")
                       : claimedByMe
                         ? t("actions.splitClaimedByYou")
-                        : sole
-                          ? t("actions.splitClaimedBySeat", {
-                              number: sole.seatNumber ?? "?",
-                            })
-                          : t("actions.splitItemUnassigned");
+                        : claimedName
+                          ? t("actions.splitClaimedByName", { name: claimedName })
+                          : sole
+                            ? t("actions.splitClaimedBySeat", {
+                                number: sole.seatNumber ?? "?",
+                              })
+                            : t("actions.splitItemUnassigned");
 
                     const seatButtons = [...payerTargets]
                       .sort((a, b) => Number(Boolean(b.isYours)) - Number(Boolean(a.isYours)))
@@ -1172,7 +1191,7 @@ export function GuestBillSplitDialog({
                           type="button"
                           onClick={() => assignToSeat(line, seat.seatId)}
                           className={cn(
-                            "guest-bill-compact-btn inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-semibold leading-none transition-colors",
+                            "guest-bill-compact-btn inline-flex max-w-40 items-center truncate rounded-md border px-2.5 py-1.5 text-xs font-semibold leading-none transition-colors",
                             active
                               ? "border-cyan-500/50 bg-cyan-500/20 text-foreground"
                               : "border-border text-foreground/65 hover:bg-muted",

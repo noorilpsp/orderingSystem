@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
             ? body.rewardId.trim()
             : undefined,
         phone: typeof body.phone === "string" ? body.phone : null,
+        guestName: typeof body.guestName === "string" ? body.guestName : null,
         items: body.items ?? [],
       }),
     );

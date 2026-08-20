@@ -500,16 +500,10 @@ async function createDineInGuestOrder(
 
     const trimmedCustomerName = customerName?.trim() || null;
     if (seatId && trimmedCustomerName) {
-      const seat = await db.query.seats.findFirst({
-        where: eq(seatsTable.id, seatId),
-        columns: { id: true, guestName: true },
-      });
-      if (seat && !seat.guestName?.trim()) {
-        await db
-          .update(seatsTable)
-          .set({ guestName: trimmedCustomerName.slice(0, 255), updatedAt: new Date() })
-          .where(eq(seatsTable.id, seatId));
-      }
+      await db
+        .update(seatsTable)
+        .set({ guestName: trimmedCustomerName.slice(0, 255), updatedAt: new Date() })
+        .where(eq(seatsTable.id, seatId));
     }
 
     try {
@@ -573,7 +567,7 @@ export async function createPublicOrder(
   try {
     const loggedIn = await getLoggedInCustomer(normalizedSlug);
     customerId = loggedIn?.customerId ?? null;
-    customerName = loggedIn?.name?.trim() || null;
+    customerName = loggedIn?.name?.trim() || input.guestName?.trim().slice(0, 255) || null;
     userId = loggedIn?.userId ?? null;
   } catch (error) {
     console.error("[createPublicOrder] Failed to resolve logged-in customer:", error);

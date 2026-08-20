@@ -299,6 +299,11 @@ export function SmartBottomBar({
   const serviceConfirmContentClass =
     "bottom-[calc(var(--guest-tab-bar-height,0rem)+8.5rem)] top-auto z-[var(--z-modal-content)] max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-0 rounded-2xl border-border bg-card p-5 text-foreground shadow-2xl data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-md";
 
+  const proposalFromName =
+    proposalBanner && splitData
+      ? splitData.seats.find((seat) => seat.seatId === proposalBanner.fromSeatId)
+          ?.guestName?.trim() || null
+      : null;
   const proposalYouOwe =
     proposalBanner && guestSeat?.seatId
       ? proposalBanner.amounts.find((row) => row.seatId === guestSeat.seatId)?.amount ?? null
@@ -317,9 +322,11 @@ export function SmartBottomBar({
         >
           <div className="pointer-events-auto w-full max-w-lg rounded-2xl border border-emerald-600/40 bg-card/95 p-3 text-start shadow-2xl backdrop-blur-xl md:max-w-xl">
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-              {t("actions.splitProposalTitle", {
-                number: proposalBanner.fromSeatNumber ?? "?",
-              })}
+              {proposalFromName
+                ? t("actions.splitProposalFromName", { name: proposalFromName })
+                : t("actions.splitProposalTitle", {
+                    number: proposalBanner.fromSeatNumber ?? "?",
+                  })}
             </p>
             <p className="mt-1 text-sm font-semibold text-foreground">
               {proposalYouOwe != null
