@@ -21,6 +21,7 @@ import {
 } from "@/db/schema";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
 import { ADMIN_MERCHANTS_CACHE_TAG } from "@/lib/queries";
+import { timezoneFromCountry } from "@/lib/timezone/fromCountry";
 
 export const runtime = "nodejs";
 
@@ -210,6 +211,9 @@ export async function POST(request: NextRequest) {
     const merchant = merchantResult.data;
     const location = locationResult.data;
     const invitation = invitationResult.data;
+    const timezone = timezoneFromCountry(
+      location.country || merchant.registeredCountry,
+    );
     const inviteEmail = invitation.email?.trim() ?? "";
     const shouldInvite = z.string().email().safeParse(inviteEmail).success;
 
@@ -252,7 +256,7 @@ export async function POST(request: NextRequest) {
         primaryBrandColor: null,
         accentColor: null,
         defaultCurrency: merchant.defaultCurrency ?? "EUR",
-        defaultTimezone: merchant.defaultTimezone ?? "Europe/Brussels",
+        defaultTimezone: merchant.defaultTimezone?.trim() || timezone,
         defaultLanguage: merchant.defaultLanguage ?? "nl-BE",
         dateFormat: null,
         numberFormat: null,
@@ -308,7 +312,7 @@ export async function POST(request: NextRequest) {
         averagePrepTimeMinutes: location.averagePrepTimeMinutes ?? null,
         status: location.status ?? "active",
         visibleInDirectory: location.visibleInDirectory ?? true,
-        timezone: location.timezone ?? null,
+        timezone: location.timezone?.trim() || timezone,
       } as typeof merchantLocations.$inferInsert;
       
       const insertedLocations = await tx.insert(merchantLocations).values(locationValues).returning({ id: merchantLocations.id });

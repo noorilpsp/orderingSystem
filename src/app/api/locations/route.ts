@@ -8,6 +8,7 @@ import type { MerchantLocation } from "@/lib/db/schema/merchant-locations"
 import { revalidateTag } from "next/cache"
 import { unstable_cache } from "@/lib/unstable-cache"
 import { revalidatePublicMenuForSlug } from "@/lib/public-menu/publicMenuCache"
+import { timezoneFromCountry } from "@/lib/timezone/fromCountry"
 
 export const runtime = "nodejs"
 
@@ -164,6 +165,8 @@ export async function POST(request: NextRequest) {
         ? rawStatus
         : "active"
 
+    const country = body.address?.country || body.country || "Belgium"
+
     const locationData: typeof merchantLocations.$inferInsert = {
       merchantId,
       name: body.storeName || body.name || "New Location",
@@ -174,7 +177,7 @@ export async function POST(request: NextRequest) {
       addressLine2: body.address?.apartment || body.addressLine2 || null,
       postalCode: body.address?.postalCode || body.postalCode || "",
       city: body.address?.city || body.city || "",
-      country: body.address?.country || body.country || "Belgium",
+      country,
       phone: body.phoneNumber || body.phone || "",
       email: body.publicEmail || body.email || null,
       websiteUrl: body.website || null,
@@ -188,7 +191,7 @@ export async function POST(request: NextRequest) {
       enableOnlineOrders: body.enableOnlineOrders ?? true,
       status,
       visibleInDirectory: body.publicListing ?? true,
-      timezone: body.timezone || null,
+      timezone: timezoneFromCountry(country),
       // Opening hours and order modes - already in DB format from client
       openingHours: body.openingHours || {},
       orderModes:

@@ -218,7 +218,7 @@ export function ContextPill({
                     {guestSeat?.seatNumber != null && guestSeat.seatNumber > 0 ? (
                       <span className="font-semibold text-white dark:text-blue-100 vivid:text-white">
                         {" · "}
-                        S{guestSeat.seatNumber}
+                        {t("context.seatNumber", { number: guestSeat.seatNumber })}
                       </span>
                     ) : guestSeatLoading ? (
                       <span className={secondaryLabelClass}>

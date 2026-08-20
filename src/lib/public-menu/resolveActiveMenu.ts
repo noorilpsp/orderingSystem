@@ -216,3 +216,57 @@ export function openingHoursToGuestHours(
     return { day: day.charAt(0).toUpperCase() + day.slice(1), time };
   });
 }
+
+function guestHoursToDbSchedule(
+  hours: Array<{ day: string; time: string }>,
+): DbSchedule {
+  const schedule: DbSchedule = {};
+
+  for (const entry of hours) {
+    const day = entry.day.trim().toLowerCase();
+    if (!(day in DAY_MAP)) continue;
+
+    const time = entry.time.trim();
+    if (!time || time.toLowerCase() === "closed") {
+      schedule[day] = [];
+      continue;
+    }
+
+    const blocks: Array<{ open: string; close: string }> = [];
+    for (const part of time.split(",")) {
+      const [open, close] = part
+        .split(/\s*[-–—]\s*/)
+        .map((value) => value.trim());
+      if (open && close) blocks.push({ open, close });
+    }
+    schedule[day] = blocks;
+  }
+
+  return schedule;
+}
+
+/** Wall-clock `Date` whose local fields match `timeZone` (for getHours/getDay). */
+function wallClockInTimeZone(now: Date, timeZone?: string | null): Date {
+  const tz = timeZone?.trim();
+  if (!tz) return now;
+  try {
+    return new Date(now.toLocaleString("en-US", { timeZone: tz }));
+  } catch {
+    return now;
+  }
+}
+
+/**
+ * Whether the guest restaurant is within today's opening hours.
+ * Returns `null` when hours are missing so the UI can hide the badge.
+ */
+export function isGuestRestaurantOpenNow(
+  hours: Array<{ day: string; time: string }> | null | undefined,
+  timeZone?: string | null,
+  now = new Date(),
+): boolean | null {
+  if (!hours?.length) return null;
+  const blocks = dbScheduleToBlocks(guestHoursToDbSchedule(hours));
+  if (blocks.length === 0) return false;
+  return isWithinSchedule(blocks, wallClockInTimeZone(now, timeZone));
+}

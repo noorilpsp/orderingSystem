@@ -1,10 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { restaurant as staticRestaurant } from "@/lib/menu-data";
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { useGuestT } from "@/lib/guest-i18n";
+import { cn } from "@/lib/utils";
+import { isGuestRestaurantOpenNow } from "@/lib/public-menu/resolveActiveMenu";
 
 interface HeroSectionProps {
   onInfoClick: () => void;
@@ -24,6 +26,18 @@ export function HeroSection({ onInfoClick, topRightSlot }: HeroSectionProps) {
   const restaurant = publicMenu?.restaurant ?? staticRestaurant;
   const bannerUrl = restaurant.bannerUrl?.trim() || null;
   const logoUrl = restaurant.logoUrl?.trim() || null;
+  const [openNow, setOpenNow] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      setOpenNow(
+        isGuestRestaurantOpenNow(restaurant.hours, restaurant.timezone),
+      );
+    };
+    update();
+    const id = window.setInterval(update, 30_000);
+    return () => window.clearInterval(id);
+  }, [restaurant.hours, restaurant.timezone]);
 
   return (
     <div className="relative">
@@ -87,9 +101,16 @@ export function HeroSection({ onInfoClick, topRightSlot }: HeroSectionProps) {
             </div>
 
             <div className="flex max-w-full items-center gap-2">
-              <div className="liquid-glass shrink-0 rounded-full px-3 py-1 text-xs font-semibold text-emerald-200">
-                {t("info.openNow")}
-              </div>
+              {openNow != null ? (
+                <div
+                  className={cn(
+                    "liquid-glass shrink-0 rounded-full px-3 py-1 text-xs font-semibold",
+                    openNow ? "text-emerald-200" : "text-rose-200",
+                  )}
+                >
+                  {openNow ? t("info.openNow") : t("info.closedNow")}
+                </div>
+              ) : null}
               {restaurant.address ? (
                 <div className="liquid-glass min-w-0 max-w-[min(66vw,28rem)] rounded-full px-3 py-1 text-xs text-white/85">
                   <span className="block truncate">{restaurant.address}</span>

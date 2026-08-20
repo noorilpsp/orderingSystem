@@ -4,6 +4,7 @@ import { items, menus } from "@/db/schema";
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
 import { promotions } from "@/lib/db/schema/promotions";
 import { nowInTimeZone } from "@/lib/promotions/schedule";
+import { resolveStoreTimezone } from "@/lib/timezone/fromCountry";
 import {
   dbScheduleToBlocks,
   nextWithinScheduleBoundary,
@@ -46,12 +47,20 @@ export async function getNextPublicMenuTransitionAt(
   locationId: string,
 ): Promise<Date | null> {
   const [location] = await db
-    .select({ timezone: merchantLocations.timezone })
+    .select({
+      timezone: merchantLocations.timezone,
+      country: merchantLocations.country,
+    })
     .from(merchantLocations)
     .where(eq(merchantLocations.id, locationId))
     .limit(1);
 
-  const now = nowInTimeZone(location?.timezone);
+  const now = nowInTimeZone(
+    resolveStoreTimezone({
+      country: location?.country,
+      locationTimezone: location?.timezone,
+    }),
+  );
   let next: Date | null = null;
 
   const [menuRows, itemRows, promoRows] = await Promise.all([

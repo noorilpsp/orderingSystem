@@ -8,6 +8,7 @@ import type { MerchantLocation } from "@/lib/db/schema/merchant-locations"
 import { revalidateTag } from "next/cache"
 import { unstable_cache } from "@/lib/unstable-cache"
 import { revalidatePublicMenuForLocation, revalidatePublicMenuForSlug } from "@/lib/public-menu/publicMenuCache"
+import { timezoneFromCountry } from "@/lib/timezone/fromCountry"
 
 export const runtime = "nodejs"
 
@@ -218,6 +219,12 @@ export async function PUT(
       updateData.country = body.address.country
     }
 
+    const nextCountry =
+      typeof updateData.country === "string"
+        ? updateData.country
+        : existingLocation.country
+    updateData.timezone = timezoneFromCountry(nextCountry)
+
     // Contact
     if (body.phoneNumber !== undefined) {
       updateData.phone = body.phoneNumber
@@ -261,9 +268,6 @@ export async function PUT(
     }
     if (body.publicListing !== undefined) {
       updateData.visibleInDirectory = body.publicListing
-    }
-    if (body.timezone !== undefined) {
-      updateData.timezone = body.timezone || null
     }
 
     // Opening hours - already in DB format from client

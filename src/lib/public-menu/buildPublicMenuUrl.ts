@@ -1,3 +1,5 @@
+export const GUEST_MENU_ORIGIN = "https://qlanis.vercel.app";
+
 export type PublicMenuPath = "menu" | "checkout" | "order-confirmation";
 
 export type BuildPublicMenuUrlInput = {
@@ -21,6 +23,8 @@ export function buildGuestMenuQueryString(input: {
 
   if (input.mode === "pickup") {
     params.set("mode", "pickup");
+  } else if (input.mode === "dine-in" || input.mode === "on_site") {
+    params.set("mode", "dine-in");
   }
 
   for (const [key, value] of Object.entries(input.extraParams ?? {})) {
@@ -66,4 +70,41 @@ export function buildTableQrMenuUrl(
     path: "menu",
     origin,
   });
+}
+
+export type GuestMenuQrVariant = "table" | "pickup" | "dine-in";
+
+export function buildGuestMenuQrUrl(input: {
+  storeSlug: string;
+  variant: GuestMenuQrVariant;
+  tableNumber?: string | number;
+  origin?: string;
+}): string {
+  const origin = input.origin?.trim() || GUEST_MENU_ORIGIN;
+  switch (input.variant) {
+    case "table":
+      return buildTableQrMenuUrl(
+        input.storeSlug,
+        String(input.tableNumber ?? "").trim(),
+        origin,
+      );
+    case "pickup":
+      return buildPublicMenuUrl({
+        storeSlug: input.storeSlug,
+        mode: "pickup",
+        path: "menu",
+        origin,
+      });
+    case "dine-in":
+      return buildPublicMenuUrl({
+        storeSlug: input.storeSlug,
+        mode: "dine-in",
+        path: "menu",
+        origin,
+      });
+    default: {
+      const _exhaustive: never = input.variant;
+      return _exhaustive;
+    }
+  }
 }

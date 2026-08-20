@@ -53,7 +53,6 @@ const formSchema = z.object({
   address: z.string().min(1, 'Address is required'),
   city: z.string().min(1, 'City is required'),
   country: z.string().min(1, 'Country is required'),
-  timezone: z.string().min(1, 'Timezone is required'),
   ownerName: z.string().min(1, 'Owner name is required'),
   ownerEmail: z.string().email('Enter a valid owner email'),
   subscriptionTier: z.string().min(1, 'Subscription tier is required'),
@@ -76,7 +75,6 @@ export function NewMerchantForm() {
     address: '',
     city: '',
     country: '',
-    timezone: 'Europe/Brussels',
     ownerName: '',
     ownerEmail: '',
     subscriptionTier: 'trial',
@@ -497,17 +495,6 @@ export function NewMerchantForm() {
                   placeholder="Belgium"
                 />
                 {errors.country && <p className="text-destructive text-sm">{errors.country}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <Input
-                  id="timezone"
-                  name="timezone"
-                  value={values.timezone}
-                  onChange={(event) => setField('timezone', event.target.value)}
-                  placeholder="Europe/Brussels"
-                />
-                {errors.timezone && <p className="text-destructive text-sm">{errors.timezone}</p>}
               </div>
             </div>
           </AccordionContent>

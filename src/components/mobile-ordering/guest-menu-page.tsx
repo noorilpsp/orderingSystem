@@ -462,8 +462,8 @@ export function GuestMenuPage() {
   );
 
   const featuredItems = useMemo(
-    () => featuredItemsInCategoryOrder(categories, items),
-    [categories, items],
+    () => featuredItemsInCategoryOrder(categories, filteredMenuItems),
+    [categories, filteredMenuItems],
   );
 
   useEffect(() => {
@@ -721,7 +721,7 @@ export function GuestMenuPage() {
                   </div>
                 </div>
                 {categoryIndex < visibleCategories.length - 1 && (
-                  <div className="mx-4 h-px bg-border/70 lg:mx-0" />
+                  <div className="mx-4 h-0.5 bg-border lg:mx-0" />
                 )}
               </div>
             );

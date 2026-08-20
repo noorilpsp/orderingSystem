@@ -8,6 +8,7 @@ import {
   type PromotionKind,
 } from "@/lib/promotions/pricing";
 import { isPromotionScheduleActive } from "@/lib/promotions/schedule";
+import { resolveStoreTimezone } from "@/lib/timezone/fromCountry";
 
 export type { AppliedItemPromo, PromotionKind };
 
@@ -27,10 +28,18 @@ export async function listActiveItemPromos(
   if (!locationId || (itemIds && itemIds.length === 0)) return result;
 
   const [location] = await db
-    .select({ timezone: merchantLocations.timezone })
+    .select({
+      timezone: merchantLocations.timezone,
+      country: merchantLocations.country,
+    })
     .from(merchantLocations)
     .where(eq(merchantLocations.id, locationId))
     .limit(1);
+
+  const timezone = resolveStoreTimezone({
+    country: location?.country,
+    locationTimezone: location?.timezone,
+  });
 
   const conditions = [
     eq(promotions.locationId, locationId),
@@ -56,8 +65,6 @@ export async function listActiveItemPromos(
     .from(promotions)
     .innerJoin(promotionItems, eq(promotionItems.promotionId, promotions.id))
     .where(and(...conditions));
-
-  const timezone = location?.timezone ?? null;
 
   for (const row of rows) {
     if (

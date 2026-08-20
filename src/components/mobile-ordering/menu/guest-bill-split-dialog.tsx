@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Loader2, Minus, Plus, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGuestLocale, useGuestT, type GuestLocale } from "@/lib/guest-i18n";
 import { resolveCatalogText } from "@/lib/catalog-i18n";
 import { OpsCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
@@ -116,33 +115,6 @@ function lookupClaimRecord(
   return claims[lineId];
 }
 
-function itemsForSeat(
-  lines: GuestBillSplitItem[],
-  seat: GuestBillSplitSeat,
-): GuestBillSplitItem[] {
-  return lines.filter((line) => {
-    if (seat.seatId && line.seatId) return line.seatId === seat.seatId;
-    if (seat.seatNumber != null && line.seatNumber != null) {
-      return line.seatNumber === seat.seatNumber;
-    }
-    return false;
-  });
-}
-
-function unassignedItems(lines: GuestBillSplitItem[]): GuestBillSplitItem[] {
-  return lines.filter((line) => line.seatNumber == null || line.seatNumber <= 0);
-}
-
-function seatBadgeClass(line: GuestBillSplitItem): string {
-  if (line.seatNumber == null || line.seatNumber <= 0) {
-    return "border-sky-500/40 bg-sky-500/15 text-sky-900 dark:text-sky-100";
-  }
-  if (line.isYours) {
-    return "border-emerald-500/40 bg-emerald-500/15 text-emerald-900 dark:text-emerald-100";
-  }
-  return "border-indigo-500/40 bg-indigo-500/15 text-indigo-900 dark:text-indigo-100";
-}
-
 function billLineDisplayName(locale: GuestLocale, line: GuestBillSplitItem): string {
   return resolveCatalogText(locale, { name: line.name }, line.i18n).name;
 }
@@ -174,7 +146,7 @@ function BillLineCustomizations({
           event.stopPropagation();
           setExpanded((prev) => !prev);
         }}
-        className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+        className="guest-bill-compact-btn mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
       >
         <ChevronDown
           className={cn(
@@ -183,52 +155,6 @@ function BillLineCustomizations({
           )}
         />
       </button>
-    </div>
-  );
-}
-
-function BillLineReadOnly({
-  line,
-  displayName,
-  formatMoney,
-  seatLabel,
-  showSeatBadge,
-}: {
-  line: GuestBillSplitItem;
-  displayName: string;
-  formatMoney: (value: number) => string;
-  seatLabel: string;
-  showSeatBadge?: boolean;
-}) {
-  return (
-    <div className="flex w-full items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
-      <div className="min-w-0 flex-1 text-start">
-        <p className="font-medium leading-snug text-foreground">
-          {line.quantity > 1 ? (
-            <span className="me-1.5 text-[13px] font-bold tabular-nums text-foreground">
-              ×{line.quantity}
-            </span>
-          ) : null}
-          {displayName}
-          {showSeatBadge ? (
-            <span
-              className={cn(
-                "ms-1.5 inline-flex h-5 items-center rounded border px-1.5 align-middle text-[11px] font-semibold leading-none",
-                seatBadgeClass(line),
-              )}
-            >
-              {seatLabel}
-            </span>
-          ) : null}
-        </p>
-        <BillLineCustomizations customizations={line.customizations} />
-        {line.notes ? (
-          <p className="mt-0.5 text-[11px] text-foreground/60">{line.notes}</p>
-        ) : null}
-      </div>
-      <p className="shrink-0 text-end text-sm font-semibold tabular-nums text-foreground" dir="ltr">
-        {formatMoney(line.price)}
-      </p>
     </div>
   );
 }
@@ -247,7 +173,7 @@ export function GuestBillSplitDialog({
   splitLoading,
   splitError,
   splitData,
-  initialMode = null,
+  initialMode: _initialMode = null,
   onRefresh,
   onToast,
 }: GuestBillSplitDialogProps) {
@@ -255,7 +181,7 @@ export function GuestBillSplitDialog({
   const { dir, locale } = useGuestLocale();
   const { formatMoney } = useGuestLocalization();
   const isRtl = dir === "rtl";
-  const [splitMode, setSplitMode] = useState<GuestSplitMode>("by-seat");
+  const [splitMode, setSplitMode] = useState<GuestSplitMode>("item");
   const [splitCount, setSplitCount] = useState(2);
   const [localItems, setLocalItems] = useState<GuestBillSplitItem[]>([]);
   const [localPayers, setLocalPayers] = useState<LocalPayer[]>([]);
@@ -275,7 +201,6 @@ export function GuestBillSplitDialog({
 
   const equalSplitBase = splitData && splitData.subtotal > 0 ? splitData.subtotal : 0;
   const billLines = localItems;
-  const sharedBillLines = unassignedItems(billLines);
   const assignableSeats = useMemo(
     () =>
       (splitData?.seats ?? []).filter(
@@ -423,7 +348,7 @@ export function GuestBillSplitDialog({
 
   useEffect(() => {
     if (!open) {
-      setSplitMode("by-seat");
+      setSplitMode("item");
       setExpandedSplitLineId(null);
       setSendPending(false);
       setLocalPayers([]);
@@ -438,8 +363,8 @@ export function GuestBillSplitDialog({
       pendingExtraPayerPostsRef.current.clear();
       return;
     }
-    setSplitMode(initialMode ?? "by-seat");
-  }, [open, initialMode]);
+    setSplitMode("item");
+  }, [open]);
 
   useEffect(() => {
     // Seed Equal people count once per open. Prefer the shared proposal's
@@ -722,19 +647,6 @@ export function GuestBillSplitDialog({
       return;
     }
     postAssignment(line.id, { seatId }, sharesForSeatId(seatId));
-  };
-
-  const claimMine = (line: GuestBillSplitItem) => {
-    if (!yourSeatId) {
-      onToast?.(t("actions.payMyShareMissing"), "warning");
-      return;
-    }
-    const sole = line.assignmentShares?.length === 1 ? line.assignmentShares[0] : null;
-    if (sole?.seatId === yourSeatId && !line.isAssignmentSplit) {
-      postAssignment(line.id, { clear: true }, []);
-      return;
-    }
-    postAssignment(line.id, { seatId: yourSeatId }, sharesForSeatId(yourSeatId));
   };
 
   const clearLine = (line: GuestBillSplitItem) => {
@@ -1119,27 +1031,7 @@ export function GuestBillSplitDialog({
           ) : null}
 
           {splitData ? (
-            <Tabs
-              value={splitMode}
-              onValueChange={(value) => setSplitMode(value as GuestSplitMode)}
-              className="gap-3"
-              dir={dir}
-            >
-              <TabsList className="grid h-auto w-full shrink-0 grid-cols-2 gap-1 bg-muted/60 p-1 sm:grid-cols-4">
-                <TabsTrigger value="one-bill" className="text-sm sm:text-base">
-                  {t("actions.splitModeOneBill")}
-                </TabsTrigger>
-                <TabsTrigger value="by-seat" className="text-sm sm:text-base">
-                  {t("actions.splitModeBySeat")}
-                </TabsTrigger>
-                <TabsTrigger value="equal" className="text-sm sm:text-base">
-                  {t("actions.splitModeEqual")}
-                </TabsTrigger>
-                <TabsTrigger value="item" className="text-sm sm:text-base">
-                  {t("actions.splitModeItem")}
-                </TabsTrigger>
-              </TabsList>
-
+            <div className="space-y-3">
               <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl border border-emerald-600/40 bg-emerald-500/15 px-3 py-2.5">
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-emerald-900/85 dark:text-emerald-100/85">
@@ -1165,198 +1057,7 @@ export function GuestBillSplitDialog({
                 </p>
               </div>
 
-              <TabsContent value="one-bill" className="mt-0 space-y-2">
-                <p className="text-xs text-foreground/65">{t("actions.splitOneBillHint")}</p>
-                <div className="space-y-1.5">
-                  {billLines.map((line) => (
-                    <BillLineReadOnly
-                      key={line.id}
-                      line={line}
-                      displayName={billLineDisplayName(locale, line)}
-                      formatMoney={formatMoney}
-                      showSeatBadge
-                      seatLabel={
-                        line.seatNumber == null || line.seatNumber <= 0
-                          ? t("actions.splitUnassigned")
-                          : t("actions.splitSeatChip", { number: line.seatNumber })
-                      }
-                    />
-                  ))}
-                  {billLines.length === 0 ? (
-                    <p className="px-1 py-2 text-xs text-foreground/70">
-                      {t("actions.splitEmpty")}
-                    </p>
-                  ) : null}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="by-seat" className="mt-0 space-y-2">
-                <p className="text-xs text-foreground/65">{t("actions.splitBySeatHint")}</p>
-                <div className="space-y-2">
-                  {splitData.seats.map((seat) => {
-                    const seatLines = itemsForSeat(billLines, seat);
-                    return (
-                      <div
-                        key={seat.seatId ?? `seat-${seat.seatNumber}`}
-                        className={cn(
-                          "overflow-hidden rounded-lg border",
-                          seat.isYours
-                            ? "border-emerald-600/40 bg-emerald-500/15"
-                            : "border-border bg-muted/40",
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-3 px-3 py-2">
-                          <div className="min-w-0">
-                            {seat.isYours ? (
-                              <>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900 dark:text-emerald-100">
-                                  {t("actions.payMyShare")}
-                                  {seat.seatNumber != null
-                                    ? ` · ${t("actions.splitSeatLabel", { number: seat.seatNumber })}`
-                                    : ""}
-                                </p>
-                                <p className="mt-0.5 text-sm font-semibold text-emerald-950 dark:text-emerald-50">
-                                  {t("actions.payMyShareAmount", {
-                                    amount: formatMoney(seat.subtotal),
-                                  })}
-                                </p>
-                                <p className="text-[11px] text-emerald-900/80 dark:text-emerald-100/80">
-                                  {t("actions.splitItemCount", { count: seat.itemCount })}
-                                </p>
-                              </>
-                            ) : (
-                              <>
-                                <p className="truncate text-sm font-medium text-foreground">
-                                  {seat.seatNumber != null
-                                    ? t("actions.splitSeatLabel", { number: seat.seatNumber })
-                                    : t("actions.splitUnassigned")}
-                                  {seat.guestName ? ` · ${seat.guestName}` : ""}
-                                </p>
-                                <p className="text-[11px] text-foreground/65">
-                                  {t("actions.splitItemCount", { count: seat.itemCount })}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                          {seat.isYours ? null : (
-                            <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground" dir="ltr">
-                              {formatMoney(seat.subtotal)}
-                            </p>
-                          )}
-                        </div>
-                        {seatLines.length > 0 ? (
-                          <div className="space-y-1 border-t border-border/70 bg-background/40 px-2 py-2">
-                            {seatLines.map((line) => (
-                              <BillLineReadOnly
-                                key={line.id}
-                                line={line}
-                                displayName={billLineDisplayName(locale, line)}
-                                formatMoney={formatMoney}
-                                seatLabel=""
-                              />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                  {splitData.unassigned ? (
-                    <div className="overflow-hidden rounded-lg border border-border bg-muted/40">
-                      <div className="flex items-center justify-between gap-3 px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">
-                            {t("actions.splitUnassigned")}
-                          </p>
-                          <p className="text-[11px] text-foreground/65">
-                            {t("actions.splitItemCount", {
-                              count: splitData.unassigned.itemCount,
-                            })}
-                          </p>
-                        </div>
-                        <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground" dir="ltr">
-                          {formatMoney(splitData.unassigned.subtotal)}
-                        </p>
-                      </div>
-                      {sharedBillLines.length > 0 ? (
-                        <div className="space-y-1 border-t border-border/70 bg-background/40 px-2 py-2">
-                          {sharedBillLines.map((line) => (
-                            <BillLineReadOnly
-                              key={line.id}
-                              line={line}
-                              displayName={billLineDisplayName(locale, line)}
-                              formatMoney={formatMoney}
-                              seatLabel=""
-                            />
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="equal" className="mt-0 space-y-2">
-                <div className="rounded-xl border border-border bg-muted/45 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">
-                      {t("actions.splitEqually")}
-                    </p>
-                    <span className="text-xs font-medium tabular-nums text-foreground/75" dir="ltr">
-                      {formatMoney(equalSplitBase)}
-                    </span>
-                  </div>
-                  <p className="mb-2 text-xs text-foreground/65">{t("actions.splitEquallyHint")}</p>
-                  <div className="flex items-center justify-between rounded-lg border border-border bg-background px-2 py-1.5">
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="border-border text-foreground"
-                      onClick={() => setSplitCount((prev) => Math.max(2, prev - 1))}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm font-semibold text-foreground">
-                      {t("actions.peopleCount", { count: splitCount })}
-                    </span>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="border-border text-foreground"
-                      onClick={() => setSplitCount((prev) => Math.min(MAX_SPLIT_PEOPLE, prev + 1))}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-emerald-600/40 bg-emerald-500/15 px-3 py-2.5">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-emerald-900 dark:text-emerald-100">
-                      {t("actions.perPersonLabel")}
-                    </span>
-                    <span className="text-xl font-bold tabular-nums text-emerald-950 dark:text-emerald-50" dir="ltr">
-                      {formatMoney(perPerson)}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  {billLines.map((line) => (
-                    <BillLineReadOnly
-                      key={line.id}
-                      line={line}
-                      displayName={billLineDisplayName(locale, line)}
-                      formatMoney={formatMoney}
-                      showSeatBadge
-                      seatLabel={
-                        line.seatNumber == null || line.seatNumber <= 0
-                          ? t("actions.splitUnassigned")
-                          : t("actions.splitSeatChip", { number: line.seatNumber })
-                      }
-                    />
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="item" className="mt-0 space-y-2">
+              <div className="space-y-2">
                 <p className="text-xs text-foreground/65">{t("actions.splitAssignHint")}</p>
 
                 <div className="rounded-xl border border-emerald-600/40 bg-emerald-500/15 p-3">
@@ -1460,24 +1161,9 @@ export function GuestBillSplitDialog({
                             })
                           : t("actions.splitItemUnassigned");
 
-                    const claimButton = (
-                      <button
-                        key="claim"
-                        type="button"
-                        onClick={() => claimMine(line)}
-                        className={cn(
-                          "guest-bill-compact-btn inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-semibold leading-none transition-colors",
-                          claimedByMe
-                            ? "border-foreground/30 bg-muted text-foreground"
-                            : "border-border text-foreground/65 hover:bg-muted",
-                        )}
-                      >
-                        {claimedByMe
-                          ? t("actions.splitReleaseClaim")
-                          : t("actions.splitClaimItem")}
-                      </button>
-                    );
-                    const seatButtons = payerTargets.map((seat) => {
+                    const seatButtons = [...payerTargets]
+                      .sort((a, b) => Number(Boolean(b.isYours)) - Number(Boolean(a.isYours)))
+                      .map((seat) => {
                       const active =
                         sole?.seatId === seat.seatId && !line.isAssignmentSplit;
                       return (
@@ -1528,8 +1214,8 @@ export function GuestBillSplitDialog({
                       ) : null;
                     // RTL: Split on the right (first in DOM); seat chips flow right→left.
                     const actionChips = isRtl
-                      ? [splitButton, claimButton, ...seatButtons, clearButton]
-                      : [claimButton, ...seatButtons, splitButton, clearButton];
+                      ? [splitButton, ...seatButtons, clearButton]
+                      : [...seatButtons, splitButton, clearButton];
 
                     return (
                       <div
@@ -1652,8 +1338,8 @@ export function GuestBillSplitDialog({
                     </p>
                   ) : null}
                 </div>
-              </TabsContent>
-            </Tabs>
+              </div>
+            </div>
           ) : null}
         </div>
 

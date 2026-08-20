@@ -40,6 +40,7 @@ import { normalizeCatalogI18n } from "@/lib/catalog-i18n";
 import { normalizeAvailableGuestLocales } from "@/lib/merchant-localization";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 import { withDbRetry } from "@/lib/db/withDbRetry";
+import { resolveStoreTimezone } from "@/lib/timezone/fromCountry";
 
 function isLebanonCountry(country: string | null | undefined): boolean {
   const normalized = (country ?? "").trim().toLowerCase();
@@ -261,6 +262,7 @@ async function buildPublicMenuViewOnce(
       logoUrl: true,
       bannerUrl: true,
       openingHours: true,
+      timezone: true,
       enableOnlineOrders: true,
       status: true,
       orderModes: true,
@@ -339,6 +341,7 @@ async function buildPublicMenuViewOnce(
         logoUrl: true,
         bannerUrl: true,
         defaultCurrency: true,
+        defaultTimezone: true,
         defaultLanguage: true,
         availableLanguages: true,
         dateFormat: true,
@@ -361,6 +364,11 @@ async function buildPublicMenuViewOnce(
     phone: location.phone,
     website: location.websiteUrl?.replace(/^https?:\/\//, "") ?? "",
     hours: openingHoursToGuestHours(location.openingHours),
+    timezone: resolveStoreTimezone({
+      country: location.country,
+      locationTimezone: location.timezone,
+      merchantTimezone: merchantRow?.defaultTimezone,
+    }),
     social: {
       instagramUrl: instagramProfileUrl(location.instagramHandle),
       facebookUrl: facebookProfileUrl(location.facebookUrl),

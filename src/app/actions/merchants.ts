@@ -13,6 +13,7 @@ import { isPlatformAdmin } from "@/lib/permissions";
 import { ADMIN_MERCHANTS_CACHE_TAG } from "@/lib/queries";
 import { revalidatePublicMenuForMerchant } from "@/lib/public-menu/publicMenuCache";
 import { normalizeMerchantFeatures } from "@/lib/db/schema/merchants";
+import { timezoneFromCountry } from "@/lib/timezone/fromCountry";
 
 // Configure Neon to use WebSocket for transaction support
 if (typeof globalThis.WebSocket === "undefined") {
@@ -74,7 +75,7 @@ const merchantSchema = z.object({
   address: z.string().min(1, "Address is required"),
   city: z.string().min(1, "City is required"),
   country: z.string().min(1, "Country is required"),
-  timezone: z.string().min(1, "Timezone is required"),
+  timezone: z.string().optional(),
   ownerName: z.string().min(1, "Owner name is required"),
   ownerEmail: z.string().email("Valid owner email is required"),
   subscriptionTier: z.enum(["trial", "basic", "pro", "enterprise"]),
@@ -101,6 +102,8 @@ export async function createMerchant(data: unknown) {
   }
 
   const validated = validation.data;
+  const timezone =
+    validated.timezone?.trim() || timezoneFromCountry(validated.country);
 
   try {
     // Use transaction-capable database connection
@@ -125,7 +128,7 @@ export async function createMerchant(data: unknown) {
           subscriptionExpiresAt: validated.subscriptionExpiresAt
             ? new Date(validated.subscriptionExpiresAt)
             : null,
-          defaultTimezone: validated.timezone,
+          defaultTimezone: timezone,
           defaultCurrency: "EUR",
           features: normalizeMerchantFeatures({ kds: validated.kdsEnabled === true }),
         })
@@ -151,7 +154,7 @@ export async function createMerchant(data: unknown) {
           bannerUrl: validated.bannerUrl?.trimEnd() || null,
           status: "active",
           openingHours: {},
-          timezone: validated.timezone,
+          timezone,
         })
         .returning();
 
@@ -277,6 +280,7 @@ export async function updateMerchant(data: unknown) {
     const address = validated.address?.trim() || "";
     const city = validated.city?.trim() || "";
     const country = validated.country?.trim() || "Belgium";
+    const timezone = timezoneFromCountry(country);
     const postalCode = validated.postalCode?.trim() || "";
     const publicEmail = validated.publicEmail?.trim() || null;
     const subscriptionTier = validated.subscriptionTier ?? existingMerchant.subscriptionTier;
@@ -298,6 +302,7 @@ export async function updateMerchant(data: unknown) {
         registeredAddressLine1: address,
         registeredCity: city,
         registeredCountry: country,
+        defaultTimezone: timezone,
         kboNumber: validated.kboNumber?.trim() || null,
         businessType: validated.businessType ?? existingMerchant.businessType,
         status: validated.status ?? existingMerchant.status,
@@ -322,6 +327,7 @@ export async function updateMerchant(data: unknown) {
       postalCode,
       city,
       country,
+      timezone,
       phone,
       email: publicEmail,
       updatedAt: new Date(),

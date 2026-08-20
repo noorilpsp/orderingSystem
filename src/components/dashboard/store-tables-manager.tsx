@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, QrCode, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TableQrDialog } from "@/components/dashboard/table-qr-dialog";
 
 type LocationTable = {
   id: string;
@@ -46,14 +47,16 @@ function newIdempotencyKey(prefix: string): string {
 
 type StoreTablesManagerProps = {
   locationId: string | null;
+  storeSlug?: string;
 };
 
-export function StoreTablesManager({ locationId }: StoreTablesManagerProps) {
+export function StoreTablesManager({ locationId, storeSlug = "" }: StoreTablesManagerProps) {
   const [tables, setTables] = useState<LocationTable[]>([]);
   const [loading, setLoading] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [qrTableNumber, setQrTableNumber] = useState<string | null>(null);
 
   const loadTables = useCallback(async () => {
     if (!locationId) {
@@ -176,7 +179,7 @@ export function StoreTablesManager({ locationId }: StoreTablesManagerProps) {
       <div>
         <Label className="text-sm font-medium">Tables</Label>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Add every table name guests can choose (e.g. T1, Patio 2). These power QR links and delivery-to-table orders.
+          Add every table name guests can choose (e.g. T1, Patio 2). Use the QR button to preview and download a printable code for that table.
         </p>
       </div>
 
@@ -220,25 +223,55 @@ export function StoreTablesManager({ locationId }: StoreTablesManagerProps) {
               className="flex items-center justify-between gap-2 rounded-md border border-border/50 bg-background px-3 py-2"
             >
               <span className="text-sm font-medium truncate">{table.tableNumber}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                onClick={() => void handleDelete(table)}
-                disabled={deletingId === table.id}
-                aria-label={`Remove table ${table.tableNumber}`}
-              >
-                {deletingId === table.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </Button>
+              <div className="flex items-center shrink-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={() => {
+                    if (!storeSlug.trim()) {
+                      toast.error("Set a store URL above before generating QR codes.");
+                      return;
+                    }
+                    setQrTableNumber(table.tableNumber);
+                  }}
+                  aria-label={`QR code for table ${table.tableNumber}`}
+                >
+                  <QrCode className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={() => void handleDelete(table)}
+                  disabled={deletingId === table.id}
+                  aria-label={`Remove table ${table.tableNumber}`}
+                >
+                  {deletingId === table.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      {storeSlug.trim() && qrTableNumber ? (
+        <TableQrDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setQrTableNumber(null);
+          }}
+          storeSlug={storeSlug}
+          variant="table"
+          tableNumber={qrTableNumber}
+        />
+      ) : null}
     </div>
   );
 }

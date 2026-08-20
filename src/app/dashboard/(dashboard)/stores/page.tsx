@@ -7,6 +7,7 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { coerceTaxRatePercent } from "@/lib/tax-rate"
+import { timezoneFromCountry } from "@/lib/timezone/fromCountry"
 import {
   Save,
   X,
@@ -45,7 +46,7 @@ import { toast } from "sonner"
 import { useTenant } from "@/lib/contexts/TenantContext"
 import { useLocations } from "@/lib/hooks/useLocations"
 import { useCurrentMerchant } from "@/lib/hooks/useCurrentMerchant"
-import { buildPublicMenuUrl } from "@/lib/public-menu/buildPublicMenuUrl";
+import { buildPublicMenuUrl, GUEST_MENU_ORIGIN } from "@/lib/public-menu/buildPublicMenuUrl";
 import type { Merchant } from "@/lib/db/schema/merchants"
 import type { MerchantLocation, OpeningHours, OrderModes } from "@/lib/db/schema/merchant-locations"
 import { DEFAULT_PICKUP_INSTRUCTIONS } from "@/lib/guest-menu/types"
@@ -54,6 +55,7 @@ import {
   normalizeAvailableGuestLocales,
 } from "@/lib/merchant-localization"
 import { StoreTablesManager } from "@/components/dashboard/store-tables-manager"
+import { StoreMenuQrButton } from "@/components/dashboard/table-qr-dialog"
 
 // Zod Schema
 const storeInfoSchema = z.object({
@@ -607,8 +609,7 @@ export default function StoresPage() {
   }
 
   const copyStoreUrl = () => {
-    const origin = typeof window !== "undefined" ? window.location.origin : ""
-    navigator.clipboard.writeText(buildPublicMenuUrl({ storeSlug, origin }))
+    navigator.clipboard.writeText(buildPublicMenuUrl({ storeSlug, origin: GUEST_MENU_ORIGIN }))
     setUrlCopied(true)
     toast.success("Store URL copied to clipboard")
     setTimeout(() => setUrlCopied(false), 2000)
@@ -660,7 +661,7 @@ export default function StoresPage() {
         taxRate: data.taxRate,
         storeStatus: formStatusToDb(data.storeStatus),
         publicListing: data.publicListing,
-        timezone: data.useBusinessTimezone ? null : data.timezone,
+        timezone: timezoneFromCountry(data.address.country),
         accentColor: data.accentColor || null,
       }
 
@@ -731,7 +732,7 @@ export default function StoresPage() {
           logoUrl: resolvedLogoUrl,
           bannerUrl: resolvedBannerUrl,
           defaultCurrency: data.defaultCurrency,
-          defaultTimezone: data.timezone,
+          defaultTimezone: timezoneFromCountry(data.address.country),
           defaultLanguage: data.defaultLanguage,
           availableLanguages: data.availableLanguages,
           dateFormat: data.dateFormat,
@@ -2164,13 +2165,22 @@ export default function StoresPage() {
                                     id="dineInGuestSessionSelfService"
                                     className="mt-0.5"
                                   />
-                                  <div>
-                                    <Label
-                                      htmlFor="dineInGuestSessionSelfService"
-                                      className="text-sm font-normal cursor-pointer"
-                                    >
-                                      Self pickup
-                                    </Label>
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <Label
+                                        htmlFor="dineInGuestSessionSelfService"
+                                        className="text-sm font-normal cursor-pointer"
+                                      >
+                                        Self pickup
+                                      </Label>
+                                      {orderModes.dineInGuestSessionMode === "self_service" ? (
+                                        <StoreMenuQrButton
+                                          storeSlug={storeSlug}
+                                          variant="dine-in"
+                                          label="Dine-in QR"
+                                        />
+                                      ) : null}
+                                    </div>
                                     <p className="text-xs text-muted-foreground">
                                       Guests order from the table QR and pick up the order themselves
                                     </p>
@@ -2180,10 +2190,12 @@ export default function StoresPage() {
                             </div>
                           )}
 
-                          {orderModes.dineIn &&
-                          orderModes.dineInGuestSessionMode === "staff_seated" ? (
+                          {orderModes.dineIn ? (
                             <div className="ml-7">
-                              <StoreTablesManager locationId={currentLocationId} />
+                              <StoreTablesManager
+                                locationId={currentLocationId}
+                                storeSlug={storeSlug}
+                              />
                             </div>
                           ) : null}
 
@@ -2196,9 +2208,18 @@ export default function StoresPage() {
                               }
                             />
                             <div className="flex-1">
-                              <Label htmlFor="pickup" className="text-sm font-normal cursor-pointer">
-                                Pickup
-                              </Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <Label htmlFor="pickup" className="text-sm font-normal cursor-pointer">
+                                  Pickup
+                                </Label>
+                                {orderModes.pickup ? (
+                                  <StoreMenuQrButton
+                                    storeSlug={storeSlug}
+                                    variant="pickup"
+                                    label="Pickup QR"
+                                  />
+                                ) : null}
+                              </div>
                               <p className="text-xs text-muted-foreground">Order ahead, pick up at store</p>
                             </div>
                           </div>

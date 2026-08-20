@@ -9,6 +9,8 @@ export type GuestRestaurant = {
   phone: string;
   website: string;
   hours: Array<{ day: string; time: string }>;
+  /** IANA timezone for opening-hours evaluation (location, else merchant default). */
+  timezone?: string | null;
   social?: {
     instagramUrl?: string | null;
     facebookUrl?: string | null;
