@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { mockIntegrations } from "../data"
 import { ExternalLink, Lock, Eye, EyeOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface ConnectIntegrationModalProps {
   integrationKey: string
@@ -234,14 +235,14 @@ export function ConnectIntegrationModal({ integrationKey, open, onClose }: Conne
 
                   <div className="space-y-2">
                     <Label htmlFor="phoneNumber">Phone Number *</Label>
-                    <Input
+                    <PhoneNumberField
                       id="phoneNumber"
-                      placeholder="+1 555 123 4567"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={setPhoneNumber}
+                      placeholder="Mobile number"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Your {integration.name} phone number (with country code)
+                      Your {integration.name} phone number
                     </p>
                   </div>
                 </div>

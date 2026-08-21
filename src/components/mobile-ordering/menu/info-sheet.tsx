@@ -14,6 +14,7 @@ import {
 import { restaurant as staticRestaurant } from "@/lib/menu-data";
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { useGuestT, type EnMessageKey } from "@/lib/guest-i18n";
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone";
 
 interface InfoSheetProps {
   open: boolean;
@@ -71,6 +72,7 @@ function TikTokIcon({ className }: { className?: string }) {
 export function InfoSheet({ open, onOpenChange }: InfoSheetProps) {
   const publicMenu = usePublicMenuOptional();
   const t = useGuestT();
+  const displayPhone = useDisplayPhone();
   const restaurant = publicMenu?.restaurant ?? staticRestaurant;
   const [dragY, setDragY] = useState(0);
   const touchStartY = useRef(0);
@@ -183,7 +185,7 @@ export function InfoSheet({ open, onOpenChange }: InfoSheetProps) {
                   href={`tel:${restaurant.phone}`}
                   className="text-sm text-blue-600 hover:underline"
                 >
-                  {restaurant.phone}
+                  {displayPhone(restaurant.phone)}
                 </a>
               </div>
             </div>

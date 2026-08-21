@@ -11,6 +11,7 @@ export const restaurant = {
   availableLanguages: ["en", "ar"] as Array<"en" | "ar">,
   dateFormat: "DD/MM/YYYY" as string | null,
   numberFormat: "1.234,56" as string | null,
+  country: "Belgium",
   timezone: null as string | null,
   hours: [
     { day: "Monday", time: "11:00 - 22:00" },

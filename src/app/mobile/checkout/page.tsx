@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneNumberField } from "@/components/shared/phone-number-field";
 import { WalkingPersonLottie } from "@/components/ui/walking-person-lottie";
 import { customizationGroups } from "@/lib/menu-item-modal-data";
 import { EditTableModal } from "@/components/mobile-ordering/menu/edit-table-modal";
@@ -430,12 +431,13 @@ export default function MobileCheckoutPage() {
                 <Label htmlFor="phone" className="text-xs text-muted-foreground">
                   Phone
                 </Label>
-                <Input
+                <PhoneNumberField
                   id="phone"
                   value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="+32 123 456 789"
-                  className="mt-1 h-10 border-border/80 bg-card/45"
+                  onChange={setPhone}
+                  placeholder="Mobile number"
+                  className="mt-1"
+                  inputClassName="h-10 border-border/80 bg-card/45"
                 />
               </div>
               <div>

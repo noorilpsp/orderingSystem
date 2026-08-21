@@ -16,6 +16,7 @@ import type {
   GuestCustomizationGroup,
   GuestMenuItem,
   GuestOrderModes,
+  GuestOrderType,
   GuestRestaurant,
 } from "@/lib/guest-menu/types";
 import {
@@ -72,8 +73,10 @@ import {
   fetchLoggedInCustomerAction,
 } from "@/app/actions/customer-auth";
 import type { GuestOrderHistoryEntry } from "@/lib/public-menu/getGuestOrderHistory";
+import { writeStoredGuestPhoneCountry } from "@/lib/public-menu/guest-phone";
+import { writeGuestLastStore } from "@/lib/public-menu/guest-last-store";
 
-type OrderType = "dine-in" | "pickup";
+type OrderType = GuestOrderType;
 
 const ORDER_HISTORY_STALE_MS = 30_000;
 
@@ -225,7 +228,7 @@ export function PublicMenuProvider({
   }, [orderType, storeSlug, tableNumber]);
 
   const accountLoginPath = `/login?returnTo=${encodeURIComponent(accountReturnTo)}`;
-  const accountSignupPath = `/signup?returnTo=${encodeURIComponent(accountReturnTo)}`;
+  const accountSignupPath = `/signup?returnTo=${encodeURIComponent(accountReturnTo)}&store=${encodeURIComponent(storeSlug)}`;
 
   useEffect(() => {
     setGuestDeviceId(getOrCreateGuestDeviceId());
@@ -244,6 +247,11 @@ export function PublicMenuProvider({
   useEffect(() => {
     preloadGuestCartImages(cart, view?.items ?? [], view?.rewards ?? []);
   }, [cart, view?.items, view?.rewards]);
+
+  useEffect(() => {
+    writeGuestLastStore(storeSlug);
+    writeStoredGuestPhoneCountry(view?.restaurant?.country);
+  }, [storeSlug, view?.restaurant?.country]);
 
   const refetchCustomer = useCallback(async () => {
     if (storeSlug === "demo") {
@@ -419,6 +427,8 @@ export function PublicMenuProvider({
     else url.searchParams.delete("table");
 
     if (orderType === "dine-in") url.searchParams.set("mode", "dine-in");
+    else if (orderType === "pickup") url.searchParams.set("mode", "pickup");
+    else if (orderType === "delivery") url.searchParams.set("mode", "delivery");
     else url.searchParams.delete("mode");
 
     const next = `${url.pathname}${url.search}`;

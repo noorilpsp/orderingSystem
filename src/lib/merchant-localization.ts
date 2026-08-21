@@ -106,6 +106,24 @@ export function formatMerchantMoney(
   }
 }
 
+export function merchantCurrencySymbol(currency?: string | null): string {
+  const code = (currency ?? "").trim().toUpperCase();
+  if (!code) return "";
+  if (code === "LBP") return "LBP";
+  try {
+    const part = new Intl.NumberFormat("en", {
+      style: "currency",
+      currency: code,
+      currencyDisplay: "narrowSymbol",
+    })
+      .formatToParts(0)
+      .find((entry) => entry.type === "currency");
+    return part?.value?.trim() || code;
+  } catch {
+    return code;
+  }
+}
+
 export function formatMerchantNumber(
   value: number,
   numberFormat?: string | null,

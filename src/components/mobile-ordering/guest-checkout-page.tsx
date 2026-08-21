@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Clock, Loader2, LogIn, MapPin, Phone, Sparkles, Store, User } from "lucide-react";
+import { DeliveryAddressSection } from "@/components/mobile-ordering/checkout/delivery-address-section";
 import { OrderTypeToggle } from "@/components/mobile-ordering/checkout/order-type-toggle";
 import {
   PickupTimingPicker,
@@ -33,10 +34,18 @@ import {
 } from "@/lib/public-menu/guest-cart-pricing";
 import { guestCartLineId } from "@/lib/public-menu/guest-cart-lines";
 import {
+  isCompleteGuestDeliveryAddress,
+  readLastGuestDeliveryAddress,
+  type GuestDeliveryAddress,
+} from "@/lib/public-menu/guest-delivery-address";
+import {
   isValidGuestPhone,
+  phoneCountryFromStoreCountry,
   readStoredGuestPhone,
   writeStoredGuestPhone,
 } from "@/lib/public-menu/guest-phone";
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone";
+import { PhoneNumberField } from "@/components/shared/phone-number-field";
 import { GuestCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
 import { PromoPrice } from "@/components/shared/promo-price";
 import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
@@ -47,6 +56,7 @@ import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/gues
 export function GuestCheckoutPage() {
   const router = useRouter();
   const t = useGuestT();
+  const displayPhone = useDisplayPhone();
   const { locale } = useGuestLocale();
   const { formatMoney } = useGuestLocalization();
   const {
@@ -81,13 +91,20 @@ export function GuestCheckoutPage() {
   const [guestPhone, setGuestPhone] = useState("");
   const [guestPhoneError, setGuestPhoneError] = useState(false);
   const [guestName, setGuestName] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState<GuestDeliveryAddress | null>(null);
+  const [deliveryAddressError, setDeliveryAddressError] = useState(false);
+  const [deliveryAddressOpen, setDeliveryAddressOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<GuestPaymentMethodId>("pay_at_pickup");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const placingRef = useRef(false);
   const guestPhoneInputRef = useRef<HTMLInputElement>(null);
+  const guestNameInputRef = useRef<HTMLInputElement>(null);
+  const deliveryAddressButtonRef = useRef<HTMLButtonElement>(null);
   const didDefaultPickupRef = useRef(false);
 
   const pickupPrepMinutes = orderModes.pickup?.estimated_time_minutes ?? 15;
+  const deliveryPrepMinutes =
+    orderModes.delivery?.estimated_time_minutes ?? pickupPrepMinutes;
 
   useEffect(() => {
     if (customer) return;
@@ -96,25 +113,29 @@ export function GuestCheckoutPage() {
   }, [customer]);
 
   useEffect(() => {
+    const last = readLastGuestDeliveryAddress();
+    if (last) setDeliveryAddress(last);
+  }, []);
+
+  useEffect(() => {
     const fromSeat = guestSeat?.guestName?.trim();
     if (!fromSeat) return;
     setGuestName((prev) => (prev.trim() ? prev : fromSeat));
   }, [guestSeat?.guestName]);
 
-  // Walk-in checkout starts on pickup once; table QR keeps dine-in.
+  // Walk-in checkout starts on pickup once; table QR keeps dine-in; delivery stays delivery.
   useEffect(() => {
     if (didDefaultPickupRef.current) return;
     didDefaultPickupRef.current = true;
-    if (!tableNumber.trim()) {
+    if (!tableNumber.trim() && orderType === "dine-in") {
       setOrderType("pickup");
     }
-  }, [setOrderType, tableNumber]);
+  }, [orderType, setOrderType, tableNumber]);
 
   useEffect(() => {
-    if (orderType !== "pickup") {
-      setPickupTimingMode("now");
-      setScheduledPickupAt(null);
-    }
+    if (orderType === "pickup" || orderType === "delivery") return;
+    setPickupTimingMode("now");
+    setScheduledPickupAt(null);
   }, [orderType]);
 
   const rewardCartLine = findRewardInCart(cart);
@@ -139,21 +160,35 @@ export function GuestCheckoutPage() {
       : 0;
   const showGuestEarnTeaser = !customer && estimatedEarnPoints > 0;
   const checkoutLoginPath = `/login?returnTo=${encodeURIComponent(checkoutPath)}`;
-  const subtotal = foodSubtotal;
-  const tax = subtotal * (taxRatePercent / 100);
-  const total = Math.max(0, subtotal + tax - loyaltyDiscount);
-  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
   const dineInEnabled = orderModes.dine_in?.enabled !== false;
   const pickupEnabled = orderModes.pickup?.enabled !== false;
+  const deliveryEnabled = orderModes.delivery?.enabled === true;
   const guestSessionMode = resolveGuestSessionMode(orderModes);
   const isSelfPickupMode = guestSessionMode === "self_service";
-  // Delivery-to-table: order type is fixed by QR. Self-pickup can toggle dine-in ↔ pickup.
-  const showOrderTypeToggle = dineInEnabled && pickupEnabled && isSelfPickupMode;
+  const isDelivery = orderType === "delivery";
+  const deliveryFee = isDelivery
+    ? Math.max(0, Number(orderModes.delivery?.delivery_fee) || 0)
+    : 0;
+  const deliveryMinimum = isDelivery
+    ? Math.max(0, Number(orderModes.delivery?.minimum_order) || 0)
+    : 0;
+  const meetsDeliveryMinimum = deliveryMinimum <= 0 || foodSubtotal + 1e-9 >= deliveryMinimum;
+  const subtotal = foodSubtotal;
+  const tax = subtotal * (taxRatePercent / 100);
+  const total = Math.max(0, subtotal + tax - loyaltyDiscount + deliveryFee);
+  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Same channels as the menu pill: dine-in (if this visit has a table or is self-pickup),
+  // plus pickup / delivery when those modes are on.
+  const checkoutDineInEnabled =
+    dineInEnabled && (isSelfPickupMode || tableNumber.trim().length > 0);
+  const showOrderTypeToggle =
+    [checkoutDineInEnabled, pickupEnabled, deliveryEnabled].filter(Boolean).length >= 2;
   // Delivery-to-table needs a table. Self pickup dine-in is counter collect —
   // never bind checkout to a table (avoids sticky ?table= looking "auto-selected").
   const usesTableSession = orderType === "dine-in" && !isSelfPickupMode;
-  const needsGuestPhone = !customer && !usesTableSession;
+  const needsGuestPhone = !customer && !usesTableSession && !isDelivery;
+  const needsDeliveryAddress = isDelivery;
 
   // Drop any leftover table when this store is self pickup.
   useEffect(() => {
@@ -173,6 +208,7 @@ export function GuestCheckoutPage() {
   }, [isSelfPickupMode, orderType, usesTableSession]);
 
   const apiOrderType = useMemo(() => {
+    if (orderType === "delivery") return "delivery" as const;
     if (usesTableSession) return "dine_in" as const;
     // Self-pickup dine-in stays dine_in; API converts to counter pickup.
     if (orderType === "dine-in" && isSelfPickupMode) return "dine_in" as const;
@@ -182,8 +218,9 @@ export function GuestCheckoutPage() {
   const isFormComplete =
     canPlaceOrder &&
     !!paymentMethod &&
+    meetsDeliveryMinimum &&
     (!usesTableSession || tableNumber.trim().length > 0) &&
-    (orderType !== "pickup" ||
+    ((orderType !== "pickup" && orderType !== "delivery") ||
       pickupTimingMode === "now" ||
       (pickupTimingMode === "schedule" && !!scheduledPickupAt));
 
@@ -192,6 +229,15 @@ export function GuestCheckoutPage() {
 
   const handlePlaceOrder = () => {
     if (unavailableReason || placingRef.current) return;
+    if (needsDeliveryAddress && !isCompleteGuestDeliveryAddress(deliveryAddress)) {
+      setDeliveryAddressError(true);
+      setDeliveryAddressOpen(true);
+      deliveryAddressButtonRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      return;
+    }
     if (needsGuestPhone && !isValidGuestPhone(guestPhone)) {
       setGuestPhoneError(true);
       guestPhoneInputRef.current?.scrollIntoView({
@@ -242,8 +288,11 @@ export function GuestCheckoutPage() {
 
       const guestNotes = orderNotes.trim() || null;
       const tableGuestName = usesTableSession ? guestName.trim().slice(0, 255) || null : null;
+      const deliveryPhone = isDelivery ? deliveryAddress?.phone.trim() || null : null;
       if (needsGuestPhone) {
         writeStoredGuestPhone(guestPhone);
+      } else if (deliveryPhone) {
+        writeStoredGuestPhone(deliveryPhone);
       }
 
       // Delivery-to-table: ensure this phone has a seat before placing (for split later).
@@ -266,12 +315,13 @@ export function GuestCheckoutPage() {
         deviceId: usesTableSession ? guestDeviceId || null : null,
         notes: guestNotes,
         scheduledPickupAt:
-          orderType === "pickup" && pickupTimingMode === "schedule"
+          (orderType === "pickup" || isDelivery) && pickupTimingMode === "schedule"
             ? scheduledPickupAt
             : null,
         rewardId: selectedReward?.id,
-        phone: needsGuestPhone ? guestPhone.trim() : null,
+        phone: needsGuestPhone ? guestPhone.trim() : deliveryPhone,
         guestName: tableGuestName,
+        deliveryAddress: isDelivery ? deliveryAddress : null,
         items,
       });
 
@@ -280,9 +330,16 @@ export function GuestCheckoutPage() {
       const params = new URLSearchParams();
       params.set("pending", "1");
       params.set("placementKey", placementKey);
-      params.set("mode", orderType === "pickup" ? "pickup" : "on_site");
+      params.set(
+        "mode",
+        orderType === "pickup"
+          ? "pickup"
+          : orderType === "delivery"
+            ? "delivery"
+            : "on_site",
+      );
       if (usesTableSession && tableNumber) params.set("table", tableNumber);
-      params.set("eta", String(pickupPrepMinutes));
+      params.set("eta", String(isDelivery ? deliveryPrepMinutes : pickupPrepMinutes));
       if (estimatedEarnPoints > 0) {
         params.set("earnPoints", String(estimatedEarnPoints));
       }
@@ -348,6 +405,9 @@ export function GuestCheckoutPage() {
         {showOrderTypeToggle ? (
           <OrderTypeToggle
             value={orderType}
+            dineInEnabled={checkoutDineInEnabled}
+            pickupEnabled={pickupEnabled}
+            deliveryEnabled={deliveryEnabled}
             onChange={(next) => {
               setOrderType(next);
             }}
@@ -374,7 +434,7 @@ export function GuestCheckoutPage() {
               <div className="flex h-4 items-center gap-2">
                 <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <p className="m-0 text-sm leading-none text-muted-foreground">
-                  {restaurant.phone}
+                  {displayPhone(restaurant.phone)}
                 </p>
               </div>
             ) : null}
@@ -404,7 +464,7 @@ export function GuestCheckoutPage() {
                   {customer.phone ? (
                     <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                       <Phone className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{customer.phone}</span>
+                      <span className="truncate">{displayPhone(customer.phone)}</span>
                     </p>
                   ) : null}
                 </>
@@ -426,6 +486,7 @@ export function GuestCheckoutPage() {
                 {t("checkout.nameOptional")}
               </span>
               <input
+                ref={guestNameInputRef}
                 id="guest-checkout-name"
                 type="text"
                 autoComplete="name"
@@ -446,24 +507,27 @@ export function GuestCheckoutPage() {
                 <Phone className="h-3.5 w-3.5 text-muted-foreground" />
                 {t("checkout.phone")}
               </span>
-              <input
-                ref={guestPhoneInputRef}
+              <PhoneNumberField
+                inputRef={guestPhoneInputRef}
                 id="guest-checkout-phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
                 value={guestPhone}
-                onChange={(event) => {
-                  setGuestPhone(event.target.value);
+                onChange={(next) => {
+                  setGuestPhone(next);
                   if (guestPhoneError) setGuestPhoneError(false);
                 }}
+                defaultCountry={restaurant?.country}
+                invalid={guestPhoneError}
                 placeholder={t("checkout.phonePlaceholder")}
-                maxLength={50}
-                aria-invalid={guestPhoneError}
-                className={`mt-1.5 h-11 w-full scroll-mt-24 rounded-xl border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                locale={locale}
+                countryAriaLabel={t("checkout.addressPhoneCountry")}
+                searchPlaceholder={t("checkout.searchCountry")}
+                emptyText={t("checkout.noCountryFound")}
+                className="mt-1.5"
+                triggerClassName="h-11 rounded-xl"
+                inputClassName={`h-11 scroll-mt-24 rounded-xl border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground shadow-none focus-visible:ring-2 ${
                   guestPhoneError
-                    ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20"
-                    : "border-border/70 focus:border-primary focus:ring-primary/20"
+                    ? "border-rose-500 focus-visible:border-rose-500 focus-visible:ring-rose-500/20"
+                    : "border-border/70 focus-visible:border-primary focus-visible:ring-primary/20"
                 }`}
               />
               <span
@@ -477,6 +541,23 @@ export function GuestCheckoutPage() {
               </span>
             </label>
           )}
+          {needsDeliveryAddress ? (
+            <DeliveryAddressSection
+              selected={deliveryAddress}
+              error={deliveryAddressError}
+              open={deliveryAddressOpen}
+              onOpenChange={setDeliveryAddressOpen}
+              buttonRef={deliveryAddressButtonRef}
+              onSelect={(address) => {
+                setDeliveryAddress(address);
+                if (address) {
+                  setDeliveryAddressError(false);
+                  if (address.phone) setGuestPhone(address.phone);
+                }
+              }}
+              defaultCountry={phoneCountryFromStoreCountry(restaurant?.country)}
+            />
+          ) : null}
         </section>
 
         <section className={cardClass}>
@@ -569,12 +650,13 @@ export function GuestCheckoutPage() {
           </section>
         ) : null}
 
-        {orderType === "pickup" && pickupEnabled ? (
+        {(orderType === "pickup" && pickupEnabled) || (isDelivery && deliveryEnabled) ? (
           <PickupTimingPicker
             mode={pickupTimingMode}
             scheduledAt={scheduledPickupAt}
             hours={restaurant?.hours}
-            prepMinutes={pickupPrepMinutes}
+            prepMinutes={isDelivery ? deliveryPrepMinutes : pickupPrepMinutes}
+            kind={isDelivery ? "delivery" : "pickup"}
             onModeChange={setPickupTimingMode}
             onScheduledAtChange={setScheduledPickupAt}
           />
@@ -605,7 +687,7 @@ export function GuestCheckoutPage() {
         />
 
         <section className={cardClass}>
-          {taxRatePercent > 0 || loyaltyDiscount > 0 ? (
+          {taxRatePercent > 0 || loyaltyDiscount > 0 || isDelivery ? (
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{t("common.subtotal")}</span>
               <span className="font-medium text-foreground">{formatMoney(subtotal)}</span>
@@ -624,6 +706,19 @@ export function GuestCheckoutPage() {
                 −{formatMoney(loyaltyDiscount)}
               </span>
             </div>
+          ) : null}
+          {isDelivery ? (
+            <div className="mt-2 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{t("checkout.deliveryFee")}</span>
+              <span className="font-medium text-foreground">{formatMoney(deliveryFee)}</span>
+            </div>
+          ) : null}
+          {isDelivery && deliveryMinimum > 0 && !meetsDeliveryMinimum ? (
+            <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">
+              {t("checkout.deliveryMinimumHint", {
+                amount: formatMoney(Math.max(0, deliveryMinimum - foodSubtotal)),
+              })}
+            </p>
           ) : null}
           {customer && estimatedEarnPoints > 0 ? (
             <div className="mt-2 flex items-center justify-between text-sm">
@@ -674,7 +769,13 @@ export function GuestCheckoutPage() {
                 <span>
                   {usesTableSession
                     ? t("checkout.footerTableTray", { number: tableNumber || "—" })
-                    : orderType === "dine-in" && isSelfPickupMode
+                    : isDelivery
+                      ? pickupTimingMode === "schedule" && scheduledPickupAt
+                        ? t("checkout.footerDeliveryScheduled", {
+                            time: formatPickupScheduleLabel(scheduledPickupAt),
+                          })
+                        : t("checkout.footerDeliveryNow")
+                      : orderType === "dine-in" && isSelfPickupMode
                       ? t("checkout.footerDineInCounter")
                       : pickupTimingMode === "schedule" && scheduledPickupAt
                         ? t("checkout.footerPickupScheduled", {

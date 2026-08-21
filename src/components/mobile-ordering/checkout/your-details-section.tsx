@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { PhoneNumberField } from "@/components/shared/phone-number-field";
 
 interface YourDetailsSectionProps {
   name: string;
@@ -48,12 +49,11 @@ export function YourDetailsSection({
           <Label htmlFor="phone" className="text-sm font-medium text-foreground">
             Phone <span className="text-destructive">*</span>
           </Label>
-          <Input
+          <PhoneNumberField
             id="phone"
-            type="tel"
-            placeholder="+32 123 456 789"
             value={phone}
-            onChange={(e) => onPhoneChange(e.target.value)}
+            onChange={onPhoneChange}
+            placeholder="Mobile number"
             className="mt-1"
           />
         </div>

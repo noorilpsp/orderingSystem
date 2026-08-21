@@ -3,12 +3,14 @@
 import { Phone, Mail, AlertTriangle, ExternalLink } from "lucide-react"
 import { type DetailReservation, getDaysAgo, tagConfig } from "@/lib/detail-modal-data"
 import { cn } from "@/lib/utils"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 
 interface DetailGuestProfileProps {
   reservation: DetailReservation
 }
 
 export function DetailGuestProfile({ reservation }: DetailGuestProfileProps) {
+  const displayPhone = useDisplayPhone()
   const { guest, guestName, guestPhone, guestEmail, tags } = reservation
   const initials = guestName
     .split(" ")
@@ -43,7 +45,7 @@ export function DetailGuestProfile({ reservation }: DetailGuestProfileProps) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">{guestName}</p>
           <a href={`tel:${guestPhone}`} className="flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200">
-            <Phone className="h-3 w-3" /> {guestPhone}
+            <Phone className="h-3 w-3" /> {displayPhone(guestPhone)}
           </a>
           <a href={`mailto:${guestEmail}`} className="flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200">
             <Mail className="h-3 w-3" /> {guestEmail}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
@@ -46,6 +47,7 @@ interface TransactionDetailDrawerProps {
 }
 
 export function TransactionDetailDrawer({ transaction, open, onClose }: TransactionDetailDrawerProps) {
+  const displayPhone = useDisplayPhone()
   const [showFeeBreakdown, setShowFeeBreakdown] = useState(false)
   const [showRawResponse, setShowRawResponse] = useState(false)
   const [showAllTimeline, setShowAllTimeline] = useState(false)
@@ -362,7 +364,7 @@ export function TransactionDetailDrawer({ transaction, open, onClose }: Transact
                             </div>
                             <div>{transaction.order.customer.name}</div>
                             <div className="text-muted-foreground">{transaction.order.customer.email}</div>
-                            <div className="text-muted-foreground">{transaction.order.customer.phone}</div>
+                            <div className="text-muted-foreground">{displayPhone(transaction.order.customer.phone)}</div>
                             {transaction.order.customer.loyaltyTier && (
                               <div className="flex items-center gap-2">
                                 <Badge variant="secondary" className="capitalize">

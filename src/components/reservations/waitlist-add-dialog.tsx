@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { getAiQuoteEstimate } from "@/lib/waitlist-data"
+import { useLocation } from "@/lib/contexts/LocationContext"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface AddDialogProps {
   open: boolean
@@ -22,6 +24,8 @@ interface AddDialogProps {
 }
 
 export function WaitlistAddDialog({ open, onOpenChange, onAdd }: AddDialogProps) {
+  const { getCurrentLocation } = useLocation()
+  const storeCountry = getCurrentLocation()?.country
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
   const [partySize, setPartySize] = useState(2)
@@ -74,12 +78,15 @@ export function WaitlistAddDialog({ open, onOpenChange, onAdd }: AddDialogProps)
           {/* Phone */}
           <div>
             <Label htmlFor="wl-phone" className="text-xs text-zinc-400">Phone Number *</Label>
-            <Input
+            <PhoneNumberField
               id="wl-phone"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              className="mt-1 border-zinc-800 bg-zinc-800/60 text-zinc-100 placeholder:text-zinc-600"
+              onChange={setPhone}
+              defaultCountry={storeCountry}
+              placeholder="Mobile number"
+              className="mt-1"
+              triggerClassName="border-zinc-800 bg-zinc-800/60 text-zinc-100"
+              inputClassName="border-zinc-800 bg-zinc-800/60 text-zinc-100 placeholder:text-zinc-600"
             />
           </div>
 

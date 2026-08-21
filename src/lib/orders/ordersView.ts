@@ -5,7 +5,7 @@
 
 import type { CatalogI18n } from "@/lib/catalog-i18n";
 
-export type OrdersOrderSource = "table" | "pickup" | "dine_in_no_table";
+export type OrdersOrderSource = "table" | "pickup" | "delivery" | "dine_in_no_table";
 
 export type OrdersUnifiedStatus =
   | "sent"
@@ -119,6 +119,7 @@ export interface OrdersView {
   channels?: {
     deliveryToTable: boolean;
     pickup: boolean;
+    delivery: boolean;
     selfPickup: boolean;
     dineInMode: "staff_seated" | "self_service" | null;
   };

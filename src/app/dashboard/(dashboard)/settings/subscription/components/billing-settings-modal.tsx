@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface BillingSettingsModalProps {
   open: boolean
@@ -16,6 +17,7 @@ interface BillingSettingsModalProps {
 export function BillingSettingsModal({ open, onOpenChange }: BillingSettingsModalProps) {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
+  const [contactPhone, setContactPhone] = useState("+356 9123 4567")
 
   const handleSave = () => {
     setIsLoading(true)
@@ -49,7 +51,13 @@ export function BillingSettingsModal({ open, onOpenChange }: BillingSettingsModa
             </div>
             <div>
               <Label htmlFor="contactPhone">Phone</Label>
-              <Input id="contactPhone" defaultValue="+356 9123 4567" />
+              <PhoneNumberField
+                id="contactPhone"
+                value={contactPhone}
+                onChange={setContactPhone}
+                placeholder="Mobile number"
+                className="mt-1"
+              />
             </div>
           </div>
 

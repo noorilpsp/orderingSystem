@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
+import { useLocation } from "@/lib/contexts/LocationContext"
 import type { OrderItem, Seat } from "@/lib/table-data"
 
 interface PaymentModalProps {
@@ -168,6 +170,8 @@ export function PaymentModal({
   onComplete,
 }: PaymentModalProps) {
   const { formatMoney } = useMerchantLocalization()
+  const { getCurrentLocation } = useLocation()
+  const storeCountry = getCurrentLocation()?.country
   const contextLabel = contextName ?? `Table ${tableNumber}`
   const contextSharedLabel = `${contextLabel} Shared`
   const contextChipLabel = contextChip ?? `T${tableNumber}`
@@ -740,11 +744,13 @@ export function PaymentModal({
                     placeholder="Customer name (optional)"
                     className="h-8"
                   />
-                  <Input
+                  <PhoneNumberField
                     value={customerPhone}
-                    onChange={(e) => onCustomerPhoneChange?.(e.target.value)}
+                    onChange={(phone) => onCustomerPhoneChange?.(phone)}
+                    defaultCountry={storeCountry}
                     placeholder="Phone (optional)"
-                    className="h-8"
+                    triggerClassName="h-8"
+                    inputClassName="h-8"
                   />
                 </div>
                 <Textarea

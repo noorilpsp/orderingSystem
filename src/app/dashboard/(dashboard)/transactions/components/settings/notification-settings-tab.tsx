@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -9,12 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle } from "lucide-react"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface NotificationSettingsTabProps {
   onSettingsChange: () => void
 }
 
 export function NotificationSettingsTab({ onSettingsChange }: NotificationSettingsTabProps) {
+  const [smsPhone, setSmsPhone] = useState("+356 9945 1234")
   return (
     <div className="space-y-6">
       {/* Delivery Channels */}
@@ -75,12 +78,15 @@ export function NotificationSettingsTab({ onSettingsChange }: NotificationSettin
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone number:</Label>
                 <div className="flex items-center gap-2">
-                  <Input
+                  <PhoneNumberField
                     id="phone"
-                    type="tel"
-                    defaultValue="+356 9945 1234"
+                    value={smsPhone}
+                    onChange={(next) => {
+                      setSmsPhone(next)
+                      onSettingsChange()
+                    }}
                     className="max-w-md"
-                    onChange={onSettingsChange}
+                    placeholder="Mobile number"
                   />
                   <Badge variant="secondary" className="gap-1">
                     <CheckCircle className="h-3 w-3" />

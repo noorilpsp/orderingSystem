@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import {
   type WaitlistEntry,
   getElapsedMinutes,
@@ -44,6 +45,7 @@ export function WaitlistDetailPanel({
   onRemove,
   onConvert,
 }: WaitlistDetailPanelProps) {
+  const displayPhone = useDisplayPhone()
   const isDesktop = useMediaQuery("(min-width: 1280px)")
   const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1279px)")
   const panelRef = useRef<HTMLDivElement>(null)
@@ -207,7 +209,7 @@ export function WaitlistDetailPanel({
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Guest Details</h3>
             <div className="space-y-1.5 text-xs text-zinc-300">
               {entry.phone && (
-                <p className="flex items-center gap-1.5"><Phone className="h-3 w-3 text-zinc-500" />{entry.phone}</p>
+                <p className="flex items-center gap-1.5"><Phone className="h-3 w-3 text-zinc-500" />{displayPhone(entry.phone)}</p>
               )}
               {entry.barTab !== undefined && <p>Bar tab: ${entry.barTab}</p>}
               {entry.preferences && <p>Preferences: {entry.preferences}</p>}

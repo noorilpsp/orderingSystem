@@ -40,7 +40,10 @@ export function parseScheduledPickupAt(
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatScheduledPickupNote(scheduledPickupAt: Date): string {
+export function formatScheduledPickupNote(
+  scheduledPickupAt: Date,
+  kind: "pickup" | "delivery" = "pickup",
+): string {
   const day = scheduledPickupAt.toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -50,5 +53,14 @@ export function formatScheduledPickupNote(scheduledPickupAt: Date): string {
     hour: "numeric",
     minute: "2-digit",
   });
-  return `Scheduled pickup: ${day} · ${time}`;
+  switch (kind) {
+    case "delivery":
+      return `Scheduled delivery: ${day} · ${time}`;
+    case "pickup":
+      return `Scheduled pickup: ${day} · ${time}`;
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
 }

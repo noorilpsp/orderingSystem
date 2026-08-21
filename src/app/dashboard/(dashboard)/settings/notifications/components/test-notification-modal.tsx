@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface TestNotificationModalProps {
   open: boolean
@@ -81,19 +82,22 @@ export function TestNotificationModal({ open, onOpenChange, channelId }: TestNot
                   ? "Phone Number"
                   : "User ID"}
             </Label>
-            <Input
-              id="recipient"
-              type={channel === "email" ? "email" : "text"}
-              placeholder={
-                channel === "email"
-                  ? "test@example.com"
-                  : channel === "sms" || channel === "whatsapp"
-                    ? "+1 (555) 000-0000"
-                    : "user123"
-              }
-              value={recipient}
-              onChange={(e) => setRecipient(e.target.value)}
-            />
+            {channel === "sms" || channel === "whatsapp" ? (
+              <PhoneNumberField
+                id="recipient"
+                value={recipient}
+                onChange={setRecipient}
+                placeholder="Mobile number"
+              />
+            ) : (
+              <Input
+                id="recipient"
+                type={channel === "email" ? "email" : "text"}
+                placeholder={channel === "email" ? "test@example.com" : "user123"}
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+              />
+            )}
           </div>
         </div>
         <div className="flex justify-end gap-2">

@@ -30,6 +30,7 @@ import {
   restaurant,
   seatingOptions,
 } from "@/lib/booking-data"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 
 interface StepConfirmationProps {
   state: BookingState
@@ -65,6 +66,7 @@ function AnimatedCheckmark() {
 }
 
 export function StepConfirmation({ state, onBookAnother, onModify }: StepConfirmationProps) {
+  const displayPhone = useDisplayPhone()
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [cancelled, setCancelled] = useState(false)
 
@@ -160,14 +162,14 @@ export function StepConfirmation({ state, onBookAnother, onModify }: StepConfirm
           </div>
           <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
             <Phone className="h-3 w-3" />
-            <span>{restaurant.phone}</span>
+            <span>{displayPhone(restaurant.phone)}</span>
           </div>
         </div>
       </div>
 
       {/* Confirmation sent */}
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
-        {"Confirmation sent to " + (state.phone ? state.phone : confirmationData.phone)}
+        {"Confirmation sent to " + displayPhone(state.phone ? state.phone : confirmationData.phone)}
       </p>
 
       {/* Manage reservation */}

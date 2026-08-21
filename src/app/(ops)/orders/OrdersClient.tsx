@@ -14,7 +14,7 @@ function getPayloadErrorMessage(payload: unknown, fallback: string): string {
   return typeof msg === "string" && msg.trim() ? msg : fallback
 }
 import Link from "next/link"
-import { AlertTriangle, Armchair, Banknote, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MoreHorizontal, Search, ShoppingBag, Store, Users } from "lucide-react"
+import { AlertTriangle, Armchair, Banknote, Bike, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MoreHorizontal, Search, ShoppingBag, Store, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
@@ -65,7 +65,7 @@ import { isOrdersView, type OrdersServiceRequest, type OrdersView } from "@/lib/
 import { extractTableCode, mergeServedTableTicketsForBoard, formatTableSeatGuestLabel } from "@/lib/orders/buildTableCheckOrder"
 import { groupOpsOrderItems } from "@/lib/orders/groupOpsOrderItems"
 
-type OrderSource = "table" | "pickup" | "dine_in_no_table"
+type OrderSource = "table" | "pickup" | "delivery" | "dine_in_no_table"
 type UnifiedStatus = "sent" | "preparing" | "ready" | "served" | "voided" | "refunded"
 type LocalWaveStatus = "served" | "ready" | "cooking" | "fired" | "held" | "not_started"
 type PaymentState = "paid" | "unpaid"
@@ -201,6 +201,8 @@ function sourceLabelFor(t: OpsTranslate, source: OrderSource): string {
       return t("source.table")
     case "pickup":
       return t("source.pickup")
+    case "delivery":
+      return t("source.delivery")
     case "dine_in_no_table":
       return t("source.dine")
     default: {
@@ -242,6 +244,7 @@ function orderCardGuestLine(order: UnifiedOrder, t: OpsTranslate): string {
 const sourceChipClass: Record<OrderSource, string> = {
   table: "border-cyan-300/45 bg-cyan-500/12 text-cyan-100",
   pickup: "border-violet-300/45 bg-violet-500/12 text-violet-100",
+  delivery: "border-sky-300/45 bg-sky-500/12 text-sky-100",
   dine_in_no_table: "border-amber-300/45 bg-amber-500/12 text-amber-100",
 }
 
@@ -670,7 +673,7 @@ function isOrderVisibleInBoardMode(order: UnifiedOrder, mode: BoardMode): boolea
 }
 
 function isCounterStyleOrder(order: UnifiedOrder): boolean {
-  if (order.source === "pickup" || order.source === "dine_in_no_table") return true
+  if (order.source === "pickup" || order.source === "delivery" || order.source === "dine_in_no_table") return true
   if (order.source !== "table") return false
   // Kitchen tickets and rolled-up table checks (paid once).
   return order.id.startsWith("order-") || isTableCheck(order)
@@ -721,6 +724,10 @@ function getIdentifier(order: UnifiedOrder): {
   if (order.source === "pickup") {
     const code = order.label.toUpperCase().startsWith("PU-") ? order.label : `PU-${order.label}`
     return { Icon: ShoppingBag, text: code }
+  }
+  if (order.source === "delivery") {
+    const code = order.label.toUpperCase().startsWith("DL-") ? order.label : `DL-${order.label}`
+    return { Icon: Bike, text: code }
   }
   const code = order.label.toUpperCase().startsWith("DI-") ? order.label : `DI-${order.label}`
   return { Icon: Store, text: code }
@@ -1876,6 +1883,7 @@ function OrdersBoard({
       all: base.length,
       table: base.filter((o) => o.source === "table").length,
       pickup: base.filter((o) => o.source === "pickup").length,
+      delivery: base.filter((o) => o.source === "delivery").length,
       dineIn: base.filter((o) => o.source === "dine_in_no_table").length,
     }
   }, [allOrders, boardMode, query])
@@ -1914,6 +1922,15 @@ function OrdersBoard({
         label: `${t("source.pickup")} (${sourceCounts.pickup})`,
         shortLabel: `${t("source.pickup")} (${sourceCounts.pickup})`,
         Icon: ShoppingBag,
+      })
+    }
+
+    if (channels?.delivery || sourceCounts.delivery > 0) {
+      channelFilters.push({
+        id: "delivery",
+        label: `${t("source.delivery")} (${sourceCounts.delivery})`,
+        shortLabel: `${t("source.delivery")} (${sourceCounts.delivery})`,
+        Icon: Bike,
       })
     }
 
@@ -2510,6 +2527,7 @@ function OrdersBoard({
                       <span className={cn("inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-semibold", sourceChipClass[selectedOrder.source])}>
                         {selectedOrder.source === "dine_in_no_table" ? <Store className="h-3.5 w-3.5" /> : null}
                         {selectedOrder.source === "pickup" ? <ShoppingBag className="h-3.5 w-3.5" /> : null}
+                        {selectedOrder.source === "delivery" ? <Bike className="h-3.5 w-3.5" /> : null}
                         <span>{selectedSourceLabel}</span>
                       </span>
                       {selectedIsCounterOrder ? (

@@ -27,7 +27,7 @@ import type { GuestSplitProposalRecord } from "@/lib/db/schema/guest-table-split
 import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 
-type OrderType = "dine-in" | "pickup";
+type OrderType = "dine-in" | "pickup" | "delivery";
 type ToastType = "success" | "warning";
 type ServiceActionResult = { ok: boolean; message: string };
 

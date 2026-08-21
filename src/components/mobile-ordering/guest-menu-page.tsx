@@ -609,8 +609,12 @@ export function GuestMenuPage() {
                 showToast("Pickup is not available", "warning");
                 return;
               }
+              if (next === "delivery" && orderModes.delivery?.enabled !== true) {
+                showToast("Delivery is not available", "warning");
+                return;
+              }
               setOrderType(next);
-              if (next === "pickup") setCheckRequested(false);
+              if (next !== "dine-in") setCheckRequested(false);
             }}
             onTableNumberChange={setTableNumber}
             onToast={showToast}

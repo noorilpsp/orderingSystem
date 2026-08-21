@@ -15,18 +15,45 @@ import {
   formatPickupScheduleLabel,
   type GuestHoursEntry,
 } from "@/lib/public-menu/buildPickupScheduleSlots";
-import { useGuestT } from "@/lib/guest-i18n";
+import { useGuestT, type EnMessageKey } from "@/lib/guest-i18n";
 
 export type PickupTimingMode = "now" | "schedule";
+export type FulfillmentScheduleKind = "pickup" | "delivery";
 
 interface PickupTimingPickerProps {
   mode: PickupTimingMode;
   scheduledAt: string | null;
   hours?: GuestHoursEntry[] | null;
   prepMinutes?: number;
+  kind?: FulfillmentScheduleKind;
   onModeChange: (mode: PickupTimingMode) => void;
   onScheduledAtChange: (iso: string | null) => void;
   className?: string;
+}
+
+function scheduleCopy(kind: FulfillmentScheduleKind): {
+  sheetTitle: EnMessageKey;
+  timeLabel: EnMessageKey;
+  noTimes: EnMessageKey;
+} {
+  switch (kind) {
+    case "delivery":
+      return {
+        sheetTitle: "checkout.scheduleDelivery",
+        timeLabel: "checkout.deliveryTime",
+        noTimes: "checkout.noDeliveryTimes",
+      };
+    case "pickup":
+      return {
+        sheetTitle: "checkout.schedulePickup",
+        timeLabel: "checkout.pickupTime",
+        noTimes: "checkout.noTimes",
+      };
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
 }
 
 export function PickupTimingPicker({
@@ -34,11 +61,13 @@ export function PickupTimingPicker({
   scheduledAt,
   hours,
   prepMinutes = 15,
+  kind = "pickup",
   onModeChange,
   onScheduledAtChange,
   className,
 }: PickupTimingPickerProps) {
   const t = useGuestT();
+  const copy = scheduleCopy(kind);
   const { days, slots } = useMemo(
     () => buildPickupSchedule({ hours, prepMinutes, daysAhead: 7 }),
     [hours, prepMinutes],
@@ -170,12 +199,12 @@ export function PickupTimingPicker({
         >
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
           <SheetHeader className="bg-transparent px-0 pb-3 text-left">
-            <SheetTitle>{t("checkout.schedulePickup")}</SheetTitle>
+            <SheetTitle>{t(copy.sheetTitle)}</SheetTitle>
           </SheetHeader>
 
           {days.length === 0 ? (
             <p className="py-6 text-sm text-muted-foreground">
-              {t("checkout.noTimes")}
+              {t(copy.noTimes)}
             </p>
           ) : (
             <div className="space-y-4">
@@ -229,7 +258,7 @@ export function PickupTimingPicker({
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">{t("checkout.pickupTime")}</p>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">{t(copy.timeLabel)}</p>
                 {draftClosed ? (
                   <div className="rounded-xl border border-dashed border-border/80 bg-muted/30 px-4 py-6 text-center">
                     <p className="text-sm font-semibold text-foreground">{t("checkout.closed")}</p>

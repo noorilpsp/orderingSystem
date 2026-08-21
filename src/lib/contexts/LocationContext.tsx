@@ -132,3 +132,7 @@ export function useLocation() {
   }
   return context;
 }
+
+export function useLocationOptional() {
+  return useContext(LocationContext) ?? null;
+}

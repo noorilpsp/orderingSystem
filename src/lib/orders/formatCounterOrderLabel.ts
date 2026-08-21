@@ -10,8 +10,8 @@ export function formatCounterOrderLabel(input: {
 }): string {
   const type = (input.orderType ?? "").trim().toLowerCase();
   const isPickup =
-    type === "pickup" || type === "delivery" || type === "takeaway";
-  const prefix = isPickup ? "PU" : "DI";
+    type === "pickup" || type === "takeaway";
+  const prefix = type === "delivery" ? "DL" : isPickup ? "PU" : "DI";
   const raw = (input.orderNumber ?? "").trim();
   if (!raw) {
     return `${prefix}-${input.orderId?.slice(0, 6) ?? "???"}`;
@@ -21,12 +21,13 @@ export function formatCounterOrderLabel(input: {
   // Keep explicit ticket formats as stored (including table tickets like T1-4821).
   if (
     upper.startsWith("PU-") ||
+    upper.startsWith("DL-") ||
     upper.startsWith("DI-") ||
     /^T[\w-]+$/i.test(raw)
   ) {
     return raw;
   }
-  if (upper.startsWith("PU") || upper.startsWith("DI")) {
+  if (upper.startsWith("PU") || upper.startsWith("DL") || upper.startsWith("DI")) {
     // Already prefixed without a dash (rare)
     return raw;
   }

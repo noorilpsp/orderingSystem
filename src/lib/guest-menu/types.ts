@@ -24,6 +24,8 @@ export type GuestRestaurant = {
   availableLanguages: Array<"en" | "ar">;
   dateFormat: string | null;
   numberFormat: string | null;
+  /** Store/location country name or ISO code. */
+  country?: string | null;
 };
 
 export type GuestCategory = {
@@ -124,8 +126,15 @@ export type GuestOrderModes = {
     estimated_time_minutes?: number;
     instructions?: string;
   };
-  delivery?: { enabled: boolean; estimated_time_minutes?: number };
+  delivery?: {
+    enabled: boolean;
+    estimated_time_minutes?: number;
+    minimum_order?: number;
+    delivery_fee?: number;
+  };
 };
+
+export type GuestOrderType = "dine-in" | "pickup" | "delivery";
 
 export const DEFAULT_PICKUP_INSTRUCTIONS =
   "Ring the bell at the side entrance.";

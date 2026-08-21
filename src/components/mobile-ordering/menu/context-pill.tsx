@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, MoonStar, Package, Sparkles, Sun, UtensilsCrossed, X } from "lucide-react";
+import { ChevronDown, MoonStar, Package, Bike, Sparkles, Sun, UtensilsCrossed, X } from "lucide-react";
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
 import { useGuestLocale, translateGuestMessage, type GuestLocale } from "@/lib/guest-i18n";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 import { resolveAllergenLabel } from "@/lib/catalog-i18n";
 
-type OrderType = "dine-in" | "pickup";
+type OrderType = "dine-in" | "pickup" | "delivery";
 export type ThemePreview = "classic" | "night" | "vivid";
 
 interface ContextPillProps {
@@ -101,10 +101,13 @@ export function ContextPill({
   };
 
   const isDineIn = orderType === "dine-in";
+  const isDelivery = orderType === "delivery";
   const hasTableSelected = tableNumber.trim().length > 0;
   const dineInEnabled = publicMenu?.orderModes?.dine_in?.enabled !== false;
   const pickupEnabled = publicMenu?.orderModes?.pickup?.enabled !== false;
-  const canSwitchToPickup = isDineIn && pickupEnabled;
+  const deliveryEnabled = publicMenu?.orderModes?.delivery?.enabled === true;
+  const canSwitchToPickup = orderType !== "pickup" && pickupEnabled;
+  const canSwitchToDelivery = !isDelivery && deliveryEnabled;
   // Delivery-to-table: table comes from QR — don't offer "switch to dine-in".
   // Self-pickup: guests may switch between counter dine-in and pickup.
   const canSwitchToDineIn = !isDineIn && dineInEnabled && isSelfService;
@@ -200,6 +203,8 @@ export function ContextPill({
                 <span className="context-dot-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
               </span>
+            ) : isDelivery ? (
+              <Bike className="h-4 w-4 shrink-0 text-sky-300" />
             ) : (
               <Package className="h-4 w-4 shrink-0 text-amber-300" />
             )}
@@ -249,7 +254,9 @@ export function ContextPill({
                   </span>
                 )
               ) : (
-                <span className="font-semibold">{t("context.pickup")}</span>
+                <span className="font-semibold">
+                  {isDelivery ? t("context.delivery") : t("context.pickup")}
+                </span>
               )}
             </p>
           </div>
@@ -370,6 +377,21 @@ export function ContextPill({
               </Button>
             ) : null}
 
+            {canSwitchToDelivery ? (
+              <Button
+                type="button"
+                className="mt-2 h-11 w-full justify-center gap-2 rounded-xl border border-sky-300/45 bg-sky-500/25 text-sm font-semibold text-sky-50 shadow-[0_8px_20px_rgba(14,165,233,0.18)] hover:bg-sky-500/35 dark:border-sky-300/40 dark:bg-sky-500/20 dark:text-sky-50 dark:hover:bg-sky-500/30 vivid:border-sky-200/55 vivid:bg-sky-400/30 vivid:text-white"
+                onClick={() => {
+                  onOrderTypeChange("delivery");
+                  onToast(t("context.switchedToDelivery"));
+                  setExpanded(false);
+                }}
+              >
+                <Bike className="h-4 w-4" />
+                <span>{t("context.switchToDelivery")}</span>
+              </Button>
+            ) : null}
+
             {canSwitchToDineIn ? (
               <Button
                 type="button"
@@ -453,7 +475,7 @@ export function ContextPill({
             </div>
             ) : null}
 
-            {!isDineIn && pickupInstructions ? (
+            {!isDineIn && pickupInstructions && orderType === "pickup" ? (
               <div className="mt-1 rounded-lg px-2 py-2 text-sm text-white/75 dark:text-blue-200/80 vivid:text-white/80">
                 {t("context.pickupInstructions")} {pickupInstructions}
               </div>

@@ -29,6 +29,7 @@ import {
   getUpcomingReservations,
 } from "@/lib/reservations-data"
 import { useReservationsData } from "@/lib/reservations/reservationsDataContext"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import { toast } from "sonner"
 
 function getRiskDot(risk: Reservation["risk"]): React.ReactNode {
@@ -77,6 +78,7 @@ function ReservationCard({
   currentTime: string
   locationName: string
 }) {
+  const displayPhone = useDisplayPhone()
   const isLate =
     reservation.status === "confirmed" &&
     (() => {
@@ -217,7 +219,7 @@ function ReservationCard({
           </PopoverTrigger>
           <PopoverContent className="w-72 border-zinc-700 bg-zinc-900 p-3">
             <p className="mb-2 text-xs text-muted-foreground">
-              Send to {reservation.phone ?? "Guest"}:
+              Send to {displayPhone(reservation.phone) || "Guest"}:
             </p>
             <p className="mb-3 rounded-md border border-zinc-800 bg-zinc-950 p-2 text-xs text-foreground">
               Hi {reservation.guestName.split(" ")[0]}, your table is ready at{" "}

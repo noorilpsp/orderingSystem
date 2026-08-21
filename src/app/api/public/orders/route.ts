@@ -12,6 +12,7 @@ import {
   getPublicGuestIdempotencyUserId,
 } from "@/lib/public-menu/createPublicOrder";
 import { createGuestOrderClaimToken } from "@/lib/public-menu/guest-order-claim-token";
+import { parseGuestDeliveryAddressBody } from "@/lib/public-menu/guest-delivery-address";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest) {
             : undefined,
         phone: typeof body.phone === "string" ? body.phone : null,
         guestName: typeof body.guestName === "string" ? body.guestName : null,
+        deliveryAddress: parseGuestDeliveryAddressBody(body.deliveryAddress),
         items: body.items ?? [],
       }),
     );

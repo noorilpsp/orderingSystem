@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import type { GuestProfile } from "@/lib/guests-data"
 import { getInitials, getAvatarColor, getSegmentLabel, getSegmentColor, formatCurrency } from "@/lib/guests-data"
 
@@ -53,6 +54,7 @@ function tagColor(tag: string): string {
 }
 
 export function GuestProfileHeader({ guest, onEdit }: ProfileHeaderProps) {
+  const displayPhone = useDisplayPhone()
   const tierColor = guest.vipTier === "gold" ? "text-amber-400" : guest.vipTier === "silver" ? "text-zinc-300" : "text-orange-400"
 
   return (
@@ -83,7 +85,7 @@ export function GuestProfileHeader({ guest, onEdit }: ProfileHeaderProps) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
-              <Phone className="h-3 w-3" />{guest.phone}
+              <Phone className="h-3 w-3" />{displayPhone(guest.phone)}
             </span>
             {guest.email && (
               <span className="flex items-center gap-1">

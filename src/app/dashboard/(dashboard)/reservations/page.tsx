@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -63,6 +64,7 @@ import { useRestaurantStore } from "@/store/restaurantStore"
 import { SECTION_CONFIG } from "@/store/types"
 import { STATUS_COLORS } from "@/lib/constants"
 import { cn } from "@/lib/utils"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts"
 import { useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -72,6 +74,7 @@ import ConnectedRecords from "@/components/connected/ConnectedRecords"
 type ViewMode = "list" | "timeline" | "calendar"
 
 export default function ReservationsPage() {
+  const displayPhone = useDisplayPhone()
   const reservations = useRestaurantStore((s) => s.reservations)
   const tables = useRestaurantStore((s) => s.tables)
   const waitlist = useRestaurantStore((s) => s.waitlist)
@@ -99,6 +102,7 @@ export default function ReservationsPage() {
   const [isInsightsCollapsed, setIsInsightsCollapsed] = useState(false)
   const [showCollapseButton, setShowCollapseButton] = useState(false)
   const [sidebarHeight, setSidebarHeight] = useState<number | null>(null)
+  const [newReservationPhone, setNewReservationPhone] = useState("")
 
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -1353,7 +1357,7 @@ export default function ReservationsPage() {
                     <Phone className="size-4 text-muted-foreground" />
                     <div>
                       <p className="text-xs text-muted-foreground">Phone</p>
-                      <p className="text-sm font-medium">{reservation.phone}</p>
+                      <p className="text-sm font-medium">{displayPhone(reservation.phone)}</p>
                     </div>
                   </div>
                 </div>
@@ -1587,7 +1591,12 @@ export default function ReservationsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone *</Label>
-                  <Input id="phone" type="tel" placeholder="(555) 123-4567" />
+                  <PhoneNumberField
+                    id="phone"
+                    value={newReservationPhone}
+                    onChange={setNewReservationPhone}
+                    placeholder="Mobile number"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>

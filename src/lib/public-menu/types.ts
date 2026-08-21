@@ -83,8 +83,19 @@ export type CreatePublicOrderInput = {
   rewardId?: string;
   /** Walk-in guest mobile number so the restaurant can call about the order. */
   phone?: string | null;
-  /** Optional guest name for dine-in table seats. */
+  /** Optional guest name for dine-in seats or delivery. */
   guestName?: string | null;
+  deliveryAddress?: {
+    nickname?: string | null;
+    line1: string;
+    building?: string | null;
+    line2?: string | null;
+    city: string;
+    intercom?: string | null;
+    phone?: string | null;
+    postalCode: string;
+    instructions?: string | null;
+  } | null;
   items: PublicOrderItemInput[];
 };
 

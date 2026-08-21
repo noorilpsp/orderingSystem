@@ -37,6 +37,7 @@ export const arMessages: Record<OpsMessageKey, string> = {
   "filter.all": "الكل",
   "source.table": "طاولة",
   "source.pickup": "استلام",
+  "source.delivery": "توصيل",
   "source.dine": "داخلي",
   "source.tableWithCode": "طاولة {code}",
 

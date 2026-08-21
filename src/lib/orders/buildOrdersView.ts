@@ -36,6 +36,7 @@ import {
   hasBillRequest,
   hasWaiterRequestAlert,
 } from "@/lib/floor-map/acknowledgeTableService";
+import { sweepIdleEmptyGuestSessionsForLocation } from "@/lib/public-menu/claimGuestTableSeat";
 import {
   deriveCanonicalWaveStatusFromItemStatuses,
   mapCanonicalWaveStatusToStoreLikeStatus,
@@ -255,9 +256,16 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       averagePrepTimeMinutes: true,
       orderModes: true,
       taxRate: true,
+      country: true,
     },
   });
   if (!locationRow) return null;
+
+  try {
+    await sweepIdleEmptyGuestSessionsForLocation(locationId);
+  } catch {
+    // Board still loads; empty sessions are omitted below.
+  }
 
   const locationName = locationRow.name ?? "Restaurant";
   const taxRatePercent = coerceTaxRatePercent(locationRow.taxRate);
@@ -275,6 +283,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
     15;
   const dineInEnabled = orderModesRaw?.dine_in?.enabled !== false;
   const pickupEnabled = orderModesRaw?.pickup?.enabled !== false;
+  const deliveryEnabled = orderModesRaw?.delivery?.enabled === true;
   const dineInMode =
     orderModesRaw?.dine_in?.guest_session_mode === "self_service"
       ? ("self_service" as const)
@@ -285,6 +294,7 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
     deliveryToTable: dineInEnabled && dineInMode === "staff_seated",
     selfPickup: dineInEnabled && dineInMode === "self_service",
     pickup: pickupEnabled,
+    delivery: deliveryEnabled,
     dineInMode,
   };
 
@@ -660,6 +670,8 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
             ? Math.max(...sessOrders.map((o) => o.updatedAt?.getTime() ?? 0))
             : openedAt;
 
+        if (allItems.length === 0) continue;
+
         const money = withDerivedTax({
           subtotal,
           taxAmount,
@@ -912,15 +924,21 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
     const paymentStatus = (o.paymentStatus ?? "unpaid") as string;
     const status = mapOrderStatusToUnified(o.status, paymentStatus);
     const source: OrdersOrderSource =
-      o.orderType === "pickup" || o.orderType === "delivery"
-        ? "pickup"
-        : "dine_in_no_table";
+      o.orderType === "delivery"
+        ? "delivery"
+        : o.orderType === "pickup"
+          ? "pickup"
+          : "dine_in_no_table";
     const code = formatCounterOrderLabel({
       orderNumber: o.orderNumber,
       orderType: o.orderType,
       orderId: o.id,
     });
-    const customerName = formatGuestContactLabel(o.customer?.name, o.customer?.phone);
+    const customerName = formatGuestContactLabel(
+      o.customer?.name,
+      o.customer?.phone,
+      locationRow.country,
+    );
     const paymentState = resolveOrdersPaymentState(paymentStatus);
     const createdAt = o.createdAt?.getTime() ?? 0;
     const stageEnteredAt = buildStageEnteredAt(createdAt, timelineByOrder.get(o.id) ?? []);
@@ -929,7 +947,10 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       status === "sent" &&
       isScheduledOrderParked({
         scheduledPickupAt: o.scheduledPickupAt,
-        prepMinutes,
+        prepMinutes:
+          o.orderType === "delivery"
+            ? orderModesRaw?.delivery?.estimated_time_minutes ?? prepMinutes
+            : prepMinutes,
       });
 
     const money = withDerivedTax({
@@ -943,7 +964,8 @@ export async function buildOrdersView(locationId: string): Promise<OrdersView | 
       id: `order-${o.id}`,
       source,
       label: code,
-      sectionLabel: source === "pickup" ? "Pickup" : "Dine",
+      sectionLabel:
+        source === "delivery" ? "Delivery" : source === "pickup" ? "Pickup" : "Dine",
       guestLabel: customerName,
       status,
       createdAt,

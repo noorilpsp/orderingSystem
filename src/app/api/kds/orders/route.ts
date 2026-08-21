@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const location = await db.query.merchantLocations.findFirst({
       where: eq(merchantLocations.id, locationId),
-      columns: { id: true, merchantId: true },
+      columns: { id: true, merchantId: true, country: true },
     });
 
     if (!location) {
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
         order.table?.tableNumber ??
         null;
       const customerName = order.customer
-        ? formatGuestContactLabel(order.customer.name, order.customer.phone)
+        ? formatGuestContactLabel(order.customer.name, order.customer.phone, location.country)
         : null;
 
       return {

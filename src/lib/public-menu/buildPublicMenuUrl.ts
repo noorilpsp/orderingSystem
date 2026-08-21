@@ -5,7 +5,7 @@ export type PublicMenuPath = "menu" | "checkout" | "order-confirmation";
 export type BuildPublicMenuUrlInput = {
   storeSlug: string;
   tableNumber?: string | null;
-  mode?: "dine-in" | "pickup" | "on_site";
+  mode?: "dine-in" | "pickup" | "delivery" | "on_site";
   path?: PublicMenuPath;
   origin?: string;
   extraParams?: Record<string, string | undefined>;
@@ -13,7 +13,7 @@ export type BuildPublicMenuUrlInput = {
 
 export function buildGuestMenuQueryString(input: {
   tableNumber?: string | null;
-  mode?: "dine-in" | "pickup" | "on_site";
+  mode?: "dine-in" | "pickup" | "delivery" | "on_site";
   extraParams?: Record<string, string | undefined>;
 }): string {
   const params = new URLSearchParams();
@@ -23,6 +23,8 @@ export function buildGuestMenuQueryString(input: {
 
   if (input.mode === "pickup") {
     params.set("mode", "pickup");
+  } else if (input.mode === "delivery") {
+    params.set("mode", "delivery");
   } else if (input.mode === "dine-in" || input.mode === "on_site") {
     params.set("mode", "dine-in");
   }
@@ -72,7 +74,7 @@ export function buildTableQrMenuUrl(
   });
 }
 
-export type GuestMenuQrVariant = "table" | "pickup" | "dine-in";
+export type GuestMenuQrVariant = "table" | "pickup" | "delivery" | "dine-in";
 
 export function buildGuestMenuQrUrl(input: {
   storeSlug: string;
@@ -92,6 +94,13 @@ export function buildGuestMenuQrUrl(input: {
       return buildPublicMenuUrl({
         storeSlug: input.storeSlug,
         mode: "pickup",
+        path: "menu",
+        origin,
+      });
+    case "delivery":
+      return buildPublicMenuUrl({
+        storeSlug: input.storeSlug,
+        mode: "delivery",
         path: "menu",
         origin,
       });

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Settings, TestTube2, Plus, Search, MoreVertical, CheckCircle2, AlertCircle, Clock } from "lucide-react"
 import { mockChannels, mockTemplates, mockTriggers, mockDeliveryLogs } from "./data"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { TestNotificationModal } from "./components/test-notification-modal"
 import { EditTemplateModal } from "./components/edit-template-modal"
@@ -24,6 +25,7 @@ import type { NotificationChannel, NotificationTemplate } from "./types"
 import type { NotificationTrigger, DeliveryLog } from "./types"
 
 export default function NotificationsPage() {
+  const displayPhone = useDisplayPhone()
   const [channels, setChannels] = useState(mockChannels)
   const [templates] = useState(mockTemplates)
   const [triggers, setTriggers] = useState(mockTriggers)
@@ -558,7 +560,7 @@ export default function NotificationsPage() {
                         <div className="text-sm">
                           <div className="font-medium">{log.recipient.name}</div>
                           {log.recipient.email && <div className="text-muted-foreground">{log.recipient.email}</div>}
-                          {log.recipient.phone && <div className="text-muted-foreground">{log.recipient.phone}</div>}
+                          {log.recipient.phone && <div className="text-muted-foreground">{displayPhone(log.recipient.phone)}</div>}
                         </div>
                       </td>
                       <td className="p-4">

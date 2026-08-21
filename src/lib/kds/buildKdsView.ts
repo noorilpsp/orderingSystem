@@ -20,7 +20,7 @@ import { formatGuestContactLabel } from "@/lib/orders/guestContactLabel";
 export async function buildKdsView(locationId: string): Promise<KdsView | null> {
   const locationRow = await db.query.merchantLocations.findFirst({
     where: eq(merchantLocations.id, locationId),
-    columns: { id: true, name: true },
+    columns: { id: true, name: true, country: true },
   });
   if (!locationRow) return null;
 
@@ -114,7 +114,7 @@ export async function buildKdsView(locationId: string): Promise<KdsView | null> 
     ordersList.map((o) => [
       o.id,
       o.customer
-        ? formatGuestContactLabel(o.customer.name, o.customer.phone)
+        ? formatGuestContactLabel(o.customer.name, o.customer.phone, locationRow.country)
         : null,
     ]),
   );

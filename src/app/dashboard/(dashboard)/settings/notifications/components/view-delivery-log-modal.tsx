@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, AlertCircle, Clock } from "lucide-react"
 import type { DeliveryLog } from "../types"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 
 interface ViewDeliveryLogModalProps {
   open: boolean
@@ -12,6 +13,7 @@ interface ViewDeliveryLogModalProps {
 }
 
 export function ViewDeliveryLogModal({ open, onOpenChange, log }: ViewDeliveryLogModalProps) {
+  const displayPhone = useDisplayPhone()
   if (!log) return null
 
   return (
@@ -69,7 +71,7 @@ export function ViewDeliveryLogModal({ open, onOpenChange, log }: ViewDeliveryLo
               {log.recipient.phone && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Phone:</span>
-                  <span>{log.recipient.phone}</span>
+                  <span>{displayPhone(log.recipient.phone)}</span>
                 </div>
               )}
             </div>

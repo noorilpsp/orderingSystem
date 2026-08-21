@@ -7,12 +7,16 @@ import { Link } from "@/components/ui/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { customerLogin, customerSignup } from "@/app/actions/customer-auth";
+import { PhoneNumberField } from "@/components/shared/phone-number-field";
+import { useStorePhoneCountry } from "@/lib/public-menu/use-store-phone-country";
 
 type CustomerAuthMode = "login" | "signup";
 
 type CustomerAuthFormProps = {
   mode: CustomerAuthMode;
   returnTo?: string;
+  storeSlug?: string | null;
+  defaultPhoneCountry?: string | null;
 };
 
 function ExternalLinkIcon() {
@@ -40,52 +44,42 @@ function floatingLabelClass(active: boolean) {
   }`;
 }
 
-export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
+export function CustomerAuthForm({
+  mode,
+  returnTo,
+  storeSlug = null,
+  defaultPhoneCountry = null,
+}: CustomerAuthFormProps) {
   const isSignup = mode === "signup";
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [step, setStep] = useState<"name" | "phone" | "email" | "password">(
-    isSignup ? "name" : "email",
-  );
+  const [step, setStep] = useState<"email" | "password">(isSignup ? "password" : "email");
   const [nameFocused, setNameFocused] = useState(false);
-  const [phoneFocused, setPhoneFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const phoneCountry = useStorePhoneCountry(defaultPhoneCountry, storeSlug, returnTo);
+  const authQuery = (() => {
+    const params = new URLSearchParams();
+    if (returnTo) params.set("returnTo", returnTo);
+    if (storeSlug) params.set("store", storeSlug);
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  })();
 
-  const alternateHref = isSignup
-    ? `/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`
-    : `/signup${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+  const alternateHref = isSignup ? `/login${authQuery}` : `/signup${authQuery}`;
 
   const showName = isSignup;
-  const showPhone = isSignup && step !== "name";
-  const showEmail = !isSignup || step === "email" || step === "password";
-  const showPassword = step === "password";
+  const showPhone = isSignup;
+  const showEmail = true;
+  const showPassword = isSignup || step === "password";
 
   const isValidPhone = phone.replace(/\D/g, "").length >= 7;
-
-  const advanceFromName = () => {
-    if (name.trim().length === 0) {
-      setFieldError("Name is required");
-      return;
-    }
-    setFieldError(null);
-    setStep("phone");
-  };
-
-  const advanceFromPhone = () => {
-    if (!isValidPhone) {
-      setFieldError("Please enter a valid mobile number");
-      return;
-    }
-    setFieldError(null);
-    setStep("email");
-  };
 
   const advanceFromEmail = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -102,19 +96,27 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
     setError(null);
     setFieldError(null);
 
-    if (isSignup && step === "name") {
-      advanceFromName();
-      return;
-    }
-    if (isSignup && step === "phone") {
-      advanceFromPhone();
-      return;
-    }
-    if (step === "email") {
+    if (!isSignup && step === "email") {
       advanceFromEmail();
       return;
     }
 
+    if (isSignup && !name.trim()) {
+      setFieldError("Name is required");
+      return;
+    }
+    if (isSignup && !isValidPhone) {
+      setFieldError("Please enter a valid mobile number");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFieldError("Please enter a valid email address");
+      return;
+    }
+    if (isSignup && password.length < 6) {
+      setFieldError("Password must be at least 6 characters");
+      return;
+    }
     if (!email || !password || (isSignup && (!name.trim() || !isValidPhone))) {
       setError("Please fill in all fields");
       return;
@@ -204,11 +206,7 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
     );
   }
 
-  const nameConnected = showName && (showPhone || showEmail);
-  const phoneConnectedTop = showPhone && showName;
-  const phoneConnectedBottom = showPhone && showEmail;
-  const emailConnectedTop = showEmail && (showName || showPhone || showPassword);
-  const emailConnectedBottom = showEmail && showPassword;
+  const emailConnectedBottom = !isSignup && showPassword;
 
   return (
     <div className="w-full max-w-2xl">
@@ -248,8 +246,8 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
             </div>
           ) : null}
 
-          <form onSubmit={handleSubmit} className="space-y-0">
-            <div className="space-y-0">
+          <form onSubmit={handleSubmit} className={isSignup ? "space-y-3" : "space-y-0"}>
+            <div className={isSignup ? "space-y-3" : "space-y-0"}>
               {showName ? (
                 <div className="relative">
                   <input
@@ -266,11 +264,11 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
                     onFocus={() => setNameFocused(true)}
                     onBlur={() => setNameFocused(false)}
                     required
-                    className={`w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border transition-all text-foreground focus:outline-none focus:ring-0 ${
+                    className={`w-full h-14 px-4 pt-5 pb-1 text-base bg-background border transition-all text-foreground focus:outline-none focus:ring-0 rounded-xl ${
                       fieldError
                         ? "border-red-500 focus:border-red-500"
                         : "border-border/50 focus:border-blue-500"
-                    } ${nameConnected ? "rounded-t-xl border-b-0" : "rounded-xl"}`}
+                    }`}
                   />
                   <label
                     htmlFor="customer-name"
@@ -278,86 +276,34 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
                   >
                     Name
                   </label>
-                  {!showPhone ? (
-                    <Button
-                      type="button"
-                      onClick={advanceFromName}
-                      disabled={name.trim().length === 0 || loading}
-                      size="icon"
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
-                        name.trim().length === 0 || loading
-                          ? "opacity-40 cursor-not-allowed"
-                          : "cursor-pointer"
-                      }`}
-                    >
-                      <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
-                      <span className="sr-only">Continue</span>
-                    </Button>
-                  ) : null}
                 </div>
               ) : null}
 
               {showPhone ? (
-                <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
-                  <input
+                <div className="relative">
+                  <PhoneNumberField
                     id="customer-phone"
-                    type="tel"
-                    autoComplete="tel"
-                    inputMode="tel"
-                    placeholder=""
                     value={phone}
-                    onChange={(event) => {
-                      setPhone(event.target.value);
+                    onChange={(next) => {
+                      setPhone(next);
                       if (error) setError(null);
                       if (fieldError) setFieldError(null);
                     }}
-                    onFocus={() => setPhoneFocused(true)}
-                    onBlur={() => setPhoneFocused(false)}
-                    required
-                    autoFocus={step === "phone"}
-                    className={`w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border transition-all text-foreground focus:outline-none focus:ring-0 ${
-                      fieldError
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-border/50 focus:border-blue-500"
-                    } ${
-                      phoneConnectedTop && phoneConnectedBottom
-                        ? "rounded-none border-t-border/30 border-b-0"
-                        : phoneConnectedTop && !phoneConnectedBottom
-                          ? "rounded-b-xl border-t-border/30"
-                          : phoneConnectedBottom
-                            ? "rounded-t-xl border-b-0"
-                            : "rounded-xl"
+                    invalid={Boolean(fieldError)}
+                    placeholder="Mobile number"
+                    defaultCountry={phoneCountry}
+                    triggerClassName={`h-14 rounded-xl ${
+                      fieldError ? "border-red-500" : "border-border/50"
+                    }`}
+                    inputClassName={`h-14 rounded-xl bg-background px-4 text-base shadow-none focus-visible:border-blue-500 focus-visible:ring-0 ${
+                      fieldError ? "border-red-500" : "border-border/50"
                     }`}
                   />
-                  <label
-                    htmlFor="customer-phone"
-                    className={floatingLabelClass(phoneFocused || phone.length > 0)}
-                  >
-                    Mobile number
-                  </label>
-                  {!showEmail ? (
-                    <Button
-                      type="button"
-                      onClick={advanceFromPhone}
-                      disabled={!isValidPhone || loading}
-                      size="icon"
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
-                        !isValidPhone || loading
-                          ? "opacity-40 cursor-not-allowed"
-                          : "cursor-pointer"
-                      }`}
-                    >
-                      <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
-                      <span className="sr-only">Continue</span>
-                    </Button>
-                  ) : null}
                 </div>
               ) : null}
 
               {showEmail ? (
-                <div
-                  className={`relative ${showName ? "animate-in fade-in slide-in-from-top-2 duration-300" : ""}`}
-                >
+                <div className="relative">
                   <input
                     id="customer-email"
                     type="email"
@@ -372,19 +318,14 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
                     onFocus={() => setEmailFocused(true)}
                     onBlur={() => setEmailFocused(false)}
                     required
-                    autoFocus={isSignup && step === "email"}
                     className={`w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border transition-all text-foreground focus:outline-none focus:ring-0 ${
                       fieldError
                         ? "border-red-500 focus:border-red-500"
                         : "border-border/50 focus:border-blue-500"
                     } ${
-                      emailConnectedTop && emailConnectedBottom
-                        ? "rounded-none border-t-border/30 border-b-0"
-                        : emailConnectedTop && !emailConnectedBottom
-                          ? "rounded-b-xl border-t-border/30"
-                          : emailConnectedBottom
-                            ? "rounded-t-xl border-b-0"
-                            : "rounded-xl"
+                      emailConnectedBottom
+                        ? "rounded-t-xl border-b-0"
+                        : "rounded-xl"
                     }`}
                   />
                   <label
@@ -413,7 +354,7 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
               ) : null}
 
               {showPassword ? (
-                <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className={`relative ${isSignup ? "" : "animate-in fade-in slide-in-from-top-2 duration-300"}`}>
                   <input
                     id="customer-password"
                     type="password"
@@ -428,8 +369,12 @@ export function CustomerAuthForm({ mode, returnTo }: CustomerAuthFormProps) {
                     onBlur={() => setPasswordFocused(false)}
                     required
                     minLength={isSignup ? 6 : 1}
-                    autoFocus
-                    className="w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 rounded-b-xl focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
+                    autoFocus={!isSignup}
+                    className={`w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border border-border/50 focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground ${
+                      isSignup
+                        ? "rounded-xl"
+                        : "border-t-border/30 rounded-b-xl"
+                    }`}
                   />
                   <label
                     htmlFor="customer-password"

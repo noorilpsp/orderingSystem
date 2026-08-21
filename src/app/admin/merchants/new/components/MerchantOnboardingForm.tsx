@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { updateMerchant } from "@/app/actions/merchants";
+import { PhoneNumberField } from "@/components/shared/phone-number-field";
 import {
   merchantOnboardingSchema,
   type MerchantOnboardingFormData,
@@ -437,11 +438,12 @@ export function MerchantOnboardingForm({
                 <FormItem>
                   <FormLabel>Phone</FormLabel>
                   <FormControl>
-                    <Input
-                      type="tel"
-                      placeholder="+32 2 123 45 67"
-                      {...field}
+                    <PhoneNumberField
+                      value={field.value}
+                      onChange={field.onChange}
+                      defaultCountry={country}
                       disabled={isSubmitting}
+                      placeholder="Mobile number"
                     />
                   </FormControl>
                   <FormMessage />

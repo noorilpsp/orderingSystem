@@ -14,7 +14,7 @@ export type GuestOrderPlacementItem = {
 
 export type GuestOrderPlacementRequest = {
   storeSlug: string;
-  orderType: "dine_in" | "pickup";
+  orderType: "dine_in" | "pickup" | "delivery";
   paymentTiming: "pay_later";
   tableNumber: string | null;
   seatId?: string | null;
@@ -25,6 +25,17 @@ export type GuestOrderPlacementRequest = {
   rewardId?: string;
   phone?: string | null;
   guestName?: string | null;
+  deliveryAddress?: {
+    nickname?: string | null;
+    line1: string;
+    building?: string | null;
+    line2?: string | null;
+    city: string;
+    intercom?: string | null;
+    phone?: string | null;
+    postalCode: string;
+    instructions?: string | null;
+  } | null;
   items: GuestOrderPlacementItem[];
 };
 
@@ -195,7 +206,7 @@ export function runGuestOrderPlacementInBackground(
       writeGuestActiveOrder(storeSlug, {
         orderId: result.orderId,
         orderNumber: result.orderNumber,
-        mode: request.orderType === "pickup" ? "pickup" : "on_site",
+        mode: request.orderType === "dine_in" ? "on_site" : "pickup",
         tableNumber: request.tableNumber,
         etaMinutes: 15,
         savedAt: Date.now(),

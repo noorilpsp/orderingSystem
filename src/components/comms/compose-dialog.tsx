@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import { templates, allVariables } from "@/lib/comms-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -54,6 +55,7 @@ export function ComposeDialog({
   open: boolean
   onClose: () => void
 }) {
+  const displayPhone = useDisplayPhone()
   const [guestSearch, setGuestSearch] = useState("")
   const [selectedGuest, setSelectedGuest] = useState<
     (typeof guestSuggestions)[0] | null
@@ -139,7 +141,7 @@ export function ComposeDialog({
                   {selectedGuest.name}
                 </span>
                 <span className="text-[10px] text-zinc-400">
-                  ({selectedGuest.phone})
+                  ({displayPhone(selectedGuest.phone)})
                 </span>
                 <button
                   type="button"
@@ -172,7 +174,7 @@ export function ComposeDialog({
                         className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-xs text-zinc-100 hover:bg-zinc-700"
                       >
                         <span className="font-medium">{g.name}</span>
-                        <span className="text-[10px] text-zinc-400">{g.phone}</span>
+                        <span className="text-[10px] text-zinc-400">{displayPhone(g.phone)}</span>
                       </button>
                     ))}
                   </div>

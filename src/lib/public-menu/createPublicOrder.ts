@@ -9,6 +9,7 @@ import {
 import {
   orders as ordersTable,
   seats as seatsTable,
+  orderDelivery as orderDeliveryTable,
 } from "@/lib/db/schema/orders";
 import { createOrderWithItemsForPickupDelivery } from "@/app/actions/orders";
 import type { PickupDeliveryLineItemInput } from "@/app/actions/orders";
@@ -36,7 +37,11 @@ import {
 } from "@/lib/public-menu/scheduledOrderRelease";
 import { getLoggedInCustomer } from "@/lib/public-menu/getLoggedInCustomer";
 import { ensureWalkInCustomerByPhone } from "@/lib/public-menu/ensureWalkInCustomerByPhone";
-import { isValidGuestPhone } from "@/lib/public-menu/guest-phone";
+import { formatPhoneForDisplay, isValidGuestPhone } from "@/lib/public-menu/guest-phone";
+import {
+  formatGuestDeliveryAddressNote,
+  normalizeGuestDeliveryAddress,
+} from "@/lib/public-menu/guest-delivery-address";
 import { withTx } from "@/domain/tx";
 import {
   applyLoyaltyRedemptionForOrder,
@@ -260,12 +265,42 @@ async function createPickupOrDeliveryOrder(
     subtotal = preparedRedemption.subtotal;
   }
 
+  if (input.orderType === "delivery") {
+    const minimum = Number(location.orderModes?.delivery?.minimum_order) || 0;
+    if (minimum > 0 && subtotal + 1e-9 < minimum) {
+      return {
+        ok: false,
+        code: "BAD_REQUEST",
+        message: "Order is below the delivery minimum",
+      };
+    }
+  }
+
+  const parsedDeliveryAddress =
+    input.orderType === "delivery"
+      ? normalizeGuestDeliveryAddress(input.deliveryAddress)
+      : null;
+  if (input.orderType === "delivery" && !parsedDeliveryAddress) {
+    return {
+      ok: false,
+      code: "BAD_REQUEST",
+      message: "Delivery address is required",
+    };
+  }
+
   const taxRate = Number.parseFloat(String(location.taxRate ?? "0.00")) / 100;
   const serviceChargeRate =
     Number.parseFloat(String(location.serviceChargePercentage ?? "0.00")) / 100;
   const taxAmount = subtotal * taxRate;
   const serviceCharge = subtotal * serviceChargeRate;
-  const total = Math.max(0, subtotal + taxAmount + serviceCharge - discountAmount);
+  const deliveryFee =
+    input.orderType === "delivery"
+      ? Math.max(0, Number(location.orderModes?.delivery?.delivery_fee) || 0)
+      : 0;
+  const total = Math.max(
+    0,
+    subtotal + taxAmount + serviceCharge + deliveryFee - discountAmount,
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -295,11 +330,23 @@ async function createPickupOrDeliveryOrder(
   }
 
   const scheduledNote = scheduledPickupAt
-    ? formatScheduledPickupNote(scheduledPickupAt)
+    ? formatScheduledPickupNote(
+        scheduledPickupAt,
+        input.orderType === "delivery" ? "delivery" : "pickup",
+      )
     : null;
-  const notes = [input.notes?.trim() || null, scheduledNote]
-    .filter(Boolean)
-    .join(" · ") || null;
+  const deliveryNote =
+    parsedDeliveryAddress
+      ? formatGuestDeliveryAddressNote(
+          parsedDeliveryAddress,
+          input.guestName,
+          location.country,
+        )
+      : null;
+  const notes =
+    [deliveryNote, input.notes?.trim() || null, scheduledNote]
+      .filter(Boolean)
+      .join(" · ") || null;
 
   const merchantId =
     preparedRedemption.ok &&
@@ -338,6 +385,31 @@ async function createPickupOrDeliveryOrder(
 
       if (!created.ok) {
         throw new Error(created.error);
+      }
+
+      if (parsedDeliveryAddress) {
+        await tx.insert(orderDeliveryTable).values({
+          orderId: created.orderId,
+          addressLine1: parsedDeliveryAddress.line1,
+          addressLine2:
+            [parsedDeliveryAddress.building, parsedDeliveryAddress.line2]
+              .filter(Boolean)
+              .join(", ") || null,
+          city: parsedDeliveryAddress.city,
+          postalCode: parsedDeliveryAddress.postalCode,
+          deliveryInstructions:
+            [
+              parsedDeliveryAddress.intercom,
+              parsedDeliveryAddress.phone
+                ? `Tel ${formatPhoneForDisplay(parsedDeliveryAddress.phone, location.country)}`
+                : null,
+              parsedDeliveryAddress.instructions,
+            ]
+              .filter(Boolean)
+              .join(" · ") || null,
+          deliveryFee: deliveryFee.toFixed(2),
+          estimatedDeliveryAt: scheduledPickupAt,
+        });
       }
 
       if (
@@ -398,7 +470,12 @@ async function createPickupOrDeliveryOrder(
         0,
       ),
       scheduledPickupAt,
-      prepMinutes: location.orderModes?.pickup?.estimated_time_minutes ?? 15,
+      prepMinutes:
+        input.orderType === "delivery"
+          ? location.orderModes?.delivery?.estimated_time_minutes ??
+            location.orderModes?.pickup?.estimated_time_minutes ??
+            15
+          : location.orderModes?.pickup?.estimated_time_minutes ?? 15,
     });
   } catch (error) {
     console.error("[createPickupOrDeliveryOrder] push notify failed", error);

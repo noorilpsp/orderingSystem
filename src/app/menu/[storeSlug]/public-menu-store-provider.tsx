@@ -35,21 +35,24 @@ function GuestMenuSearchParamsSync() {
   const lockTableFromQr = publicMenu?.lockTableFromQr;
   const setOrderType = publicMenu?.setOrderType;
   const tableLocked = publicMenu?.tableLocked ?? false;
-  const currentTable = publicMenu?.tableNumber ?? "";
 
   useEffect(() => {
     if (!setTableNumber || !setOrderType) return;
 
     const tableNumber = searchParams.get("table") ?? "";
     const mode = searchParams.get("mode");
+    // Table QR URLs imply dine-in, but an explicit mode always wins — otherwise
+    // Switch to Pickup (table stays in the URL) gets snapped back to dine-in.
     const orderType =
       mode === "pickup"
         ? "pickup"
-        : mode === "dine-in" || mode === "on_site"
-          ? "dine-in"
-          : tableNumber.trim() || (tableLocked && currentTable.trim())
+        : mode === "delivery"
+          ? "delivery"
+          : mode === "dine-in" || mode === "on_site"
             ? "dine-in"
-            : "pickup";
+            : tableNumber.trim()
+              ? "dine-in"
+              : "pickup";
 
     if (tableNumber.trim() && lockTableFromQr) {
       lockTableFromQr(tableNumber);
@@ -59,14 +62,10 @@ function GuestMenuSearchParamsSync() {
       setTableNumber("");
     }
     setOrderType(orderType);
-  }, [
-    searchParams,
-    setTableNumber,
-    lockTableFromQr,
-    setOrderType,
-    tableLocked,
-    currentTable,
-  ]);
+    // Only re-read when the URL changes. Seat/lock updates must not re-apply a
+    // stale ?mode=dine-in over a user switch to pickup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [searchParams, setTableNumber, lockTableFromQr, setOrderType]);
 
   return null;
 }

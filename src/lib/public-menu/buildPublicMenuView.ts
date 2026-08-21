@@ -382,6 +382,7 @@ async function buildPublicMenuViewOnce(
     ),
     dateFormat: merchantRow?.dateFormat ?? "DD/MM/YYYY",
     numberFormat: merchantRow?.numberFormat ?? "1.234,56",
+    country: location.country ?? null,
   };
 
   const loyalty = normalizeLoyaltySettings(merchantRow?.loyaltySettings);
@@ -641,6 +642,7 @@ export async function resolvePublicLocationBySlug(storeSlug: string) {
         orderModes: true,
         taxRate: true,
         serviceChargePercentage: true,
+        country: true,
       },
     }),
   );

@@ -8,6 +8,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { coerceTaxRatePercent } from "@/lib/tax-rate"
 import { timezoneFromCountry } from "@/lib/timezone/fromCountry"
+import { phoneCountryFromStoreCountry } from "@/lib/public-menu/guest-phone"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 import {
   Save,
   X,
@@ -52,6 +54,7 @@ import type { MerchantLocation, OpeningHours, OrderModes } from "@/lib/db/schema
 import { DEFAULT_PICKUP_INSTRUCTIONS } from "@/lib/guest-menu/types"
 import {
   mapMerchantLanguageToGuestLocale,
+  merchantCurrencySymbol,
   normalizeAvailableGuestLocales,
 } from "@/lib/merchant-localization"
 import { StoreTablesManager } from "@/components/dashboard/store-tables-manager"
@@ -400,7 +403,7 @@ export default function StoresPage() {
         apartment: "",
         postalCode: "",
         city: "",
-        country: "Belgium",
+        country: "BE",
       },
       phoneNumber: "",
       publicEmail: "",
@@ -461,6 +464,8 @@ export default function StoresPage() {
   const deliveryRadius = watch("deliveryRadius")
   const deliveryFee = watch("deliveryFee")
   const minimumOrder = watch("minimumOrder")
+  const defaultCurrency = (watch("defaultCurrency") || "EUR").trim().toUpperCase()
+  const currencySymbol = merchantCurrencySymbol(defaultCurrency) || defaultCurrency
 
   // Select first location when locations are loaded
   useEffect(() => {
@@ -500,7 +505,7 @@ export default function StoresPage() {
         apartment: location.addressLine2 ?? "",
         postalCode: location.postalCode ?? "",
         city: location.city ?? "",
-        country: location.country ?? "Belgium",
+        country: phoneCountryFromStoreCountry(location.country),
       },
       phoneNumber: location.phone ?? "",
       publicEmail: location.email ?? "",
@@ -778,7 +783,7 @@ export default function StoresPage() {
           apartment: savedLocation.addressLine2 ?? "",
           postalCode: savedLocation.postalCode ?? "",
           city: savedLocation.city ?? "",
-          country: savedLocation.country ?? "Belgium",
+          country: phoneCountryFromStoreCountry(savedLocation.country),
         },
         phoneNumber: savedLocation.phone ?? "",
         publicEmail: savedLocation.email ?? "",
@@ -856,7 +861,7 @@ export default function StoresPage() {
           apartment: currentLocation.addressLine2 ?? "",
           postalCode: currentLocation.postalCode ?? "",
           city: currentLocation.city ?? "",
-          country: currentLocation.country ?? "Belgium",
+          country: phoneCountryFromStoreCountry(currentLocation.country),
         },
         phoneNumber: currentLocation.phone ?? "",
         publicEmail: currentLocation.email ?? "",
@@ -1470,12 +1475,19 @@ export default function StoresPage() {
                     <Phone className="w-4 h-4 inline mr-2" />
                     Phone Number
                   </Label>
-                  <Input
-                    id="phoneNumber"
-                    type="tel"
-                    {...register("phoneNumber")}
-                    placeholder="+1 (555) 123-4567"
-                    className={cn(errors.phoneNumber && "border-red-500")}
+                  <Controller
+                    name="phoneNumber"
+                    control={control}
+                    render={({ field }) => (
+                      <PhoneNumberField
+                        id="phoneNumber"
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        defaultCountry={watch("address.country")}
+                        invalid={Boolean(errors.phoneNumber)}
+                        placeholder="Mobile number"
+                      />
+                    )}
                   />
                   {errors.phoneNumber && <p className="text-xs text-red-500">{errors.phoneNumber.message}</p>}
                 </div>
@@ -2249,9 +2261,18 @@ export default function StoresPage() {
                               }
                             />
                             <div className="flex-1">
-                              <Label htmlFor="delivery" className="text-sm font-normal cursor-pointer">
-                                Delivery
-                              </Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <Label htmlFor="delivery" className="text-sm font-normal cursor-pointer">
+                                  Delivery
+                                </Label>
+                                {orderModes.delivery ? (
+                                  <StoreMenuQrButton
+                                    storeSlug={storeSlug}
+                                    variant="delivery"
+                                    label="Delivery QR"
+                                  />
+                                ) : null}
+                              </div>
                               <p className="text-xs text-muted-foreground">Order for delivery</p>
                             </div>
                           </div>
@@ -2260,18 +2281,7 @@ export default function StoresPage() {
                         {orderModes.delivery && (
                           <div className="pl-8 space-y-3 pt-2 border-l-2 border-orange-100 dark:border-orange-900">
                             <div className="space-y-2">
-                              <Label htmlFor="deliveryRadius">Delivery Radius (miles)</Label>
-                              <Input
-                                id="deliveryRadius"
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                {...register("deliveryRadius", { valueAsNumber: true })}
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label htmlFor="deliveryFee">Delivery Fee ($)</Label>
+                              <Label htmlFor="deliveryFee">Delivery Fee ({currencySymbol})</Label>
                               <Input
                                 id="deliveryFee"
                                 type="number"
@@ -2282,7 +2292,7 @@ export default function StoresPage() {
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="minimumOrder">Minimum Order ($)</Label>
+                              <Label htmlFor="minimumOrder">Minimum Order ({currencySymbol})</Label>
                               <Input
                                 id="minimumOrder"
                                 type="number"

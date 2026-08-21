@@ -155,6 +155,33 @@ async function closeEmptyGuestSessionIfNeeded(
   return updated.length > 0;
 }
 
+/**
+ * Close walk-away table sessions for a location: expire soft seat claims, then
+ * close sessions that still have no orders and no remaining claims once they
+ * have been idle for {@link SOFT_SEAT_CLAIM_TTL_MS}.
+ */
+export async function sweepIdleEmptyGuestSessionsForLocation(
+  locationId: string,
+): Promise<void> {
+  const id = locationId.trim();
+  if (!id) return;
+
+  const openRows = await db.query.sessions.findMany({
+    where: and(eq(sessionsTable.locationId, id), eq(sessionsTable.status, "open")),
+    columns: { id: true, openedAt: true },
+  });
+  if (openRows.length === 0) return;
+
+  const idleCutoffMs = Date.now() - SOFT_SEAT_CLAIM_TTL_MS;
+  for (const row of openRows) {
+    const expiry = await releaseExpiredSoftSeatClaims(row.id);
+    if (expiry.sessionClosed) continue;
+    const openedAtMs = row.openedAt?.getTime() ?? 0;
+    if (openedAtMs > idleCutoffMs) continue;
+    await closeEmptyGuestSessionIfNeeded(row.id);
+  }
+}
+
 async function loadSeatAssignment(
   sessionId: string,
   seatId: string,

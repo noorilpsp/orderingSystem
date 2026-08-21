@@ -35,6 +35,7 @@ export const enMessages = {
   "filter.all": "All",
   "source.table": "Table",
   "source.pickup": "Pickup",
+  "source.delivery": "Delivery",
   "source.dine": "Dine",
   "source.tableWithCode": "Table {code}",
 

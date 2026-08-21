@@ -16,6 +16,7 @@ import {
   Receipt,
   Store,
 } from "lucide-react";
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone";
 
 type OrderType = "on_site" | "pickup";
 type StatusId = "placed" | "confirmed" | "preparing" | "ready";
@@ -65,6 +66,7 @@ function euro(value: number) {
 }
 
 export default function MobileOrderConfirmationPage() {
+  const displayPhone = useDisplayPhone();
   const router = useRouter();
   const [orderType, setOrderType] = useState<OrderType>(order.orderType);
   const [tableNumber, setTableNumber] = useState(order.tableNumber);
@@ -330,7 +332,7 @@ export default function MobileOrderConfirmationPage() {
             </div>
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-muted-foreground" />
-              <span>{restaurant.phone}</span>
+              <span>{displayPhone(restaurant.phone)}</span>
             </div>
           </div>
         </section>

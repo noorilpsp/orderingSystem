@@ -34,6 +34,12 @@ function qrCopyForVariant(
         description: "Guests scan this to open the menu in pickup mode.",
         filename: qrDownloadFilename("pickup"),
       };
+    case "delivery":
+      return {
+        title: "Delivery QR code",
+        description: "Guests scan this to open the menu in delivery mode.",
+        filename: qrDownloadFilename("delivery"),
+      };
     case "dine-in":
       return {
         title: "Dine-in QR code",

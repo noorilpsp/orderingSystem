@@ -35,6 +35,7 @@ import {
   formatReservationDurationCompact,
 } from "@/lib/listview-data"
 import { cn } from "@/lib/utils"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 
 interface ListDetailPanelProps {
   reservation: ListReservation | null
@@ -67,6 +68,7 @@ function TagBadge({ type, label }: { type: ListTagType; label: string }) {
 }
 
 export function ListDetailPanel({ reservation, open, onClose, onCancel }: ListDetailPanelProps) {
+  const displayPhone = useDisplayPhone()
   if (!reservation) return null
 
   const statusBadge = getStatusBadge(reservation.status, reservation.courseStage)
@@ -220,7 +222,7 @@ export function ListDetailPanel({ reservation, open, onClose, onCancel }: ListDe
                 <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">Contact</div>
                 <div className="flex items-center gap-2 text-xs text-zinc-300">
                   <Phone className="h-3.5 w-3.5 text-zinc-500" />
-                  {reservation.phone}
+                  {displayPhone(reservation.phone)}
                 </div>
               </div>
             )}

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { useLocation } from "@/lib/contexts/LocationContext"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface AddGuestDialogProps {
   open: boolean
@@ -16,6 +18,8 @@ const inputClass =
   "rounded-lg border border-zinc-600/60 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
 
 export function AddGuestDialog({ open, onOpenChange, locationId, onSuccess }: AddGuestDialogProps) {
+  const { locations } = useLocation()
+  const storeCountry = locations.find((location) => location.id === locationId)?.country
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
@@ -108,14 +112,15 @@ export function AddGuestDialog({ open, onOpenChange, locationId, onSuccess }: Ad
             <label htmlFor="add-guest-phone" className="text-xs font-medium text-zinc-400">
               Phone *
             </label>
-            <input
+            <PhoneNumberField
               id="add-guest-phone"
-              type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className={inputClass}
-              placeholder="Phone number"
+              onChange={setPhone}
+              defaultCountry={storeCountry}
               disabled={loading}
+              placeholder="Phone number"
+              triggerClassName="rounded-lg border-zinc-600/60 bg-zinc-800/80 text-zinc-100"
+              inputClassName={inputClass}
             />
           </div>
           <div className="flex flex-col gap-1.5">

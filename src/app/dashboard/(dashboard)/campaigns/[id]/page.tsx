@@ -42,8 +42,10 @@ import {
   FileText,
 } from "lucide-react"
 import { getCampaignDetailData } from "../detail-mock-data"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 
 export default function CampaignDetailPage({ params }: { params: { id: string } }) {
+  const displayPhone = useDisplayPhone()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("overview")
   const [recipientSearch, setRecipientSearch] = useState("")
@@ -884,7 +886,7 @@ function RecipientsTable({ recipients }: { recipients: any[] }) {
             <TableCell>
               <div>
                 <div className="font-medium">{recipient.name}</div>
-                <div className="text-sm text-muted-foreground">{recipient.email || recipient.phone}</div>
+                <div className="text-sm text-muted-foreground">{recipient.email || displayPhone(recipient.phone)}</div>
               </div>
             </TableCell>
             <TableCell>

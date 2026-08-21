@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +54,7 @@ export function WaitlistCard({
   onRemove,
   onConvert,
 }: WaitlistCardProps) {
+  const displayPhone = useDisplayPhone()
   const elapsed = getElapsedMinutes(entry) + elapsedOffset
   const quoted = Math.max(entry.quotedWait, 1)
   const waitRatio = elapsed / quoted
@@ -268,7 +270,7 @@ export function WaitlistCard({
             {entry.phone && (
               <div className="flex items-center gap-1.5 text-zinc-400">
                 <Phone className="h-3 w-3" />
-                {entry.phone}
+                {displayPhone(entry.phone)}
               </div>
             )}
             {entry.notes && (

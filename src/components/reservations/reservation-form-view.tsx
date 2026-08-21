@@ -17,6 +17,7 @@ import type { TableLane } from "@/lib/timeline-data"
 import { resolveTableUuidFromStore } from "@/lib/resolveTableUuid"
 import { useRestaurantMutations } from "@/lib/hooks/useRestaurantMutations"
 import { useLocation } from "@/lib/contexts/LocationContext"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 import { useReservationsData } from "@/lib/reservations/reservationsDataContext"
 import {
   type GuestProfile,
@@ -456,7 +457,8 @@ function getReservationFormLaneGroupId(table: { floorPlanId?: string | null; sec
 export function ReservationFormView({ mode = "create", prefill, onRequestClose }: ReservationFormViewProps) {
   const isMobile = useMediaQuery("(max-width: 767px)")
   const isDesktop = useMediaQuery("(min-width: 1280px)")
-  const { currentLocationId } = useLocation()
+  const { currentLocationId, getCurrentLocation } = useLocation()
+  const storeCountry = getCurrentLocation()?.country
   const { config, reservations, tables } = useReservationsData()
   const { createReservation, updateReservation, deleteReservation } = useRestaurantMutations()
   const servicePeriods = config.servicePeriods
@@ -1093,12 +1095,12 @@ export function ReservationFormView({ mode = "create", prefill, onRequestClose }
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
                 Phone <span className="text-red-400">*</span>
               </label>
-              <Input
+              <PhoneNumberField
                 value={form.phone}
-                onChange={(e) => updateForm({ phone: e.target.value })}
-                placeholder="+1 (555) 000-0000"
-                className="bg-secondary/50 border-border/60"
-                type="tel"
+                onChange={(phone) => updateForm({ phone })}
+                defaultCountry={storeCountry}
+                placeholder="Mobile number"
+                inputClassName="bg-secondary/50 border-border/60"
               />
             </div>
             <div>
@@ -1387,18 +1389,16 @@ export function ReservationFormView({ mode = "create", prefill, onRequestClose }
                 onClearGuest={handleClearGuest}
                 locationId={currentLocationId}
               />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div>
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
                     Phone <span className="text-red-400">*</span>
                   </label>
-                  <Input
+                  <PhoneNumberField
                     value={form.phone}
-                    onChange={(e) => updateForm({ phone: e.target.value })}
-                    placeholder="+1 (555) 000-0000"
-                    className="bg-secondary/50 border-border/60"
-                    type="tel"
-                    aria-required="true"
+                    onChange={(phone) => updateForm({ phone })}
+                    defaultCountry={storeCountry}
+                    placeholder="Mobile number"
+                    inputClassName="bg-secondary/50 border-border/60"
                   />
                 </div>
                 <div>
@@ -1413,7 +1413,6 @@ export function ReservationFormView({ mode = "create", prefill, onRequestClose }
                     type="email"
                   />
                 </div>
-              </div>
             </div>
           </section>
 

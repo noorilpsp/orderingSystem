@@ -18,6 +18,7 @@ import {
   type GuestOrderPlacementState,
 } from "@/lib/public-menu/guest-order-placement";
 import { formatPickupScheduleLabel } from "@/lib/public-menu/buildPickupScheduleSlots";
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone";
 import { cn } from "@/lib/utils";
 import type { GuestCustomizationGroup, GuestMenuItem } from "@/lib/guest-menu/types";
 import type { GuestOrderTrackStatus } from "@/lib/public-menu/deriveGuestOrderTrackStatus";
@@ -254,6 +255,7 @@ export function GuestOrderConfirmationPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const t = useGuestT();
+  const displayPhone = useDisplayPhone();
   const { locale } = useGuestLocale();
   const { formatMoney } = useGuestLocalization();
   const {
@@ -309,8 +311,10 @@ export function GuestOrderConfirmationPage() {
   const isSubmittingOrder =
     isPlacementPending &&
     (!resolvedPlacement || resolvedPlacement.status === "pending");
+  const urlMode = searchParams.get("mode");
+  const isDeliveryOrder = urlMode === "delivery";
   const urlOrderType: OrderType =
-    searchParams.get("mode") === "pickup" ? "pickup" : "on_site";
+    urlMode === "pickup" || urlMode === "delivery" ? "pickup" : "on_site";
   const [liveOrderType, setLiveOrderType] = useState<OrderType | null>(null);
   // Prefer live status from the server — URL mode can be missing/wrong after refresh.
   const orderType: OrderType = liveOrderType ?? urlOrderType;
@@ -320,7 +324,12 @@ export function GuestOrderConfirmationPage() {
       ? orderNumberRaw
       : formatCounterOrderLabel({
           orderNumber: liveOrderNumber ?? orderNumberRaw,
-          orderType: orderType === "pickup" ? "pickup" : "dine_in",
+          orderType:
+            isDeliveryOrder
+              ? "delivery"
+              : orderType === "pickup"
+                ? "pickup"
+                : "dine_in",
           orderId: orderId || null,
         });
   const tableNumber = searchParams.get("table") ?? "";
@@ -423,7 +432,7 @@ export function GuestOrderConfirmationPage() {
 
   const confirmReturnTo = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
   const confirmLoginPath = `/login?returnTo=${encodeURIComponent(confirmReturnTo)}`;
-  const confirmSignupPath = `/signup?returnTo=${encodeURIComponent(confirmReturnTo)}`;
+  const confirmSignupPath = `/signup?returnTo=${encodeURIComponent(confirmReturnTo)}&store=${encodeURIComponent(storeSlug)}`;
 
   useEffect(() => {
     if (customerLoading) return;
@@ -546,7 +555,11 @@ export function GuestOrderConfirmationPage() {
         setLiveOrderNumber(status.orderNumber);
       }
       if (typeof status.orderType === "string" && status.orderType) {
-        setLiveOrderType(status.orderType === "pickup" ? "pickup" : "on_site");
+        setLiveOrderType(
+          status.orderType === "pickup" || status.orderType === "delivery"
+            ? "pickup"
+            : "on_site",
+        );
       }
       if (typeof status.scheduledPickupAt === "string" && status.scheduledPickupAt) {
         setScheduledPickupAt(status.scheduledPickupAt);
@@ -857,10 +870,15 @@ export function GuestOrderConfirmationPage() {
           <p className="mt-3 text-sm text-muted-foreground">
             {orderType === "pickup"
               ? trackStatus === "scheduled" && scheduledPickupAt
-                ? t("confirm.pickupScheduled", {
-                    time: formatPickupScheduleLabel(scheduledPickupAt),
-                  })
-                : t("confirm.pickupOrder")
+                ? t(
+                    isDeliveryOrder
+                      ? "confirm.deliveryScheduled"
+                      : "confirm.pickupScheduled",
+                    {
+                      time: formatPickupScheduleLabel(scheduledPickupAt),
+                    },
+                  )
+                : t(isDeliveryOrder ? "confirm.deliveryOrder" : "confirm.pickupOrder")
               : tableNumber
                 ? `${t("confirm.dineInTable", { number: tableNumber })}${
                     guestSeat ? ` · Seat ${guestSeat.seatNumber}` : ""
@@ -1282,7 +1300,7 @@ export function GuestOrderConfirmationPage() {
             </div>
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4" />
-              <span>{restaurant?.phone}</span>
+              <span>{displayPhone(restaurant?.phone)}</span>
             </div>
           </div>
         </section>

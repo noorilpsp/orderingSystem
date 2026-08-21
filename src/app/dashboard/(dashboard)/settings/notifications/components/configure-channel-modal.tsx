@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { NotificationChannel } from "../types"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
 
 interface ConfigureChannelModalProps {
   open: boolean
@@ -20,6 +21,7 @@ export function ConfigureChannelModal({ open, onOpenChange, channel }: Configure
   const [saving, setSaving] = useState(false)
   const [provider, setProvider] = useState(channel?.provider || "")
   const [apiKey, setApiKey] = useState("")
+  const [phone, setPhone] = useState("")
   const { toast } = useToast()
 
   const handleSave = async () => {
@@ -86,7 +88,12 @@ export function ConfigureChannelModal({ open, onOpenChange, channel }: Configure
           {channel?.name === "SMS" || channel?.name === "WhatsApp" ? (
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" type="tel" placeholder="+1 (555) 000-0000" />
+              <PhoneNumberField
+                id="phone"
+                value={phone}
+                onChange={setPhone}
+                placeholder="Mobile number"
+              />
             </div>
           ) : null}
         </div>

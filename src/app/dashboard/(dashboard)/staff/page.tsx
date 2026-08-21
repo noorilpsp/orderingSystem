@@ -5,6 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from "
 import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PhoneNumberField } from "@/components/shared/phone-number-field"
+import { useLocation } from "@/lib/contexts/LocationContext"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -46,6 +49,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { UnsavedChangesModal } from "@/components/modals/unsaved-changes-modal"
 
 export default function StaffPage() {
+  const displayPhone = useDisplayPhone()
   const [view, setView] = useState<"grid" | "list">("grid")
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedRole, setSelectedRole] = useState<string[]>([])
@@ -843,7 +847,7 @@ function StaffDetailDrawer({
                       <Phone className="w-4 h-4 mt-0.5 text-muted-foreground" />
                       <div className="flex-1">
                         <p className="text-xs text-muted-foreground">Phone</p>
-                        <p className="font-medium text-sm">{staff.phone}</p>
+                        <p className="font-medium text-sm">{displayPhone(staff.phone)}</p>
                       </div>
                     </div>
 
@@ -1167,6 +1171,9 @@ function AddStaffModal({
   isOpen: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const [phone, setPhone] = useState("")
+  const storeCountry = useLocation().getCurrentLocation()?.country
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -1200,7 +1207,12 @@ function AddStaffModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Phone</label>
-              <Input placeholder="+1 (555) 000-0000" />
+              <PhoneNumberField
+                value={phone}
+                onChange={setPhone}
+                defaultCountry={storeCountry}
+                placeholder="Mobile number"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>
@@ -1242,6 +1254,8 @@ function AddStaffDrawer({
   const [isDirty, setIsDirty] = useState(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+  const [phone, setPhone] = useState("")
+  const storeCountry = useLocation().getCurrentLocation()?.country
 
   useEffect(() => {
     if (isOpen) {
@@ -1368,7 +1382,15 @@ function AddStaffDrawer({
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Phone</label>
-                        <Input placeholder="+1 (555) 000-0000" onChange={() => setIsDirty(true)} />
+                        <PhoneNumberField
+                          value={phone}
+                          onChange={(next) => {
+                            setPhone(next)
+                            setIsDirty(true)
+                          }}
+                          defaultCountry={storeCountry}
+                          placeholder="Mobile number"
+                        />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Email</label>
@@ -1511,14 +1533,17 @@ function EditStaffDrawer({
   const [isDirty, setIsDirty] = useState(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+  const [phone, setPhone] = useState(staff.phone)
+  const storeCountry = useLocation().getCurrentLocation()?.country
 
   useEffect(() => {
     if (isOpen) {
       setActiveTab("basic")
       setIsClosing(false)
       setIsDirty(false)
+      setPhone(staff.phone)
     }
-  }, [isOpen])
+  }, [isOpen, staff.phone])
 
   const handleClose = () => {
     if (isDirty) {
@@ -1641,10 +1666,14 @@ function EditStaffDrawer({
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Phone</label>
-                        <Input
-                          defaultValue={staff.phone}
-                          placeholder="+1 (555) 000-0000"
-                          onChange={() => setIsDirty(true)}
+                        <PhoneNumberField
+                          value={phone}
+                          onChange={(next) => {
+                            setPhone(next)
+                            setIsDirty(true)
+                          }}
+                          defaultCountry={storeCountry}
+                          placeholder="Mobile number"
                         />
                       </div>
                       <div className="space-y-2">

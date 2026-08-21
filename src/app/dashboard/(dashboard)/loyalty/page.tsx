@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/loyalty-program-settings-card"
 import { LoyaltyRewardsManager } from "@/components/dashboard/loyalty-rewards-manager"
 import { useTenant } from "@/lib/contexts/TenantContext"
+import { useDisplayPhone } from "@/lib/public-menu/use-display-phone"
 import type { LoyaltyMemberRow } from "@/lib/loyalty/loyaltyMembersView"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -711,6 +712,7 @@ const topPerformers = [
 ]
 
 export default function LoyaltyPage() {
+  const displayPhone = useDisplayPhone()
   const { currentMerchantId } = useTenant()
   const [searchQuery, setSearchQuery] = useState("")
   const [tierFilter, setTierFilter] = useState("all")
@@ -3011,7 +3013,7 @@ export default function LoyaltyPage() {
                                 </div>
                                 {member.phone ? (
                                   <div className="text-xs text-muted-foreground">
-                                    {member.phone}
+                                    {displayPhone(member.phone)}
                                   </div>
                                 ) : null}
                               </div>

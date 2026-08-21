@@ -6,7 +6,9 @@ import {
   updateCustomerPassword,
   updateCustomerProfile,
 } from "@/app/actions/customer-auth";
-import { useGuestT } from "@/lib/guest-i18n";
+import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
+import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
+import { PhoneNumberField } from "@/components/shared/phone-number-field";
 import { cn } from "@/lib/utils";
 
 type GuestAccountSettingsProps = {
@@ -31,6 +33,8 @@ export function GuestAccountSettings({
   className,
 }: GuestAccountSettingsProps) {
   const t = useGuestT();
+  const { locale } = useGuestLocale();
+  const publicMenu = usePublicMenuOptional();
   const [displayName, setDisplayName] = useState(name);
   const [displayPhone, setDisplayPhone] = useState(phone ?? "");
   const [profilePending, setProfilePending] = useState(false);
@@ -125,14 +129,17 @@ export function GuestAccountSettings({
         </label>
         <label className="block text-sm text-foreground">
           {t("auth.phone")}
-          <input
-            type="tel"
-            inputMode="tel"
+          <PhoneNumberField
             value={displayPhone}
-            onChange={(event) => setDisplayPhone(event.target.value)}
-            maxLength={50}
-            autoComplete="tel"
-            className={inputClass}
+            onChange={setDisplayPhone}
+            defaultCountry={publicMenu?.restaurant?.country}
+            locale={locale}
+            countryAriaLabel={t("checkout.addressPhoneCountry")}
+            searchPlaceholder={t("checkout.searchCountry")}
+            emptyText={t("checkout.noCountryFound")}
+            className="mt-1.5"
+            triggerClassName="h-11 rounded-xl"
+            inputClassName="h-11 rounded-xl border-border/70 bg-background px-3 text-sm shadow-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
           />
         </label>
         <label className="block text-sm text-foreground">

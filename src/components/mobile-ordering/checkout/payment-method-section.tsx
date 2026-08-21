@@ -1,12 +1,13 @@
 "use client";
 
-import { DollarSign, Store, UtensilsCrossed } from "lucide-react";
+import { Bike, DollarSign, Store, UtensilsCrossed } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGuestT } from "@/lib/guest-i18n";
 import type { EnMessageKey } from "@/lib/guest-i18n";
 
 export type GuestPaymentMethodId =
   | "pay_at_pickup"
+  | "pay_on_delivery"
   | "pay_at_table"
   | "pay_at_counter";
 
@@ -18,18 +19,19 @@ type PaymentMethodOption = {
 };
 
 export function defaultGuestPaymentMethod(input: {
-  orderType: "dine-in" | "pickup";
+  orderType: "dine-in" | "pickup" | "delivery";
   usesTableSession: boolean;
   isSelfPickupMode: boolean;
 }): GuestPaymentMethodId {
   if (input.orderType === "pickup") return "pay_at_pickup";
+  if (input.orderType === "delivery") return "pay_on_delivery";
   if (input.usesTableSession) return "pay_at_table";
   if (input.isSelfPickupMode) return "pay_at_counter";
   return "pay_at_table";
 }
 
 function paymentMethodOptions(input: {
-  orderType: "dine-in" | "pickup";
+  orderType: "dine-in" | "pickup" | "delivery";
   usesTableSession: boolean;
 }): PaymentMethodOption[] {
   if (input.orderType === "pickup") {
@@ -39,6 +41,17 @@ function paymentMethodOptions(input: {
         labelKey: "checkout.payAtPickup",
         descriptionKey: "checkout.payAtPickupDesc",
         icon: DollarSign,
+      },
+    ];
+  }
+
+  if (input.orderType === "delivery") {
+    return [
+      {
+        id: "pay_on_delivery",
+        labelKey: "checkout.payOnDelivery",
+        descriptionKey: "checkout.payOnDeliveryDesc",
+        icon: Bike,
       },
     ];
   }
@@ -71,6 +84,8 @@ export function paymentMethodFooterHint(
   switch (method) {
     case "pay_at_pickup":
       return t("checkout.payAtPickupHint");
+    case "pay_on_delivery":
+      return t("checkout.payOnDeliveryHint");
     case "pay_at_table":
       return t("checkout.payAtTableHint");
     case "pay_at_counter":
@@ -83,7 +98,7 @@ export function paymentMethodFooterHint(
 }
 
 interface PaymentMethodSectionProps {
-  orderType: "dine-in" | "pickup";
+  orderType: "dine-in" | "pickup" | "delivery";
   usesTableSession: boolean;
   isSelfPickupMode: boolean;
   selectedMethod: GuestPaymentMethodId;

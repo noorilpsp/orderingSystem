@@ -1,101 +1,95 @@
 'use client'
 
 import type React from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Link } from '@/components/ui/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
 import { signup } from '@/app/actions/auth'
+import { PhoneNumberField } from '@/components/shared/phone-number-field'
+import { useStorePhoneCountry } from '@/lib/public-menu/use-store-phone-country'
 
-export default function SignupForm() {
+type SignupFormProps = {
+  storeSlug?: string | null
+  defaultPhoneCountry?: string | null
+}
+
+export default function SignupForm({
+  storeSlug = null,
+  defaultPhoneCountry = null,
+}: SignupFormProps) {
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [emailFocused, setEmailFocused] = useState(false)
   const [nameFocused, setNameFocused] = useState(false)
-  const [phoneFocused, setPhoneFocused] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [returnTo, setReturnTo] = useState<string | null>(null)
   const [invitationEmail, setInvitationEmail] = useState<string | null>(null)
   const [isEmailLocked, setIsEmailLocked] = useState(false)
+  const phoneCountry = useStorePhoneCountry(defaultPhoneCountry, storeSlug, returnTo)
 
-  // Read returnTo and email from query params
   useEffect(() => {
     const returnToParam = searchParams.get('returnTo')
     const emailParam = searchParams.get('email')
 
-    // Security: Only allow internal redirects (must start with /)
     if (returnToParam && returnToParam.startsWith('/')) {
       setReturnTo(returnToParam)
     } else if (returnToParam) {
       console.warn('[signup] Invalid returnTo URL, ignoring:', returnToParam)
     }
 
-    // If email param exists, pre-fill and lock the email field
     if (emailParam) {
       const decodedEmail = decodeURIComponent(emailParam)
       setEmail(decodedEmail)
       setInvitationEmail(decodedEmail)
       setIsEmailLocked(true)
-      setShowPassword(true)
     }
   }, [searchParams])
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // If email is locked (from invitation), prevent changes
     if (isEmailLocked) {
       return
     }
 
-    const newEmail = e.target.value
-    setEmail(newEmail)
-
-    // Clear errors when user starts typing
+    setEmail(e.target.value)
     if (error) setError(null)
     if (emailError) setEmailError(null)
-
-    if (newEmail.length === 0 && showPassword) {
-      setShowPassword(false)
-    }
-  }
-
-  const handleContinue = () => {
-    if (!showPassword && email.length > 0) {
-      // Basic email validation when user tries to continue
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(email)) {
-        setEmailError('Please enter a valid email address')
-        return
-      }
-      setShowPassword(true)
-    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!showPassword) {
-      // first step advance (email -> password)
-      handleContinue()
+
+    if (!fullName.trim()) {
+      setError('Please enter your name')
       return
     }
-
-    // Validate required fields before submitting
+    if (phone.replace(/\D/g, '').length < 7) {
+      setError('Please enter a valid mobile number')
+      return
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
     if (!email || !fullName.trim() || !phone.trim() || !password) {
       setError('Please fill in your name, phone, email, and password')
       return
     }
 
-    // If invitation email exists, validate it matches
     if (invitationEmail && email.toLowerCase() !== invitationEmail.toLowerCase()) {
       setEmailError('Email must match the invitation email address')
       return
@@ -106,7 +100,6 @@ export default function SignupForm() {
     setEmailError(null)
 
     try {
-      // Call Server Action directly - no fetch needed!
       const result = await signup({
         email,
         password,
@@ -120,14 +113,11 @@ export default function SignupForm() {
         return
       }
 
-      // Check if email confirmation is required
       if (!result.session) {
-        // Email confirmation required
         setNeedsConfirmation(true)
         return
       }
 
-      // Session exists, redirect to returnTo or default to dashboard
       const redirectUrl = returnTo || '/dashboard'
       window.location.href = redirectUrl
     } catch (err) {
@@ -146,7 +136,6 @@ export default function SignupForm() {
       <div className="w-full max-w-2xl">
         <div className="p-6 sm:p-12 sm:shadow-xl sm:border sm:border-border/40 sm:bg-card sm:rounded-3xl">
           <div className="space-y-8">
-            {/* Logo */}
             <div className="flex justify-center">
               <div className="w-28 h-28 relative">
                 <Image
@@ -193,7 +182,6 @@ export default function SignupForm() {
     <div className="w-full max-w-2xl">
       <div className="p-6 sm:p-12 sm:shadow-xl sm:border sm:border-border/40 sm:bg-card sm:rounded-3xl">
         <div className="space-y-8">
-          {/* v0 animated logo */}
           <div className="flex justify-center">
             <div className="w-28 h-28 relative">
               <Image
@@ -228,163 +216,130 @@ export default function SignupForm() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-0">
-            <div className="space-y-0">
-              <div className="relative">
-                <input
-                  id="email"
-                  type="email"
-                  placeholder=""
-                  value={email}
-                  onChange={handleEmailChange}
-                  onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
-                  required
-                  disabled={isEmailLocked}
-                  className={`w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border transition-all text-foreground focus:outline-none focus:ring-0 ${
-                    emailError
-                      ? 'border-red-500 focus:border-red-500'
-                      : 'border-border/50 focus:border-blue-500'
-                  } ${showPassword ? 'rounded-t-xl border-b-0' : 'rounded-xl'} ${
-                    isEmailLocked ? 'opacity-60 cursor-not-allowed' : ''
-                  }`}
-                />
-                <label
-                  htmlFor="email"
-                  className={`absolute left-4 transition-all pointer-events-none ${
-                    emailFocused || email.length > 0
-                      ? 'top-2 text-xs text-muted-foreground'
-                      : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
-                  }`}
-                >
-                  Email
-                </label>
-                {!showPassword && (
-                  <Button
-                    type="button"
-                    onClick={handleContinue}
-                    disabled={email.length === 0 || loading || !!emailError}
-                    size="icon"
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
-                      email.length === 0 || loading || !!emailError
-                        ? 'opacity-40 cursor-not-allowed'
-                        : 'cursor-pointer'
-                    }`}
-                  >
-                    <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
-                    <span className="sr-only">Continue</span>
-                  </Button>
-                )}
-              </div>
-              {isEmailLocked && (
-                <p className="text-xs text-muted-foreground mt-1 px-4">
-                  This email address is from your invitation
-                </p>
-              )}
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="relative">
+              <input
+                id="fullName"
+                type="text"
+                placeholder=""
+                value={fullName}
+                onChange={(e) => {
+                  setFullName(e.target.value)
+                  if (error) setError(null)
+                }}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => setNameFocused(false)}
+                required
+                autoComplete="name"
+                className="w-full h-14 px-4 pt-5 pb-1 text-base bg-background border border-border/50 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
+              />
+              <label
+                htmlFor="fullName"
+                className={`absolute left-4 transition-all pointer-events-none ${
+                  nameFocused || fullName.length > 0
+                    ? 'top-2 text-xs text-muted-foreground'
+                    : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
+                }`}
+              >
+                Full name
+              </label>
+            </div>
 
-              {showPassword && (
-                <>
-                  <div className="relative">
-                    <input
-                      id="fullName"
-                      type="text"
-                      placeholder=""
-                      value={fullName}
-                      onChange={(e) => {
-                        setFullName(e.target.value)
-                        if (error) setError(null)
-                      }}
-                      onFocus={() => setNameFocused(true)}
-                      onBlur={() => setNameFocused(false)}
-                      required
-                      autoFocus
-                      className="w-full h-14 px-4 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
-                    />
-                    <label
-                      htmlFor="fullName"
-                      className={`absolute left-4 transition-all pointer-events-none ${
-                        nameFocused || fullName.length > 0
-                          ? 'top-2 text-xs text-muted-foreground'
-                          : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
-                      }`}
-                    >
-                      Full name
-                    </label>
-                  </div>
+            <PhoneNumberField
+              id="phone"
+              value={phone}
+              onChange={(next) => {
+                setPhone(next)
+                if (error) setError(null)
+              }}
+              defaultCountry={phoneCountry}
+              placeholder="Mobile number"
+              triggerClassName="h-14 rounded-xl border-border/50"
+              inputClassName="h-14 rounded-xl border-border/50 bg-background px-4 text-base shadow-none focus-visible:border-blue-500 focus-visible:ring-0"
+            />
 
-                  <div className="relative">
-                    <input
-                      id="phone"
-                      type="tel"
-                      placeholder=""
-                      value={phone}
-                      onChange={(e) => {
-                        setPhone(e.target.value)
-                        if (error) setError(null)
-                      }}
-                      onFocus={() => setPhoneFocused(true)}
-                      onBlur={() => setPhoneFocused(false)}
-                      required
-                      className="w-full h-14 px-4 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
-                    />
-                    <label
-                      htmlFor="phone"
-                      className={`absolute left-4 transition-all pointer-events-none ${
-                        phoneFocused || phone.length > 0
-                          ? 'top-2 text-xs text-muted-foreground'
-                          : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
-                      }`}
-                    >
-                      Phone
-                    </label>
-                  </div>
+            <div className="relative">
+              <input
+                id="email"
+                type="email"
+                placeholder=""
+                value={email}
+                onChange={handleEmailChange}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
+                required
+                disabled={isEmailLocked}
+                autoComplete="email"
+                className={`w-full h-14 px-4 pt-5 pb-1 text-base bg-background border rounded-xl transition-all text-foreground focus:outline-none focus:ring-0 ${
+                  emailError
+                    ? 'border-red-500 focus:border-red-500'
+                    : 'border-border/50 focus:border-blue-500'
+                } ${isEmailLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+              />
+              <label
+                htmlFor="email"
+                className={`absolute left-4 transition-all pointer-events-none ${
+                  emailFocused || email.length > 0
+                    ? 'top-2 text-xs text-muted-foreground'
+                    : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
+                }`}
+              >
+                Email
+              </label>
+            </div>
+            {isEmailLocked ? (
+              <p className="text-xs text-muted-foreground px-1">
+                This email address is from your invitation
+              </p>
+            ) : null}
 
-                  <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
-                    <input
-                      id="password"
-                      type="password"
-                      placeholder=""
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setPasswordFocused(true)}
-                      onBlur={() => setPasswordFocused(false)}
-                      required
-                      className="w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border border-border/50 border-t-border/30 rounded-b-xl focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
-                    />
-                    <label
-                      htmlFor="password"
-                      className={`absolute left-4 transition-all pointer-events-none ${
-                        passwordFocused || password.length > 0
-                          ? 'top-2 text-xs text-muted-foreground'
-                          : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
-                      }`}
-                    >
-                      Password
-                    </label>
-                    <Button
-                      type="submit"
-                      disabled={
-                        fullName.trim().length === 0 ||
-                        phone.trim().length === 0 ||
-                        password.length === 0 ||
-                        loading
-                      }
-                      size="icon"
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
-                        fullName.trim().length === 0 ||
-                        phone.trim().length === 0 ||
-                        password.length === 0 ||
-                        loading
-                          ? 'opacity-40 cursor-not-allowed'
-                          : 'cursor-pointer'
-                      }`}
-                    >
-                      <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
-                      <span className="sr-only">Submit</span>
-                    </Button>
-                  </div>
-                </>
-              )}
+            <div className="relative">
+              <input
+                id="password"
+                type="password"
+                placeholder=""
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
+                required
+                autoComplete="new-password"
+                minLength={6}
+                className="w-full h-14 px-4 pr-14 pt-5 pb-1 text-base bg-background border border-border/50 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-0 transition-all text-foreground"
+              />
+              <label
+                htmlFor="password"
+                className={`absolute left-4 transition-all pointer-events-none ${
+                  passwordFocused || password.length > 0
+                    ? 'top-2 text-xs text-muted-foreground'
+                    : 'top-1/2 -translate-y-1/2 text-base text-muted-foreground/60'
+                }`}
+              >
+                Password
+              </label>
+              <Button
+                type="submit"
+                disabled={
+                  fullName.trim().length === 0 ||
+                  phone.trim().length === 0 ||
+                  email.length === 0 ||
+                  password.length === 0 ||
+                  loading
+                }
+                size="icon"
+                className={`absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-border/30 hover:bg-border/50 text-foreground shadow-sm transition-all flex-shrink-0 ${
+                  fullName.trim().length === 0 ||
+                  phone.trim().length === 0 ||
+                  email.length === 0 ||
+                  password.length === 0 ||
+                  loading
+                    ? 'opacity-40 cursor-not-allowed'
+                    : 'cursor-pointer'
+                }`}
+              >
+                <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
+                <span className="sr-only">Submit</span>
+              </Button>
             </div>
           </form>
 
@@ -406,4 +361,3 @@ export default function SignupForm() {
     </div>
   )
 }
-

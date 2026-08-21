@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { PhoneCountrySelect } from "@/components/shared/phone-country-select"
 import {
   type BookingState,
-  countryCodes,
   dietaryOptions,
   formatDateShort,
   formatTime12h,
@@ -39,8 +39,6 @@ export function StepDetails({ state, onChange, onSubmit, onBack, isSubmitting }:
     `${state.partySize} guest${state.partySize !== 1 ? "s" : ""}`,
     seating && seating.id !== "no_pref" ? seating.label : null,
   ].filter(Boolean)
-
-  const cc = countryCodes.find((c) => c.code === state.countryCode)
 
   // Validation
   const errors = useMemo(() => {
@@ -152,17 +150,13 @@ export function StepDetails({ state, onChange, onSubmit, onBack, isSubmitting }:
           <Label htmlFor="bk-phone" className="text-sm text-zinc-700 dark:text-zinc-300">
             Phone Number <span className="text-rose-500" aria-hidden="true">*</span>
           </Label>
-          <div className="flex gap-2">
-            <select
+          <div className="flex gap-2" dir="ltr">
+            <PhoneCountrySelect
               value={state.countryCode}
-              onChange={(e) => onChange({ countryCode: e.target.value })}
-              aria-label="Country code"
-              className="h-11 w-[100px] rounded-lg border border-zinc-300 bg-zinc-50 px-2 text-sm text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-            >
-              {countryCodes.map((c) => (
-                <option key={c.code} value={c.code}>{c.flag} {c.dial}</option>
-              ))}
-            </select>
+              onChange={(countryCode) => onChange({ countryCode })}
+              invalid={!!errors.phone}
+              className="h-11 rounded-lg border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+            />
             <Input
               id="bk-phone"
               type="tel"

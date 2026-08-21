@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { optimizeImage } from '@/lib/utils/imageOptimization'
 import { uploadImage, createMerchant } from '@/app/actions/merchants'
+import { PhoneNumberField } from '@/components/shared/phone-number-field'
 
 const businessTypes = [
   { value: 'restaurant', label: 'Restaurant' },
@@ -454,12 +455,13 @@ export function NewMerchantForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
-                <Input
+                <PhoneNumberField
                   id="phone"
                   name="phone"
                   value={values.phone}
-                  onChange={(event) => setField('phone', event.target.value)}
-                  placeholder="+32 123 456 789"
+                  onChange={(phone) => setField('phone', phone)}
+                  defaultCountry={values.country}
+                  placeholder="Mobile number"
                 />
                 {errors.phone && <p className="text-destructive text-sm">{errors.phone}</p>}
               </div>
