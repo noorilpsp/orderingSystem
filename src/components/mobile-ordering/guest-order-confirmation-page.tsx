@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bike, CheckCheck, ChevronLeft, CookingPot, Loader2, LogIn, MapPin, MessageSquare, Phone, Sparkles, Store } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
+import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
 import { createGuestOrderReadyPlayer, unlockGuestOrderReadyAudio } from "@/lib/mobile-ordering/guest-order-ready-sound";
 import {
   clearGuestActiveOrder,
@@ -573,7 +575,7 @@ export function GuestOrderConfirmationPage() {
       params.set("orderNumber", resolvedPlacement.orderNumber);
     }
 
-    const next = `/menu/${storeSlug}/order-confirmation?${params.toString()}`;
+    const next = `${guestStorePath(storeSlug, "/order-confirmation")}?${params.toString()}`;
     const current = `${window.location.pathname}${window.location.search}`;
     if (current !== next) {
       router.replace(next);
@@ -591,7 +593,7 @@ export function GuestOrderConfirmationPage() {
     if (liveOrderType === "pickup") {
       params.delete("table");
     }
-    router.replace(`/menu/${storeSlug}/order-confirmation?${params.toString()}`);
+    router.replace(`${guestStorePath(storeSlug, "/order-confirmation")}?${params.toString()}`);
   }, [liveOrderType, orderId, router, searchParams, storeSlug]);
 
   const fetchStatus = useCallback(async () => {
@@ -947,9 +949,10 @@ export function GuestOrderConfirmationPage() {
   const claimedAwarded =
     loyaltyClaim.status === "claimed" ? loyaltyClaim.awarded : 0;
   const showYouWillEarn =
-    loyaltyClaim.status === "claimed" &&
-    claimedAwarded === 0 &&
+    Boolean(customer) &&
     estimatedEarnPoints > 0 &&
+    claimedAwarded === 0 &&
+    !placementError &&
     trackStatus !== "served" &&
     trackStatus !== "cancelled" &&
     trackStatus !== "refunded";
@@ -963,18 +966,25 @@ export function GuestOrderConfirmationPage() {
   return (
     <div className="min-h-screen">
       <header className="checkout-header sticky top-0 z-30 border-b border-border/70 bg-card/80 px-2 backdrop-blur-xl lg:px-4">
-        <div
-          className="mx-auto flex w-full max-w-none items-center justify-start gap-2 px-1 py-1 lg:px-4"
-          dir="ltr"
-        >
-          <Link
-            href={menuPath}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-foreground/10"
-            aria-label={t("common.backToMenu")}
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Link>
-          <h1 className="text-lg font-bold text-foreground">{t("confirm.title")}</h1>
+        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-2 px-1 py-1 lg:px-4">
+          <div className="flex min-w-0 items-center gap-2" dir="ltr">
+            <Link
+              href={menuPath}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-foreground/10"
+              aria-label={t("common.backToMenu")}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Link>
+            <h1 className="text-lg font-bold text-foreground">{t("confirm.title")}</h1>
+          </div>
+          <Image
+            src="/BerryTapSVG.svg"
+            alt="BerryTap"
+            width={140}
+            height={36}
+            className="h-6 w-auto shrink-0"
+            priority
+          />
         </div>
       </header>
 

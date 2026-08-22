@@ -1,3 +1,5 @@
+import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
+
 export type GuestActiveOrder = {
   orderId: string;
   orderNumber: string;
@@ -237,5 +239,5 @@ export function buildGuestActiveOrderConfirmationPath(
   params.set("mode", order.mode === "pickup" ? "pickup" : "on_site");
   if (order.tableNumber) params.set("table", order.tableNumber);
   params.set("eta", String(order.etaMinutes));
-  return `/menu/${encodeURIComponent(storeSlug)}/order-confirmation?${params.toString()}`;
+  return `${guestStorePath(storeSlug, "/order-confirmation")}?${params.toString()}`;
 }

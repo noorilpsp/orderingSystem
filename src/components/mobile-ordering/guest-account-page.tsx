@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import {
   ChevronRight,
   Gift,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { GuestTabPage } from "@/components/mobile-ordering/guest-tab-page";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
+import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
 import { useGuestT } from "@/lib/guest-i18n";
 
 export function GuestAccountPage() {
@@ -31,7 +33,7 @@ export function GuestAccountPage() {
     logoutCustomer,
   } = usePublicMenu();
 
-  const settingsHref = `/menu/${encodeURIComponent(storeSlug)}/account/settings`;
+  const settingsHref = guestStorePath(storeSlug, "/account/settings");
 
   const links = [
     ...(customer
@@ -54,7 +56,20 @@ export function GuestAccountPage() {
   ];
 
   return (
-    <GuestTabPage title={t("account.title")} subtitle={restaurant?.name ?? null}>
+    <GuestTabPage
+      title={t("account.title")}
+      subtitle={restaurant?.name ?? null}
+      headerSlot={
+        <Image
+          src="/BerryTapSVG.svg"
+          alt="BerryTap"
+          width={140}
+          height={36}
+          className="h-6 w-auto"
+          priority
+        />
+      }
+    >
       {customerLoading ? (
         <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
       ) : customer ? (

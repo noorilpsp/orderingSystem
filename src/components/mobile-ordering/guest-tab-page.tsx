@@ -8,6 +8,7 @@ type GuestTabPageProps = {
   title: string;
   subtitle?: string | null;
   headerSlot?: ReactNode;
+  headerCenter?: ReactNode;
   /** When set, shows a back control that navigates here. */
   backHref?: string;
   backLabel?: string;
@@ -19,6 +20,7 @@ export function GuestTabPage({
   title,
   subtitle,
   headerSlot,
+  headerCenter,
   backHref,
   backLabel,
   children,
@@ -31,7 +33,7 @@ export function GuestTabPage({
         paddingBottom: "calc(2rem + var(--guest-tab-bar-pad-bottom, var(--guest-tab-bar-height, 0rem)))",
       }}
     >
-      <header className="sticky top-0 z-(--z-sticky) border-b border-border/70 bg-card/80 backdrop-blur-xl">
+      <header className="relative sticky top-0 z-(--z-sticky) border-b border-border/70 bg-card/80 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-none items-center justify-between gap-3 px-4 py-3 lg:px-8">
           <div className="flex min-w-0 items-center gap-2">
             {backHref ? (
@@ -52,6 +54,11 @@ export function GuestTabPage({
           </div>
           {headerSlot}
         </div>
+        {headerCenter ? (
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
+            <div className="pointer-events-auto">{headerCenter}</div>
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto w-full max-w-none space-y-4 px-4 py-4 lg:px-8">

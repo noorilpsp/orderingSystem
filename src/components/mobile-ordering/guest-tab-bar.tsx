@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Gift, Receipt, User, UtensilsCrossed } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
+import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
 import { readGuestActiveOrders } from "@/lib/public-menu/guest-active-order-storage";
 import { cn } from "@/lib/utils";
 import { useGuestT } from "@/lib/guest-i18n";
@@ -22,7 +23,7 @@ type GuestTab = {
 const HIDDEN_ON_SEGMENTS = ["checkout", "order-confirmation"];
 
 function activeTabFor(pathname: string, storeSlug: string): GuestTab["id"] {
-  const base = `/menu/${storeSlug}`;
+  const base = guestStorePath(storeSlug);
   if (pathname.startsWith(`${base}/rewards`)) return "rewards";
   if (pathname.startsWith(`${base}/orders`)) return "orders";
   if (pathname.startsWith(`${base}/account`)) return "account";
@@ -39,6 +40,7 @@ export function GuestTabBar() {
     rewards,
     loyaltyPoints,
     customer,
+    refetchOrderHistory,
   } = usePublicMenu();
   const t = useGuestT();
   const pathname = usePathname() ?? "";
@@ -51,6 +53,11 @@ export function GuestTabBar() {
     if (hidden) return;
     setHasActiveOrder(readGuestActiveOrders(storeSlug).length > 0);
   }, [hidden, pathname, storeSlug]);
+
+  useEffect(() => {
+    if (hidden || !customer) return;
+    void refetchOrderHistory();
+  }, [customer, hidden, refetchOrderHistory]);
 
   // Lets fixed elements (cart CTA, toasts) sit above the bar instead of under it.
   useEffect(() => {
@@ -131,7 +138,14 @@ export function GuestTabBar() {
               <li key={tab.id} className="flex-1">
                 <Link
                   href={tab.href}
+                  prefetch
                   aria-current={isActive ? "page" : undefined}
+                  onMouseEnter={
+                    tab.id === "orders" ? () => void refetchOrderHistory() : undefined
+                  }
+                  onFocus={
+                    tab.id === "orders" ? () => void refetchOrderHistory() : undefined
+                  }
                   className={cn(
                     "flex h-full w-full flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
                     isActive

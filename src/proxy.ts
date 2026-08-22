@@ -7,6 +7,7 @@ import {
   getAdminStatusFromCache,
   setAdminStatusCookie,
 } from '@/lib/permissions'
+import { isSafeDinerReturnTo } from '@/lib/public-menu/guestMenuPaths'
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
@@ -33,9 +34,7 @@ function matchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
 function sanitizeDinerReturnTo(returnTo: string | null): string {
   if (!returnTo) return '/account'
   const trimmed = returnTo.trim()
-  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/account'
-  if (trimmed.startsWith('/menu/')) return trimmed
-  if (trimmed === '/account' || trimmed.startsWith('/account?')) return trimmed
+  if (isSafeDinerReturnTo(trimmed)) return trimmed
   return '/account'
 }
 

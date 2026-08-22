@@ -49,7 +49,7 @@ export function FeaturedSection({
   if (items.length === 0) return null;
 
   return (
-    <div className="mb-2 px-4 py-6 lg:px-0">
+    <div className="mb-0 px-4 pt-6 pb-1 lg:px-0">
       <h2 className="mb-4 text-lg font-bold text-foreground">✨ {t("menu.featured")}</h2>
 
       {/* Phone: horizontal scroll. Tablet/desktop: grid. */}

@@ -9,6 +9,10 @@ import { users } from "@/db/schema";
 import { customers } from "@/lib/db/schema/orders";
 import { getLoggedInCustomer } from "@/lib/public-menu/getLoggedInCustomer";
 import { ensureCustomerForUser } from "@/lib/public-menu/ensureCustomerForUser";
+import {
+  isSafeDinerLogoutReturnTo,
+  isSafeDinerReturnTo,
+} from "@/lib/public-menu/guestMenuPaths";
 
 const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -29,33 +33,18 @@ const loginSchema = z.object({
   returnTo: z.string().optional(),
 });
 
-function isSafeRelativePath(path: string): boolean {
-  return path.startsWith("/") && !path.startsWith("//");
-}
-
-/** Post-login/signup: only /menu/* or /account (never dashboard/staff). */
+/** Post-login/signup: guest store paths or /account (never dashboard/staff). */
 function sanitizeReturnTo(returnTo: string | null | undefined): string {
   if (!returnTo) return "/account";
   const trimmed = returnTo.trim();
-  if (!isSafeRelativePath(trimmed)) return "/account";
-  if (trimmed.startsWith("/menu/")) return trimmed;
-  if (trimmed === "/account" || trimmed.startsWith("/account?")) return trimmed;
+  if (isSafeDinerReturnTo(trimmed)) return trimmed;
   return "/account";
 }
 
 function sanitizeLogoutReturnTo(returnTo: string | null | undefined): string {
   if (!returnTo) return "/login";
   const trimmed = returnTo.trim();
-  if (!isSafeRelativePath(trimmed)) return "/login";
-  if (
-    trimmed === "/login" ||
-    trimmed.startsWith("/login?") ||
-    trimmed.startsWith("/menu/") ||
-    trimmed === "/account" ||
-    trimmed.startsWith("/account?")
-  ) {
-    return trimmed;
-  }
+  if (isSafeDinerLogoutReturnTo(trimmed)) return trimmed;
   return "/login";
 }
 

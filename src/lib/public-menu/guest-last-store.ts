@@ -1,22 +1,17 @@
+import { storeSlugFromGuestPathname } from "@/lib/public-menu/guestMenuPaths";
+
 export const GUEST_LAST_STORE_COOKIE = "guest-last-store";
 export const GUEST_LAST_STORE_STORAGE_KEY = "guest-last-store";
 
-/** Store slug from a guest return path such as `/menu/bunnco?mode=pickup`. */
+/** Store slug from a guest return path such as `/bunnco?mode=pickup` or `/menu/bunnco`. */
 export function storeSlugFromGuestPath(
   path: string | null | undefined,
 ): string | null {
   const raw = path?.trim() ?? "";
   if (!raw.startsWith("/")) return null;
-  const [pathname, query = ""] = raw.split("?");
-  const match = pathname.match(/^\/menu\/([^/]+)/i);
-  const slugFromPath = match?.[1]?.trim();
-  if (slugFromPath) {
-    try {
-      return decodeURIComponent(slugFromPath).trim().toLowerCase() || null;
-    } catch {
-      return slugFromPath.toLowerCase() || null;
-    }
-  }
+  const fromPath = storeSlugFromGuestPathname(raw);
+  if (fromPath) return fromPath;
+  const query = raw.split("?")[1] ?? "";
   const fromQuery = new URLSearchParams(query).get("store")?.trim();
   return fromQuery ? fromQuery.toLowerCase() : null;
 }

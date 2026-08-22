@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Gift, Lock, LogIn, Sparkles } from "lucide-react";
@@ -165,11 +166,23 @@ export function GuestRewardsPage() {
     ? formatGoodThroughLabel(modalGoodThrough)
     : null;
 
+  const berryTapLogo = (
+    <Image
+      src="/BerryTapSVG.svg"
+      alt="BerryTap"
+      width={140}
+      height={36}
+      className="h-6 w-auto"
+      priority
+    />
+  );
+
   return (
     <GuestTabPage
       title={t("rewards.title")}
       subtitle={restaurant?.name ?? null}
-      headerSlot={pointsHeader}
+      headerCenter={customer ? berryTapLogo : undefined}
+      headerSlot={customer ? pointsHeader : berryTapLogo}
     >
       {programOff ? (
         <p className="rounded-2xl border border-border/70 bg-card/70 p-4 text-sm text-muted-foreground shadow-sm">

@@ -1,6 +1,6 @@
 "use client";
 
-const SW_PATH = "/menu/sw-guest-orders-push.js?v=2";
+const SW_PATH = "/sw-guest-orders-push.js?v=3";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -91,13 +91,16 @@ function waitForWorkerState(
   });
 }
 
-export async function registerGuestOrderPushServiceWorker(): Promise<ServiceWorkerRegistration> {
+export async function registerGuestOrderPushServiceWorker(
+  storeSlug?: string,
+): Promise<ServiceWorkerRegistration> {
   if (!isGuestOrderPushSupported()) {
     throw new Error("Push is not supported in this browser");
   }
-  // SW lives under /menu/ so default scope covers confirmation without header tricks.
+  const slug = storeSlug?.trim().toLowerCase() ?? "";
+  const scope = slug ? `/${encodeURIComponent(slug)}/` : "/";
   const registration = await navigator.serviceWorker.register(SW_PATH, {
-    scope: "/menu/",
+    scope,
   });
   const pending = registration.installing ?? registration.waiting;
   if (pending) {
@@ -192,7 +195,7 @@ export async function subscribeToGuestOrderPush(input: {
 
   let registration: ServiceWorkerRegistration;
   try {
-    registration = await registerGuestOrderPushServiceWorker();
+    registration = await registerGuestOrderPushServiceWorker(input.storeSlug);
   } catch (error) {
     return {
       ok: false,
@@ -206,7 +209,8 @@ export async function subscribeToGuestOrderPush(input: {
 
   // Prefer an active worker for PushManager on Safari.
   const readyRegistration = await navigator.serviceWorker.ready.catch(() => registration);
-  const pushRegistration = readyRegistration.scope.includes("/menu")
+  const slugScope = `/${encodeURIComponent(input.storeSlug.trim().toLowerCase())}/`;
+  const pushRegistration = readyRegistration.scope.includes(slugScope)
     ? readyRegistration
     : registration;
 
@@ -274,7 +278,7 @@ export async function subscribeToGuestOrderPush(input: {
 export async function unsubscribeFromGuestOrderPush(orderId: string): Promise<boolean> {
   if (!isGuestOrderPushSupported()) return false;
   try {
-    const registration = await registerGuestOrderPushServiceWorker().catch(() => null);
+    const registration = await navigator.serviceWorker.getRegistration().catch(() => null);
     const subscription = registration
       ? await registration.pushManager.getSubscription()
       : null;

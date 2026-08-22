@@ -9,6 +9,7 @@ import { ArrowRight } from "lucide-react";
 import { customerLogin, customerSignup } from "@/app/actions/customer-auth";
 import { PhoneNumberField } from "@/components/shared/phone-number-field";
 import { useStorePhoneCountry } from "@/lib/public-menu/use-store-phone-country";
+import { isGuestStorePathname } from "@/lib/public-menu/guestMenuPaths";
 
 type CustomerAuthMode = "login" | "signup";
 
@@ -419,7 +420,7 @@ export function CustomerAuthForm({
                 {isSignup ? "Sign in" : "Create account"}
               </Link>
             </p>
-            {returnTo?.startsWith("/menu/") ? (
+            {returnTo && isGuestStorePathname(returnTo) ? (
               <Link
                 href={returnTo}
                 className="text-muted-foreground hover:text-foreground hover:underline transition-colors font-normal"

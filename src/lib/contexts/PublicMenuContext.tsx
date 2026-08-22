@@ -55,6 +55,10 @@ import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
 import { preloadGuestCartImages, preloadGuestImage } from "@/lib/public-menu/preloadGuestCartImages";
 import { buildGuestMenuQueryString } from "@/lib/public-menu/buildPublicMenuUrl";
 import {
+  guestStorePath,
+  isGuestMenuPathForStore,
+} from "@/lib/public-menu/guestMenuPaths";
+import {
   buildGuestIdempotencyKey,
   runGuestOrderPlacementInBackground,
   type GuestOrderPlacementRequest,
@@ -82,7 +86,7 @@ import {
 
 type OrderType = GuestOrderType;
 
-const ORDER_HISTORY_STALE_MS = 30_000;
+const ORDER_HISTORY_FETCH_LIMIT = 50;
 
 export type GuestSeatState = StoredGuestSeat;
 
@@ -172,6 +176,7 @@ type PublicMenuContextValue = {
   loyaltyPointLots: PublicMenuCustomer["loyaltyPointLots"];
   rewards: PublicMenuReward[];
   orderHistory: GuestOrderHistoryEntry[];
+  orderHistoryTotal: number;
   orderHistoryLoading: boolean;
   refetchOrderHistory: (opts?: { force?: boolean }) => Promise<void>;
   refetchCustomer: () => Promise<void>;
@@ -223,15 +228,17 @@ export function PublicMenuProvider({
   const [customer, setCustomer] = useState<PublicMenuCustomer | null>(null);
   const [customerLoading, setCustomerLoading] = useState(true);
   const [orderHistory, setOrderHistory] = useState<GuestOrderHistoryEntry[]>([]);
+  const [orderHistoryTotal, setOrderHistoryTotal] = useState(0);
   const [orderHistoryLoading, setOrderHistoryLoading] = useState(false);
   const orderHistoryRef = useRef(orderHistory);
   const orderHistoryFetchedAtRef = useRef<number | null>(null);
   const orderHistoryUserIdRef = useRef<string | null>(null);
   orderHistoryRef.current = orderHistory;
+  const customerUserId = customer?.userId ?? null;
 
   const accountReturnTo = useMemo(() => {
     const query = buildGuestMenuQueryString({ tableNumber, mode: orderType });
-    return `/menu/${storeSlug}${query}`;
+    return `${guestStorePath(storeSlug)}${query}`;
   }, [orderType, storeSlug, tableNumber]);
 
   const accountLoginPath = `/login?returnTo=${encodeURIComponent(accountReturnTo)}`;
@@ -297,6 +304,7 @@ export function PublicMenuProvider({
 
   const clearOrderHistory = useCallback(() => {
     setOrderHistory([]);
+    setOrderHistoryTotal(0);
     setOrderHistoryLoading(false);
     orderHistoryFetchedAtRef.current = null;
     orderHistoryUserIdRef.current = null;
@@ -308,60 +316,64 @@ export function PublicMenuProvider({
         clearOrderHistory();
         return;
       }
-      if (!customer) {
+      if (!customerUserId) {
         clearOrderHistory();
         return;
       }
 
-      const now = Date.now();
-      const fetchedAt = orderHistoryFetchedAtRef.current;
-      const sameUser = orderHistoryUserIdRef.current === customer.userId;
       if (
         !opts?.force &&
-        sameUser &&
-        fetchedAt != null &&
-        now - fetchedAt < ORDER_HISTORY_STALE_MS
+        orderHistoryUserIdRef.current === customerUserId &&
+        orderHistoryFetchedAtRef.current != null
       ) {
         return;
       }
 
       const showSpinner =
         orderHistoryRef.current.length === 0 ||
-        orderHistoryUserIdRef.current !== customer.userId;
+        orderHistoryUserIdRef.current !== customerUserId;
       if (showSpinner) setOrderHistoryLoading(true);
 
       try {
-        const response = await fetch(
-          `/api/public/orders/history?storeSlug=${encodeURIComponent(storeSlug)}`,
-          { cache: "no-store" },
-        );
+        const params = new URLSearchParams({
+          storeSlug,
+          limit: String(ORDER_HISTORY_FETCH_LIMIT),
+        });
+        const response = await fetch(`/api/public/orders/history?${params.toString()}`, {
+          cache: "no-store",
+        });
         const payload = await response.json().catch(() => null);
         if (response.ok && payload?.ok === true) {
-          setOrderHistory((payload.data?.orders ?? []) as GuestOrderHistoryEntry[]);
+          const orders = (payload.data?.orders ?? []) as GuestOrderHistoryEntry[];
+          const total = Number(payload.data?.total);
+          setOrderHistory(orders);
+          setOrderHistoryTotal(Number.isFinite(total) ? total : orders.length);
         } else {
           setOrderHistory([]);
+          setOrderHistoryTotal(0);
         }
         orderHistoryFetchedAtRef.current = Date.now();
-        orderHistoryUserIdRef.current = customer.userId;
+        orderHistoryUserIdRef.current = customerUserId;
       } catch {
         if (orderHistoryRef.current.length === 0) {
           setOrderHistory([]);
+          setOrderHistoryTotal(0);
         }
       } finally {
         setOrderHistoryLoading(false);
       }
     },
-    [clearOrderHistory, customer, storeSlug],
+    [clearOrderHistory, customerUserId, storeSlug],
   );
 
   useEffect(() => {
     if (customerLoading) return;
-    if (!customer) {
+    if (!customerUserId) {
       clearOrderHistory();
       return;
     }
     void refetchOrderHistory();
-  }, [clearOrderHistory, customer, customerLoading, refetchOrderHistory]);
+  }, [clearOrderHistory, customerLoading, customerUserId, refetchOrderHistory]);
 
   const logoutCustomer = useCallback(async () => {
     // Clear before the server redirect: PublicMenuProvider lives in the menu
@@ -370,7 +382,7 @@ export function PublicMenuProvider({
     setCustomer(null);
     setCustomerLoading(false);
     const query = buildGuestMenuQueryString({ tableNumber, mode: orderType });
-    await customerLogout(`/menu/${storeSlug}/account${query}`);
+    await customerLogout(`${guestStorePath(storeSlug, "/account")}${query}`);
   }, [clearOrderHistory, orderType, storeSlug, tableNumber]);
 
   useEffect(() => {
@@ -440,7 +452,7 @@ export function PublicMenuProvider({
   useEffect(() => {
     if (typeof window === "undefined" || storeSlug === "demo") return;
     const url = new URL(window.location.href);
-    if (!url.pathname.startsWith(`/menu/${storeSlug}`)) return;
+    if (!isGuestMenuPathForStore(url.pathname, storeSlug)) return;
 
     const table = tableNumber.trim();
     if (table) url.searchParams.set("table", table);
@@ -868,12 +880,12 @@ export function PublicMenuProvider({
     updateCartItem,
     clearCart,
     getCustomizationGroupsForItem,
-    checkoutPath: `/menu/${storeSlug}/checkout${guestQuery}`,
-    menuPath: `/menu/${storeSlug}${guestQuery}`,
-    orderConfirmationPath: `/menu/${storeSlug}/order-confirmation${guestQuery}`,
-    rewardsPath: `/menu/${storeSlug}/rewards${guestQuery}`,
-    ordersPath: `/menu/${storeSlug}/orders${guestQuery}`,
-    accountPath: `/menu/${storeSlug}/account${guestQuery}`,
+    checkoutPath: `${guestStorePath(storeSlug, "/checkout")}${guestQuery}`,
+    menuPath: `${guestStorePath(storeSlug)}${guestQuery}`,
+    orderConfirmationPath: `${guestStorePath(storeSlug, "/order-confirmation")}${guestQuery}`,
+    rewardsPath: `${guestStorePath(storeSlug, "/rewards")}${guestQuery}`,
+    ordersPath: `${guestStorePath(storeSlug, "/orders")}${guestQuery}`,
+    accountPath: `${guestStorePath(storeSlug, "/account")}${guestQuery}`,
     callTableService,
     refetch: fetchMenu,
     guestOrderPlacement,
@@ -895,6 +907,7 @@ export function PublicMenuProvider({
     loyaltyPointLots: customer?.loyaltyPointLots ?? null,
     rewards: view?.rewards ?? [],
     orderHistory,
+    orderHistoryTotal,
     orderHistoryLoading,
     refetchOrderHistory,
     refetchCustomer,
@@ -1006,6 +1019,7 @@ export function StaticDemoMenuProvider({ children }: { children: ReactNode }) {
     loyaltyPointLots: null,
     rewards: [],
     orderHistory: [],
+    orderHistoryTotal: 0,
     orderHistoryLoading: false,
     refetchOrderHistory: async () => {},
     refetchCustomer: async () => {},

@@ -1316,8 +1316,8 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
 
   /* Improve touch targets on mobile */
   @media (max-width: 768px) {
-    button,
-    a {
+    button:not(.guest-brand-bar-login),
+    a:not(.guest-brand-bar-login) {
       min-height: 44px;
       min-width: 44px;
     }
@@ -1357,6 +1357,12 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
 
     /* Override for context pill (Table X Dine-in) - keep compact sizing like checkout-button-design */
     .context-pill button {
+      min-height: unset !important;
+      min-width: unset !important;
+    }
+
+    /* Guest BerryTap bar login - keep the strip slim */
+    .guest-brand-bar a {
       min-height: unset !important;
       min-width: unset !important;
     }
@@ -2058,5 +2064,35 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
   .incoming-order-overlay__accept,
   .incoming-order-overlay__badge {
     animation: none;
+  }
+}
+
+/* Unlayered so it beats the @layer base 44px tap target on `a` */
+.guest-brand-bar {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+}
+
+.guest-brand-bar a.guest-brand-bar-login {
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: auto !important;
+  width: auto !important;
+  padding: 0 !important;
+}
+
+.guest-brand-bar .guest-brand-logo {
+  display: block;
+  width: auto !important;
+}
+
+@media (min-width: 768px) {
+  .guest-brand-bar {
+    padding-top: 0.625rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .guest-brand-bar {
+    padding-top: 0.75rem;
   }
 }

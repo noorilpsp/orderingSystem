@@ -1,3 +1,5 @@
+import { guestStorePath, normalizeStoreSlug } from "@/lib/public-menu/guestMenuPaths";
+
 export const GUEST_MENU_ORIGIN = "https://qlanis.vercel.app";
 
 export type PublicMenuPath = "menu" | "checkout" | "order-confirmation";
@@ -45,7 +47,7 @@ export function buildPublicMenuUrl({
   origin = "",
   extraParams,
 }: BuildPublicMenuUrlInput): string {
-  const normalizedSlug = storeSlug.trim().toLowerCase();
+  const normalizedSlug = normalizeStoreSlug(storeSlug);
   const suffix =
     path === "checkout"
       ? "/checkout"
@@ -53,7 +55,7 @@ export function buildPublicMenuUrl({
         ? "/order-confirmation"
         : "";
 
-  const pathname = `/menu/${encodeURIComponent(normalizedSlug)}${suffix}`;
+  const pathname = guestStorePath(normalizedSlug, suffix);
   const query = buildGuestMenuQueryString({ tableNumber, mode, extraParams });
 
   if (!origin) return `${pathname}${query}`;

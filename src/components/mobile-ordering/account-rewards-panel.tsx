@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { writeSelectedRewardId } from "@/lib/public-menu/guest-reward-storage";
+import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
 import type { PublicLoyaltyReward } from "@/lib/loyalty/listActivePublicLoyaltyRewards";
 
 type AccountRewardsPanelProps = {
@@ -31,7 +32,7 @@ export function AccountRewardsPanel({
   const handleUse = (rewardId: string) => {
     writeSelectedRewardId(storeSlug, rewardId);
     toast.success("Reward saved - add items, then apply at checkout");
-    router.push(`/menu/${storeSlug}`);
+    router.push(guestStorePath(storeSlug));
   };
 
   return (
@@ -61,7 +62,7 @@ export function AccountRewardsPanel({
               </Button>
             </div>
             <Link
-              href={`/menu/${storeSlug}`}
+              href={guestStorePath(storeSlug)}
               className="mt-2 inline-block text-xs font-medium text-primary underline"
             >
               Open menu

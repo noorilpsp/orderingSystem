@@ -22,6 +22,7 @@ import {
 import { merchantLocations } from "@/lib/db/schema/merchant-locations";
 import { ADMIN_MERCHANTS_CACHE_TAG } from "@/lib/queries";
 import { timezoneFromCountry } from "@/lib/timezone/fromCountry";
+import { isValidStoreSlug } from "@/lib/public-menu/guestMenuPaths";
 
 export const runtime = "nodejs";
 
@@ -69,7 +70,19 @@ const locationSchema = z.object({
   name: z.string().optional().default(""),
   storeType: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  storeSlug: z.string().optional().nullable(),
+  storeSlug: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((val) => {
+      if (val == null) return val;
+      const slug = val.trim().toLowerCase();
+      return slug || null;
+    })
+    .refine(
+      (val) => val == null || val === "" || isValidStoreSlug(val),
+      "This URL is reserved or invalid",
+    ),
   address: z.string().optional().default(""),
   addressLine2: z.string().optional().nullable(),
   postalCode: z.string().optional().default(""),

@@ -1,5 +1,5 @@
 /**
- * Guest order-ready alert for /menu/.../order-confirmation.
+ * Guest order-ready alert for /{storeSlug}/order-confirmation.
  *
  * Unlock during Place Order (user gesture). Reuse one shared Audio element so
  * playback can start later without another tap (Safari/Chrome autoplay policy).

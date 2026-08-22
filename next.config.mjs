@@ -44,6 +44,20 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/menu/:slug",
+        destination: "/:slug",
+        permanent: true,
+      },
+      {
+        source: "/menu/:slug/:path*",
+        destination: "/:slug/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {
@@ -60,7 +74,7 @@ const nextConfig = {
         ],
       },
       {
-        source: "/menu/sw-guest-orders-push.js",
+        source: "/sw-guest-orders-push.js",
         headers: [
           {
             key: "Cache-Control",
@@ -68,7 +82,7 @@ const nextConfig = {
           },
           {
             key: "Service-Worker-Allowed",
-            value: "/menu/",
+            value: "/",
           },
         ],
       },

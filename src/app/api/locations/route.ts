@@ -9,6 +9,7 @@ import { revalidateTag } from "next/cache"
 import { unstable_cache } from "@/lib/unstable-cache"
 import { revalidatePublicMenuForSlug } from "@/lib/public-menu/publicMenuCache"
 import { timezoneFromCountry } from "@/lib/timezone/fromCountry"
+import { parseOptionalStoreSlug } from "@/lib/public-menu/guestMenuPaths"
 
 export const runtime = "nodejs"
 
@@ -167,12 +168,17 @@ export async function POST(request: NextRequest) {
 
     const country = body.address?.country || body.country || "Belgium"
 
+    const parsedSlug = parseOptionalStoreSlug(body.storeSlug)
+    if (!parsedSlug.ok) {
+      return NextResponse.json({ error: parsedSlug.message }, { status: 400 })
+    }
+
     const locationData: typeof merchantLocations.$inferInsert = {
       merchantId,
       name: body.storeName || body.name || "New Location",
       storeType: body.storeType || null,
       description: body.shortDescription || body.description || null,
-      storeSlug: body.storeSlug || null,
+      storeSlug: parsedSlug.slug,
       address: body.address?.street || body.address || "",
       addressLine2: body.address?.apartment || body.addressLine2 || null,
       postalCode: body.address?.postalCode || body.postalCode || "",

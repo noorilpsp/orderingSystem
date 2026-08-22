@@ -9,6 +9,7 @@ import { revalidateTag } from "next/cache"
 import { unstable_cache } from "@/lib/unstable-cache"
 import { revalidatePublicMenuForLocation, revalidatePublicMenuForSlug } from "@/lib/public-menu/publicMenuCache"
 import { timezoneFromCountry } from "@/lib/timezone/fromCountry"
+import { parseOptionalStoreSlug } from "@/lib/public-menu/guestMenuPaths"
 
 export const runtime = "nodejs"
 
@@ -199,7 +200,11 @@ export async function PUT(
       updateData.description = body.shortDescription || null
     }
     if (body.storeSlug !== undefined) {
-      updateData.storeSlug = body.storeSlug || null
+      const parsedSlug = parseOptionalStoreSlug(body.storeSlug)
+      if (!parsedSlug.ok) {
+        return NextResponse.json({ error: parsedSlug.message }, { status: 400 })
+      }
+      updateData.storeSlug = parsedSlug.slug
     }
 
     // Address

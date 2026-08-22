@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Clock, Loader2, LogIn, MapPin, Phone, Sparkles, Store, User } from "lucide-react";
@@ -17,6 +18,7 @@ import {
   type GuestPaymentMethodId,
 } from "@/components/mobile-ordering/checkout/payment-method-section";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
+import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
 import { unlockGuestOrderReadyAudio } from "@/lib/mobile-ordering/guest-order-ready-sound";
 import { ensureGuestOrderPushPermission } from "@/lib/public-menu/guest-orders-push-client";
 import { formatPickupScheduleLabel } from "@/lib/public-menu/buildPickupScheduleSlots";
@@ -392,7 +394,7 @@ export function GuestCheckoutPage() {
       }
       if (scheduledPickupAt) params.set("scheduledFor", scheduledPickupAt);
 
-      router.push(`/menu/${storeSlug}/order-confirmation?${params.toString()}`);
+      router.push(`${guestStorePath(storeSlug, "/order-confirmation")}?${params.toString()}`);
     })();
   };
 
@@ -434,17 +436,26 @@ export function GuestCheckoutPage() {
     <div className="min-h-screen pb-28">
       <header className="checkout-header sticky top-0 z-30 border-b border-border/70 bg-card/80 px-2 backdrop-blur-xl lg:px-4">
         <div
-          className="mx-auto flex w-full max-w-none items-center justify-start gap-2 px-1 py-1 lg:px-4"
-          dir="ltr"
+          className="mx-auto flex w-full max-w-none items-center justify-between gap-2 px-1 py-1 lg:px-4"
         >
-          <Link
-            href={menuPath}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-foreground/10"
-            aria-label={t("common.backToMenu")}
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Link>
-          <h1 className="text-lg font-bold text-foreground">{t("checkout.title")}</h1>
+          <div className="flex min-w-0 items-center gap-2" dir="ltr">
+            <Link
+              href={menuPath}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-foreground/10"
+              aria-label={t("common.backToMenu")}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Link>
+            <h1 className="text-lg font-bold text-foreground">{t("checkout.title")}</h1>
+          </div>
+          <Image
+            src="/BerryTapSVG.svg"
+            alt="BerryTap"
+            width={140}
+            height={36}
+            className="h-6 w-auto shrink-0"
+            priority
+          />
         </div>
       </header>
 

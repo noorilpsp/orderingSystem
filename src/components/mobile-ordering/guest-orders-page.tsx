@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -55,8 +56,8 @@ export function GuestOrdersPage() {
     customer,
     customerLoading,
     orderHistory,
+    orderHistoryTotal,
     orderHistoryLoading,
-    refetchOrderHistory,
     accountLoginPath,
     checkoutPath,
     menuPath,
@@ -64,9 +65,6 @@ export function GuestOrdersPage() {
 
   const [activeOrders, setActiveOrders] = useState<GuestActiveOrder[]>([]);
   const [pastPage, setPastPage] = useState(1);
-  const [historyPage, setHistoryPage] = useState<GuestOrderHistoryEntry[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyPageLoading, setHistoryPageLoading] = useState(false);
 
   const trackStatusLabel: Record<GuestOrderHistoryEntry["trackStatus"], EnMessageKey> = {
     scheduled: "confirm.scheduled",
@@ -87,59 +85,11 @@ export function GuestOrdersPage() {
     setPastPage(1);
   }, [storeSlug, customer?.userId]);
 
-  useEffect(() => {
-    if (customerLoading) return;
-    void refetchOrderHistory();
-  }, [customerLoading, refetchOrderHistory]);
-
-  useEffect(() => {
-    if (customerLoading) return;
-    if (!customer) {
-      setHistoryPage([]);
-      setHistoryTotal(0);
-      setHistoryPageLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    const loadPage = async () => {
-      setHistoryPageLoading(true);
-      try {
-        const params = new URLSearchParams({
-          storeSlug,
-          limit: String(PAST_PAGE_SIZE),
-          offset: String((pastPage - 1) * PAST_PAGE_SIZE),
-        });
-        const response = await fetch(`/api/public/orders/history?${params.toString()}`, {
-          cache: "no-store",
-        });
-        const payload = (await response.json().catch(() => null)) as {
-          ok?: boolean;
-          data?: { orders?: GuestOrderHistoryEntry[]; total?: number };
-        } | null;
-        if (cancelled) return;
-        if (response.ok && payload?.ok === true) {
-          setHistoryPage(Array.isArray(payload.data?.orders) ? payload.data.orders : []);
-          setHistoryTotal(Number(payload.data?.total) || 0);
-        } else {
-          setHistoryPage([]);
-          setHistoryTotal(0);
-        }
-      } catch {
-        if (!cancelled) {
-          setHistoryPage([]);
-          setHistoryTotal(0);
-        }
-      } finally {
-        if (!cancelled) setHistoryPageLoading(false);
-      }
-    };
-
-    void loadPage();
-    return () => {
-      cancelled = true;
-    };
-  }, [customer, customerLoading, pastPage, storeSlug]);
+  const historyPage = useMemo(
+    () =>
+      orderHistory.slice((pastPage - 1) * PAST_PAGE_SIZE, pastPage * PAST_PAGE_SIZE),
+    [orderHistory, pastPage],
+  );
 
   const handleReorder = (order: GuestOrderHistoryEntry) => {
     let added = 0;
@@ -176,7 +126,7 @@ export function GuestOrdersPage() {
     for (const order of activeOrders) {
       byId.set(order.orderId, order);
     }
-    for (const order of [...orderHistory, ...historyPage]) {
+    for (const order of orderHistory) {
       if (!isGuestOrderInProgress(order.trackStatus)) continue;
       if (byId.has(order.orderId)) continue;
       byId.set(order.orderId, {
@@ -189,27 +139,37 @@ export function GuestOrdersPage() {
       });
     }
     return [...byId.values()].sort((a, b) => b.savedAt - a.savedAt);
-  }, [activeOrders, historyPage, orderHistory]);
+  }, [activeOrders, orderHistory]);
 
   const pastOrders = useMemo(
     () => historyPage.filter((order) => !isGuestOrderInProgress(order.trackStatus)),
     [historyPage],
   );
-  const pastPageCount = Math.max(1, Math.ceil(historyTotal / PAST_PAGE_SIZE));
-  const showPastPagination = Boolean(customer) && historyTotal > PAST_PAGE_SIZE;
+  const pastPageCount = Math.max(1, Math.ceil(orderHistoryTotal / PAST_PAGE_SIZE));
+  const showPastPagination = Boolean(customer) && orderHistoryTotal > PAST_PAGE_SIZE;
 
   useEffect(() => {
     if (pastPage > pastPageCount) setPastPage(pastPageCount);
   }, [pastPage, pastPageCount]);
 
   const showLoading =
-    customerLoading ||
-    ((orderHistoryLoading || historyPageLoading) &&
-      orderHistory.length === 0 &&
-      historyPage.length === 0);
+    customerLoading || (orderHistoryLoading && orderHistory.length === 0);
 
   return (
-    <GuestTabPage title={t("orders.title")} subtitle={restaurant?.name ?? null}>
+    <GuestTabPage
+      title={t("orders.title")}
+      subtitle={restaurant?.name ?? null}
+      headerSlot={
+        <Image
+          src="/BerryTapSVG.svg"
+          alt="BerryTap"
+          width={140}
+          height={36}
+          className="h-6 w-auto"
+          priority
+        />
+      }
+    >
       {inProgressOrders.length > 0 ? (
         <section className="space-y-3">
           {inProgressOrders.map((order) => (
@@ -254,7 +214,7 @@ export function GuestOrdersPage() {
             {t("account.signIn")}
           </Link>
         </section>
-      ) : !historyPageLoading && historyTotal === 0 && inProgressOrders.length === 0 ? (
+      ) : !orderHistoryLoading && orderHistoryTotal === 0 && inProgressOrders.length === 0 ? (
         <section className="rounded-2xl border border-border/70 bg-card/70 p-5 text-center shadow-sm backdrop-blur-md">
           <p className="text-base font-semibold text-foreground">{t("orders.empty")}</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -271,13 +231,8 @@ export function GuestOrdersPage() {
         </section>
       ) : (
         <>
-          {historyPageLoading && pastOrders.length === 0 ? (
-            <div className="flex justify-center py-6">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : null}
           {pastOrders.length > 0 ? (
-        <ul className={cn("space-y-3", historyPageLoading ? "opacity-60" : null)}>
+        <ul className="space-y-3">
           {pastOrders.map((order) => (
             <li
               key={order.orderId}
@@ -367,7 +322,7 @@ export function GuestOrdersPage() {
                 variant="outline"
                 size="sm"
                 className="gap-1"
-                disabled={pastPage <= 1 || historyPageLoading}
+                disabled={pastPage <= 1}
                 onClick={() => setPastPage((page) => Math.max(1, page - 1))}
               >
                 <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
@@ -381,7 +336,7 @@ export function GuestOrdersPage() {
                 variant="outline"
                 size="sm"
                 className="gap-1"
-                disabled={pastPage >= pastPageCount || historyPageLoading}
+                disabled={pastPage >= pastPageCount}
                 onClick={() => setPastPage((page) => Math.min(pastPageCount, page + 1))}
               >
                 {t("orders.next")}

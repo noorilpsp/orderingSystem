@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { restaurant as staticRestaurant } from "@/lib/menu-data";
 import { usePublicMenuOptional } from "@/lib/contexts/PublicMenuContext";
@@ -24,6 +25,9 @@ export function HeroSection({ onInfoClick, topRightSlot }: HeroSectionProps) {
   const publicMenu = usePublicMenuOptional();
   const t = useGuestT();
   const restaurant = publicMenu?.restaurant ?? staticRestaurant;
+  const customer = publicMenu?.customer ?? null;
+  const accountLoginPath = publicMenu?.accountLoginPath ?? "/login";
+  const accountPath = publicMenu?.accountPath ?? "/login";
   const bannerUrl = restaurant.bannerUrl?.trim() || null;
   const logoUrl = restaurant.logoUrl?.trim() || null;
   const [openNow, setOpenNow] = useState<boolean | null>(null);
@@ -41,6 +45,27 @@ export function HeroSection({ onInfoClick, topRightSlot }: HeroSectionProps) {
 
   return (
     <div className="relative">
+      <div className="guest-brand-bar liquid-glass relative z-20 flex h-11 items-center justify-between gap-2 overflow-hidden rounded-none border-b border-border/50 px-4 py-2 backdrop-blur-xl md:h-12 md:px-6 md:py-2.5 lg:h-14 lg:px-8 lg:py-3">
+        <span className="guest-brand-logo-wrap inline-flex items-center">
+          <Image
+            src="/BerryTapSVG.svg"
+            alt="BerryTap"
+            width={140}
+            height={36}
+            className="guest-brand-logo block h-6 w-auto md:h-7 lg:h-8"
+            priority
+          />
+        </span>
+        <Link
+          href={customer ? accountPath : accountLoginPath}
+          className="guest-brand-bar-login inline-flex shrink-0 items-center"
+        >
+          <span className="guest-brand-bar-login-label inline-flex h-8 items-center justify-center rounded-full bg-neutral-900 px-3.5 text-xs font-semibold leading-none text-white md:h-9 md:px-4 md:text-sm">
+            {customer ? t("nav.account") : t("auth.login")}
+          </span>
+        </Link>
+      </div>
+
       <div className="relative h-72 w-full md:h-52 lg:h-56">
         <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800">
           {bannerUrl ? (

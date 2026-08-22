@@ -59,6 +59,7 @@ import {
 } from "@/lib/merchant-localization"
 import { StoreTablesManager } from "@/components/dashboard/store-tables-manager"
 import { StoreMenuQrButton } from "@/components/dashboard/table-qr-dialog"
+import { isReservedStoreSlug } from "@/lib/public-menu/guestMenuPaths"
 
 // Zod Schema
 const storeInfoSchema = z.object({
@@ -68,7 +69,8 @@ const storeInfoSchema = z.object({
   storeSlug: z
     .string()
     .min(1, "Store URL is required")
-    .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens"),
+    .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens")
+    .refine((slug) => !isReservedStoreSlug(slug), "This URL is reserved"),
   address: z.object({
     street: z.string().optional().or(z.literal("")),
     apartment: z.string().optional(),
@@ -1371,7 +1373,7 @@ export default function StoresPage() {
                   </Label>
                   <div className="flex gap-2">
                     <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-muted border rounded-lg">
-                      <span className="text-sm text-muted-foreground">/menu/</span>
+                      <span className="text-sm text-muted-foreground">/</span>
                       <Input
                         id="storeSlug"
                         {...register("storeSlug")}
