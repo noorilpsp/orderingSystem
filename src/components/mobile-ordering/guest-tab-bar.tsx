@@ -10,6 +10,7 @@ import { readGuestActiveOrders } from "@/lib/public-menu/guest-active-order-stor
 import { cn } from "@/lib/utils";
 import { useGuestT } from "@/lib/guest-i18n";
 import type { EnMessageKey } from "@/lib/guest-i18n";
+import { GuestMenuLink, useGuestStoreChromeOptional } from "@/components/mobile-ordering/guest-store-chrome";
 
 type GuestTab = {
   id: "menu" | "rewards" | "orders" | "account";
@@ -46,8 +47,10 @@ export function GuestTabBar() {
   const pathname = usePathname() ?? "";
   const [hasActiveOrder, setHasActiveOrder] = useState(false);
 
+  const chrome = useGuestStoreChromeOptional();
   const lastSegment = pathname.split("/").filter(Boolean).pop() ?? "";
-  const hidden = HIDDEN_ON_SEGMENTS.includes(lastSegment);
+  const hidden =
+    HIDDEN_ON_SEGMENTS.includes(lastSegment) && !chrome?.isMenuVisible;
 
   useEffect(() => {
     if (hidden) return;
@@ -136,37 +139,69 @@ export function GuestTabBar() {
             const isActive = active === tab.id;
             return (
               <li key={tab.id} className="flex-1">
-                <Link
-                  href={tab.href}
-                  prefetch
-                  aria-current={isActive ? "page" : undefined}
-                  onMouseEnter={
-                    tab.id === "orders" ? () => void refetchOrderHistory() : undefined
-                  }
-                  onFocus={
-                    tab.id === "orders" ? () => void refetchOrderHistory() : undefined
-                  }
-                  className={cn(
-                    "flex h-full w-full flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
-                    isActive
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <span className="relative">
-                    <Icon
-                      className={cn("h-5 w-5", isActive && "text-primary")}
-                      strokeWidth={isActive ? 2.4 : 1.8}
-                    />
-                    {tab.showDot ? (
-                      <span
-                        className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-card"
-                        aria-hidden
+                {tab.id === "menu" ? (
+                  <GuestMenuLink
+                    href={tab.href}
+                    prefetch
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "flex h-full w-full flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span className="relative">
+                      <Icon
+                        className={cn("h-5 w-5", isActive && "text-primary")}
+                        strokeWidth={isActive ? 2.4 : 1.8}
                       />
-                    ) : null}
-                  </span>
-                  <span>{t(tab.labelKey)}</span>
-                </Link>
+                      {tab.showDot ? (
+                        <span
+                          className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-card"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </span>
+                    <span>{t(tab.labelKey)}</span>
+                  </GuestMenuLink>
+                ) : (
+                  <Link
+                    href={tab.href}
+                    prefetch
+                    aria-current={isActive ? "page" : undefined}
+                    onMouseEnter={
+                      tab.id === "orders"
+                        ? () => void refetchOrderHistory()
+                        : undefined
+                    }
+                    onFocus={
+                      tab.id === "orders"
+                        ? () => void refetchOrderHistory()
+                        : undefined
+                    }
+                    className={cn(
+                      "flex h-full w-full flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span className="relative">
+                      <Icon
+                        className={cn("h-5 w-5", isActive && "text-primary")}
+                        strokeWidth={isActive ? 2.4 : 1.8}
+                      />
+                      {tab.showDot ? (
+                        <span
+                          className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-card"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </span>
+                    <span>{t(tab.labelKey)}</span>
+                  </Link>
+                )}
               </li>
             );
           })}

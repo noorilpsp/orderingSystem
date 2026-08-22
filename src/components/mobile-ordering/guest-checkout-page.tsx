@@ -18,6 +18,7 @@ import {
   type GuestPaymentMethodId,
 } from "@/components/mobile-ordering/checkout/payment-method-section";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
+import { GuestMenuLink } from "@/components/mobile-ordering/guest-store-chrome";
 import { guestStorePath } from "@/lib/public-menu/guestMenuPaths";
 import { unlockGuestOrderReadyAudio } from "@/lib/mobile-ordering/guest-order-ready-sound";
 import { ensureGuestOrderPushPermission } from "@/lib/public-menu/guest-orders-push-client";
@@ -411,9 +412,9 @@ export function GuestCheckoutPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
         <p className="text-lg font-semibold text-foreground">{t("cart.empty")}</p>
-        <Link href={menuPath} className="mt-4 text-sm font-medium text-primary underline">
+        <GuestMenuLink href={menuPath} className="mt-4 text-sm font-medium text-primary underline">
           {t("common.backToMenu")}
-        </Link>
+        </GuestMenuLink>
       </div>
     );
   }
@@ -425,9 +426,9 @@ export function GuestCheckoutPage() {
         <p className="mt-2 max-w-sm text-sm text-muted-foreground">
           {t("checkout.rewardNeedsItem")}
         </p>
-        <Link href={menuPath} className="mt-4 text-sm font-medium text-primary underline">
+        <GuestMenuLink href={menuPath} className="mt-4 text-sm font-medium text-primary underline">
           {t("common.backToMenu")}
-        </Link>
+        </GuestMenuLink>
       </div>
     );
   }
@@ -439,13 +440,13 @@ export function GuestCheckoutPage() {
           className="mx-auto flex w-full max-w-none items-center justify-between gap-2 px-1 py-1 lg:px-4"
         >
           <div className="flex min-w-0 items-center gap-2" dir="ltr">
-            <Link
+            <GuestMenuLink
               href={menuPath}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-foreground/10"
               aria-label={t("common.backToMenu")}
             >
               <ChevronLeft className="h-5 w-5" />
-            </Link>
+            </GuestMenuLink>
             <h1 className="text-lg font-bold text-foreground">{t("checkout.title")}</h1>
           </div>
           <Image

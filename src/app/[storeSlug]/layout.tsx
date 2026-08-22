@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation";
 import { GuestPhoneShell } from "@/components/mobile-ordering/guest-phone-shell";
+import {
+  GuestStoreChrome,
+  GuestStorePages,
+} from "@/components/mobile-ordering/guest-store-chrome";
 import { GuestTabBar } from "@/components/mobile-ordering/guest-tab-bar";
 import { MobileOrderingLayout } from "@/components/mobile-ordering/mobile-ordering-layout";
 import { isReservedStoreSlug, normalizeStoreSlug, STORE_SLUG_PATTERN } from "@/lib/public-menu/guestMenuPaths";
@@ -23,8 +27,12 @@ export default async function PublicMenuLayout({
   return (
     <MobileOrderingLayout>
       <PublicMenuStoreProvider storeSlug={storeSlug} initialView={initialView}>
-        <GuestPhoneShell>{children}</GuestPhoneShell>
-        <GuestTabBar />
+        <GuestStoreChrome>
+          <GuestPhoneShell>
+            <GuestStorePages>{children}</GuestStorePages>
+          </GuestPhoneShell>
+          <GuestTabBar />
+        </GuestStoreChrome>
       </PublicMenuStoreProvider>
     </MobileOrderingLayout>
   );

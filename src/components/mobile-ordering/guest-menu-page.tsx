@@ -60,7 +60,7 @@ interface ToastState {
 
 type GuestAllergenOption = { name: string; emoji?: string | null };
 
-export function GuestMenuPage() {
+export function GuestMenuPage({ isActive = true }: { isActive?: boolean } = {}) {
   const t = useGuestT();
   const { locale } = useGuestLocale();
   const {
@@ -679,6 +679,7 @@ export function GuestMenuPage() {
   // Self-pickup dine-in looks like pickup (cart bar only when needed).
   const showTableServiceUi = orderType === "dine-in" && !isSelfPickupMode;
   const showSmartBottomBar =
+    isActive &&
     !welcomeOpen &&
     !closedSheetOpen &&
     (showTableServiceUi || cartCount > 0 || Boolean(activeOrderPath));
@@ -868,26 +869,30 @@ export function GuestMenuPage() {
         </div>
       </div>
 
-      <GuestWelcomeSheet
-        open={welcomeOpen}
-        restaurantName={restaurant?.name ?? "this restaurant"}
-        loginPath={accountLoginPath}
-        signupPath={accountSignupPath}
-        onContinueAsGuest={handleContinueAsGuest}
-        onChooseAccount={handleWelcomeChooseAccount}
-        onClose={handleWelcomeClose}
-      />
+      {isActive ? (
+        <GuestWelcomeSheet
+          open={welcomeOpen}
+          restaurantName={restaurant?.name ?? "this restaurant"}
+          loginPath={accountLoginPath}
+          signupPath={accountSignupPath}
+          onContinueAsGuest={handleContinueAsGuest}
+          onChooseAccount={handleWelcomeChooseAccount}
+          onClose={handleWelcomeClose}
+        />
+      ) : null}
 
-      <GuestClosedSheet
-        open={closedSheetOpen}
-        restaurantName={restaurant?.name ?? "this restaurant"}
-        opensAtLabel={nextOpenLabel}
-        onSchedule={handleClosedSheetSchedule}
-        onBrowse={handleClosedSheetBrowse}
-        onClose={handleClosedSheetClose}
-      />
+      {isActive ? (
+        <GuestClosedSheet
+          open={closedSheetOpen}
+          restaurantName={restaurant?.name ?? "this restaurant"}
+          opensAtLabel={nextOpenLabel}
+          onSchedule={handleClosedSheetSchedule}
+          onBrowse={handleClosedSheetBrowse}
+          onClose={handleClosedSheetClose}
+        />
+      ) : null}
 
-      {parksUntilOpen ? (
+      {isActive && parksUntilOpen ? (
         <PickupTimingPicker
           hideCard
           forceScheduled
@@ -907,9 +912,9 @@ export function GuestMenuPage() {
         />
       ) : null}
 
-      <InfoSheet open={isInfoOpen} onOpenChange={setIsInfoOpen} />
+      {isActive ? <InfoSheet open={isInfoOpen} onOpenChange={setIsInfoOpen} /> : null}
 
-      {selectedItem && (
+      {isActive && selectedItem ? (
         <ItemDetailModal
           item={selectedItem}
           open={!!selectedItem}
@@ -918,7 +923,7 @@ export function GuestMenuPage() {
           }}
           onAddToCart={handleModalAddToCart}
         />
-      )}
+      ) : null}
 
       {showSmartBottomBar ? (
         <SmartBottomBar
@@ -942,19 +947,21 @@ export function GuestMenuPage() {
         />
       ) : null}
 
-      <CartBar
-        items={cart}
-        total={cartTotal}
-        menuItems={items}
-        onAddToCart={addToCart}
-        onRemoveFromCart={removeFromCart}
-        onItemClick={(cartItem) => setSelectedItem(cartItem)}
-        hideTrigger
-        externalOpenSignal={cartOpenSignal}
-        checkoutPath={checkoutPath}
-      />
+      {isActive ? (
+        <CartBar
+          items={cart}
+          total={cartTotal}
+          menuItems={items}
+          onAddToCart={addToCart}
+          onRemoveFromCart={removeFromCart}
+          onItemClick={(cartItem) => setSelectedItem(cartItem)}
+          hideTrigger
+          externalOpenSignal={cartOpenSignal}
+          checkoutPath={checkoutPath}
+        />
+      ) : null}
 
-      {toast && (
+      {isActive && toast ? (
         <div
           className="pointer-events-none fixed left-1/2 z-(--z-toast) w-full max-w-[320px] -translate-x-1/2 px-3"
           style={{
@@ -979,7 +986,7 @@ export function GuestMenuPage() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       <span className="sr-only">Tick: {tick}</span>
     </div>

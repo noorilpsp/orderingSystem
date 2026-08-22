@@ -135,6 +135,20 @@ export function isGuestMenuPathForStore(pathname: string, storeSlug: string): bo
   return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
+/** True for `/{slug}` (and legacy `/menu/{slug}`) with no nested guest page. */
+export function isGuestMenuRootPath(pathname: string, storeSlug: string): boolean {
+  const path = pathnameOnly(pathname);
+  const slug = normalizeStoreSlug(storeSlug);
+  if (!slug) return false;
+  const encoded = encodeURIComponent(slug);
+  return (
+    path === `/${encoded}` ||
+    path === `/${slug}` ||
+    path === `/menu/${encoded}` ||
+    path === `/menu/${slug}`
+  );
+}
+
 export function isGuestOrderingPathname(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   const path = pathnameOnly(pathname);

@@ -33,6 +33,7 @@ import type { GuestOrderTrackStatus } from "@/lib/public-menu/deriveGuestOrderTr
 import { previewCatalogDiscount } from "@/lib/public-menu/guest-reward-cart";
 import type { PublicMenuReward } from "@/lib/public-menu/types";
 import { GuestOrderPushEnableCard } from "@/components/mobile-ordering/guest-order-push-enable-card";
+import { GuestMenuLink } from "@/components/mobile-ordering/guest-store-chrome";
 import { useGuestT, useGuestLocale } from "@/lib/guest-i18n";
 import type { EnMessageKey } from "@/lib/guest-i18n/messages/en";
 import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
@@ -968,13 +969,13 @@ export function GuestOrderConfirmationPage() {
       <header className="checkout-header sticky top-0 z-30 border-b border-border/70 bg-card/80 px-2 backdrop-blur-xl lg:px-4">
         <div className="mx-auto flex w-full max-w-none items-center justify-between gap-2 px-1 py-1 lg:px-4">
           <div className="flex min-w-0 items-center gap-2" dir="ltr">
-            <Link
+            <GuestMenuLink
               href={menuPath}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-foreground/10"
               aria-label={t("common.backToMenu")}
             >
               <ChevronLeft className="h-5 w-5" />
-            </Link>
+            </GuestMenuLink>
             <h1 className="text-lg font-bold text-foreground">{t("confirm.title")}</h1>
           </div>
           <Image
@@ -1494,12 +1495,12 @@ export function GuestOrderConfirmationPage() {
           </div>
         </section>
 
-        <Link
+        <GuestMenuLink
           href={menuPath}
           className="flex h-12 w-full items-center justify-center rounded-xl border border-border/70 bg-card/70 text-sm font-semibold text-foreground"
         >
           {t("confirm.orderMore")}
-        </Link>
+        </GuestMenuLink>
       </main>
     </div>
   );

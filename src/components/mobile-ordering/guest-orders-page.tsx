@@ -17,6 +17,7 @@ import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/gues
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { GuestTabPage } from "@/components/mobile-ordering/guest-tab-page";
+import { GuestMenuLink } from "@/components/mobile-ordering/guest-store-chrome";
 import { OpsCustomizationDisplayLines } from "@/components/shared/customization-display-lines";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 import {
@@ -222,12 +223,12 @@ export function GuestOrdersPage() {
               name: restaurant?.name ?? t("account.thisRestaurant"),
             })}
           </p>
-          <Link
+          <GuestMenuLink
             href={menuPath}
             className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-border/70 text-sm font-semibold text-foreground"
           >
             {t("cart.browseMenu")}
-          </Link>
+          </GuestMenuLink>
         </section>
       ) : (
         <>

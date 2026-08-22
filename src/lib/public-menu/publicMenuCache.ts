@@ -53,13 +53,27 @@ async function loadPublicMenuCacheEntry(storeSlug: string): Promise<PublicMenuCa
   };
 }
 
+async function getCachedPublicMenuCatalogRevision(
+  slug: string,
+): Promise<number | null> {
+  const readRevision = unstable_cache(
+    () => getPublicMenuCatalogRevision(slug),
+    ["public-menu-revision", slug],
+    {
+      revalidate: 30,
+      tags: [publicMenuCacheTag(slug)],
+    },
+  );
+  return readRevision();
+}
+
 export async function getCachedPublicMenuView(
   storeSlug: string,
 ): Promise<PublicMenuView | null> {
   const slug = normalizePublicMenuSlug(storeSlug);
   if (!slug) return null;
 
-  const revisionMs = await getPublicMenuCatalogRevision(slug);
+  const revisionMs = await getCachedPublicMenuCatalogRevision(slug);
   const readEntry = unstable_cache(
     () => loadPublicMenuCacheEntry(slug),
     ["public-menu-view", slug, String(revisionMs ?? 0)],

@@ -1,5 +1,5 @@
-import { GuestMenuPage } from "@/components/mobile-ordering/guest-menu-page";
-
 export default function PublicStoreMenuPage() {
-  return <GuestMenuPage />;
+  // GuestMenuPage stays mounted in GuestStoreChrome so returning from
+  // checkout/confirmation does not wait on a full menu remount.
+  return null;
 }
