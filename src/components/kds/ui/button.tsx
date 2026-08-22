@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
- * KDS-specific Button — uses explicit gray palette to match original
+ * KDS-specific Button - uses explicit gray palette to match original
  * ticket-column-animation design (neutral, not NextFaster's blue theme).
  */
 const buttonVariants = cva(

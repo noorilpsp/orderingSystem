@@ -3,18 +3,18 @@ import type { Reservation } from "./reservations-data"
 // ── Reservation Create/Edit Form Data ────────────────────────────────────────
 //
 // Availability layers (used together by the reservation form):
-// 1) Global table-time fit — count of zone-eligible tables that have a long enough
+// 1) Global table-time fit - count of zone-eligible tables that have a long enough
 //    continuous free window at each slot (`buildTimeFitMap` in reservation-form-view).
-// 2) Selected-table window — `getContinuousWindowMetaForTable` for the assigned lane;
+// 2) Selected-table window - `getContinuousWindowMetaForTable` for the assigned lane;
 //    drives duration max and whether the chosen time works for that table only.
-// 3) Restaurant capacity — seat demand from reservations overlapping the slot
+// 3) Restaurant capacity - seat demand from reservations overlapping the slot
 //    (`getCapacityAtTime`); independent of which table is selected.
-// 4) Recommendation — best table/heuristic; must use the same continuous-window + duration
+// 4) Recommendation - best table/heuristic; must use the same continuous-window + duration
 //    rule as (2) so auto-assign matches “can hold this sitting” logic.
-// 5) Manual table list — `computeManualTableOpeningFromContinuousWindow` uses the same
+// 5) Manual table list - `computeManualTableOpeningFromContinuousWindow` uses the same
 //    continuous-window + duration rule as (2)/(4); “opening soon” walks block ends /
 //    next holds, not overlap with [slot, slot+duration] only.
-// 6) UI tone — slot list colors: global fit (open/busy/tight/short/full) and capacity %;
+// 6) UI tone - slot list colors: global fit (open/busy/tight/short/full) and capacity %;
 //    selected-table mismatch is a separate inline hint, not mixed into the global fit bar.
 
 export interface GuestProfile {
@@ -588,7 +588,7 @@ export function guestProfileFromStoreReservation(sr: {
 }
 
 /**
- * Local guest search. Returns empty in production—prefer searchCustomersAsGuests (API).
+ * Local guest search. Returns empty in production-prefer searchCustomersAsGuests (API).
  * Kept for backward compatibility; callers should use API when locationId is available.
  */
 export function searchGuests(_query: string): GuestProfile[] {
@@ -918,7 +918,7 @@ export function getContinuousWindowMetaForTable(
 /**
  * Manual table list: same “can host `duration` from a contiguous free window” rule as
  * `getContinuousWindowMetaForTable`. When the slot cannot be hosted, estimates the earliest
- * later start (within the service window) by walking block ends / next holds — not interval
+ * later start (within the service window) by walking block ends / next holds - not interval
  * overlap with [slot, slot+duration] alone.
  */
 export function computeManualTableOpeningFromContinuousWindow(

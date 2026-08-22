@@ -218,7 +218,7 @@ function mapOrderStatusToUnified(
   return "sent";
 }
 
-/** Paid only when paymentStatus says so — kitchen "completed" is not settlement. */
+/** Paid only when paymentStatus says so - kitchen "completed" is not settlement. */
 function resolveOrdersPaymentState(paymentStatus: string): OrdersPaymentState {
   if (paymentStatus === "refunded" || paymentStatus === "paid") return "paid";
   return "unpaid";

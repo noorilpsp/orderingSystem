@@ -630,7 +630,7 @@ export default function StoresPage() {
     setError(null)
 
     try {
-      // Get current image URLs — null clears; undefined leaves unchanged
+      // Get current image URLs - null clears; undefined leaves unchanged
       const currentLogoUrl = logoUrl
       const currentBannerUrl = bannerUrl
 
@@ -710,7 +710,7 @@ export default function StoresPage() {
       const savedLocation: MerchantLocation = await response.json()
       console.log("[StoresPage] Saved location:", savedLocation)
 
-      // Sync merchant (business) fields — fail whole save if this fails (before success toast)
+      // Sync merchant (business) fields - fail whole save if this fails (before success toast)
       const resolvedLogoUrl =
         currentLogoUrl === null
           ? null
@@ -1183,7 +1183,7 @@ export default function StoresPage() {
 
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-background">
-      {/* Fixed top save bar — always in view when there are unsaved changes */}
+      {/* Fixed top save bar - always in view when there are unsaved changes */}
       {hasUnsavedChanges ? (
         <div className="fixed inset-x-0 top-14 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 shadow-sm">
           <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
@@ -1222,7 +1222,7 @@ export default function StoresPage() {
         </div>
       ) : null}
 
-      {/* Page header — scrolls with content (not sticky) to avoid overlapping the save bar */}
+      {/* Page header - scrolls with content (not sticky) to avoid overlapping the save bar */}
       <div className={cn("border-b bg-background", hasUnsavedChanges && "pt-16 sm:pt-14")}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
@@ -2132,7 +2132,7 @@ export default function StoresPage() {
                                 Dine-in
                               </Label>
                               <p className="text-xs text-muted-foreground">
-                                Order at table — choose self pickup or delivery to table
+                                Order at table - choose self pickup or delivery to table
                               </p>
                             </div>
                           </div>

@@ -1,6 +1,6 @@
 /**
  * Coerce a location tax rate percent (e.g. 21 = 21%).
- * Preserves 0 — do not use `x || fallback`, which treats 0 as missing.
+ * Preserves 0 - do not use `x || fallback`, which treats 0 as missing.
  * Missing/invalid values default to 0%.
  */
 export function coerceTaxRatePercent(

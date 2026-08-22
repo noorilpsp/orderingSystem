@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * POST /api/sessions/[sessionId]/waves/next
  * Create the next wave for a session.
  * Body: { eventSource? } (optional, accepted for consistency)
- * Does NOT write to DB in the route — delegates to domain.
+ * Does NOT write to DB in the route - delegates to domain.
  */
 export async function POST(
   request: NextRequest,

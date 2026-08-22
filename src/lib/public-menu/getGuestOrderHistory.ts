@@ -1,6 +1,6 @@
 /**
  * Past orders for the signed-in diner at one store.
- * Anonymous guests get an empty list — their only order is the device-local active one.
+ * Anonymous guests get an empty list - their only order is the device-local active one.
  */
 import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";

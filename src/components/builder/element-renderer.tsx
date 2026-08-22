@@ -522,13 +522,13 @@ export function ElementRenderer({
 
     return (
       <svg viewBox={`0 0 ${vw} ${vh}`} width={width} height={height} className="block" style={{ filter: glow, overflow: "visible" }}>
-        {/* stools along outside bottom of horizontal arm — customers face up toward bar */}
+        {/* stools along outside bottom of horizontal arm - customers face up toward bar */}
         {Array.from({ length: hStoolCount }).map((_, i) => {
           const sx = cx + 10 + ((width - 20) / hStoolCount) * (i + 0.5)
           const sy = cy + height + stoolGap
           return <Chair key={`h${i}`} x={sx} y={sy} size={stoolSize} facingAngle={0} />
         })}
-        {/* stools along outside right of vertical arm — customers face left toward bar */}
+        {/* stools along outside right of vertical arm - customers face left toward bar */}
         {Array.from({ length: vStoolCount }).map((_, i) => {
           const sx = cx + width + stoolGap
           const sy = cy + 10 + ((height - 20) / vStoolCount) * (i + 0.5)

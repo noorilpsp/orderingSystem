@@ -391,7 +391,7 @@ export function CustomizeItemModal({
               Cancel
             </Button>
             <Button onClick={validateAndAdd} size="lg">
-              {submitLabel} — {formatMoney(totalPrice)}
+              {submitLabel} - {formatMoney(totalPrice)}
             </Button>
           </div>
         </div>

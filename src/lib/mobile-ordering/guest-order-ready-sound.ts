@@ -48,7 +48,7 @@ export async function unlockGuestOrderReadyAudio(): Promise<boolean> {
   const audio = getSharedAudio();
   if (!audio) return false;
 
-  // Always touch the shared element during the user gesture — don't trust
+  // Always touch the shared element during the user gesture - don't trust
   // sessionStorage alone (a new Audio() would still be blocked).
   try {
     audio.loop = false;
@@ -85,7 +85,7 @@ export type GuestOrderReadyPlayer = {
   isPlaying: () => boolean;
 };
 
-/** One player per confirmation page — stop is reliable across ready → served. */
+/** One player per confirmation page - stop is reliable across ready → served. */
 export function createGuestOrderReadyPlayer(): GuestOrderReadyPlayer {
   let generation = 0;
 

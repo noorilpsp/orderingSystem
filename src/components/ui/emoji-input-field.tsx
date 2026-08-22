@@ -14,7 +14,7 @@ export interface EmojiPickerButtonProps {
 
 /**
  * A standalone emoji-picker button.
- * Unlike EmojiInputField this does NOT render a bundled text input —
+ * Unlike EmojiInputField this does NOT render a bundled text input -
  * use it alongside your own <Input> when emoji and name are separate fields.
  */
 export function EmojiPickerButton({ value, onChange, forcePortal = false }: EmojiPickerButtonProps) {

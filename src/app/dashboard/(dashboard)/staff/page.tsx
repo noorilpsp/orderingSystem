@@ -1137,7 +1137,7 @@ function StaffDetailDrawer({
                       <Card key={note.id} className="p-3">
                         <p className="text-xs text-muted-foreground mb-1">{note.date}</p>
                         <p className="text-sm">{note.text}</p>
-                        <p className="text-xs text-muted-foreground mt-1">— {note.author}</p>
+                        <p className="text-xs text-muted-foreground mt-1">- {note.author}</p>
                       </Card>
                     ))}
                   </div>

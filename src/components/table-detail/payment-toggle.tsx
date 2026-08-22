@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Simple toggle for Payment modal — matches table-merge exactly.
+ * Simple toggle for Payment modal - matches table-merge exactly.
  * Uses inline styles to avoid theme/variable conflicts in portaled content.
  */
 export function PaymentToggle({

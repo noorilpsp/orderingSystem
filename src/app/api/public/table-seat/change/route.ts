@@ -29,7 +29,7 @@ function failureStatus(code: string): number {
 }
 
 /**
- * POST /api/public/table-seat/change — move this device to another seat.
+ * POST /api/public/table-seat/change - move this device to another seat.
  */
 export async function POST(request: NextRequest) {
   try {

@@ -87,7 +87,7 @@ export function formatMerchantMoney(
   }
 
   try {
-    // LBP narrow symbol is "L£" — prefer the ISO code for clarity.
+    // LBP narrow symbol is "L£" - prefer the ISO code for clarity.
     const currencyDisplay = currency === "LBP" ? "code" : "narrowSymbol";
     return new Intl.NumberFormat(locale, {
       style: "currency",
@@ -97,7 +97,7 @@ export function formatMerchantMoney(
       maximumFractionDigits: 2,
     }).format(safe);
   } catch {
-    // Invalid currency code — show code + amount (never invent another currency).
+    // Invalid currency code - show code + amount (never invent another currency).
     const formatted = new Intl.NumberFormat(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,

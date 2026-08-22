@@ -97,7 +97,7 @@ function formatOrderNumberLabel(order: {
   })
 }
 
-/** Unified board status — aligned with /orders ops labels. */
+/** Unified board status - aligned with /orders ops labels. */
 type DisplayStatus = "new" | "preparing" | "ready" | "completed" | "voided" | "refunded"
 
 const DISPLAY_STATUS_LABEL: Record<DisplayStatus, string> = {
@@ -249,7 +249,7 @@ function formatDateRangeLabel(dateRange: DateRange | undefined): string {
 
 function formatOrderPlacedDate(createdAt: string): string {
   const date = new Date(createdAt)
-  if (!Number.isFinite(date.getTime())) return "—"
+  if (!Number.isFinite(date.getTime())) return "-"
   return date.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -1542,7 +1542,7 @@ function OrdersPageContent() {
                         </div>
                 <div>
                   <p className="text-muted-foreground">Staff</p>
-                  <p className="font-medium">{selectedOrder.assignedStaff?.fullName || "—"}</p>
+                  <p className="font-medium">{selectedOrder.assignedStaff?.fullName || "-"}</p>
                         </div>
                         </div>
               {selectedOrder.notes && (

@@ -4,7 +4,7 @@ export function guestWelcomeStorageKey(storeSlug: string): string {
   return `${STORAGE_PREFIX}${storeSlug.trim().toLowerCase()}`;
 }
 
-/** True once the guest has chosen "Continue as guest" for this store. */
+/** True once the guest has tapped Sign in or Continue as guest for this store. */
 export function hasSeenGuestWelcome(storeSlug: string): boolean {
   if (typeof window === "undefined") return true;
   try {

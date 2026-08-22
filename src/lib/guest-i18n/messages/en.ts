@@ -138,6 +138,8 @@ export const enMessages = {
   "actions.waterOnWay": "{type} water on the way ✓",
   "actions.specialRequestPlaceholder": "E.g., extra napkins, less spicy, allergy alert…",
   "actions.viewCartCount": "View Cart ({count})",
+  "actions.scheduleCartCount": "Schedule ({count})",
+  "actions.checkoutAt": "Checkout · {time}",
   "actions.trackOrder": "Track your order",
   "actions.needWaiter": "Need anything? Call your waiter",
   "actions.callWaiterTitle": "Call your waiter?",
@@ -170,7 +172,7 @@ export const enMessages = {
   "actions.splitClaimedByName": "Claimed · {name}",
   "actions.splitClaimTaken": "Another seat already claimed this item.",
   "actions.splitClaimAllFirst": "Assign every item (or wait for others) before sending.",
-  "actions.splitNoClaimsYet": "Nothing assigned yet — tap your seat on your items.",
+  "actions.splitNoClaimsYet": "Nothing assigned yet - tap your seat on your items.",
   "actions.splitUnclaimedItems": "Still open",
   "actions.splitSendToTable": "Send to table",
   "actions.splitConfirmSplit": "Confirm split",
@@ -331,6 +333,15 @@ export const enMessages = {
   "checkout.readyAsap": "Ready ASAP",
   "checkout.pickTime": "Pick a time",
   "checkout.closed": "Closed",
+  "checkout.whenWeOpen": "When we open",
+  "checkout.closedNowHint": "We'll start this when we open.",
+  "menu.opensAt": "Opens {time}",
+
+  // Closed store sheet
+  "closed.sheetSubtitle": "You can still browse and schedule for {time}.",
+  "closed.sheetSubtitleNoTime": "You can still browse and schedule for when we open.",
+  "closed.scheduleOrder": "Schedule an order",
+  "closed.browseMenu": "Browse menu",
 
   // Confirmation
   "confirm.title": "Your order",
@@ -343,6 +354,8 @@ export const enMessages = {
   "confirm.ready": "Ready",
   "confirm.readyToServe": "Ready to serve",
   "confirm.readyForPickup": "Ready for pickup",
+  "confirm.readyForDelivery": "Ready for delivery",
+  "confirm.deliverTo": "Deliver to",
   "confirm.complete": "Complete",
   "confirm.allDone": "All done",
   "confirm.cancelled": "Cancelled",
@@ -370,17 +383,17 @@ export const enMessages = {
   "confirm.enableNotifications": "Enable notifications",
   "confirm.alertsTitle": "Get order alerts",
   "confirm.alertsIosHint":
-    "iPhone: Share → Add to Home Screen, open that app, then return here — alerts turn on automatically.",
+    "iPhone: Share → Add to Home Screen, open that app, then return here - alerts turn on automatically.",
   "confirm.alertsAddToHome": "Add to Home Screen",
   "confirm.alertsHowTitle": "Add to Home Screen",
   "confirm.alertsHowIntro":
     "Safari can’t add this from the page. Use Share in the toolbar, then come back.",
   "confirm.alertsStep1": "Tap the Share button in Safari (square with an arrow up).",
   "confirm.alertsStep2": "Scroll and tap Add to Home Screen.",
-  "confirm.alertsStep3": "Open the new icon, then return to this order — alerts turn on automatically.",
+  "confirm.alertsStep3": "Open the new icon, then return to this order - alerts turn on automatically.",
   "confirm.alertsTurnOnTitle": "Turn on order alerts",
   "confirm.alertsTurnOnHint":
-    "Allow notifications so we can update you when the kitchen accepts, your order is ready, or it’s delayed — even if you leave this page.",
+    "Allow notifications so we can update you when the kitchen accepts, your order is ready, or it’s delayed - even if you leave this page.",
   "confirm.alertsAllow": "Allow alerts",
   "confirm.alertsCouldNotEnable": "Could not enable alerts",
   "confirm.pickupOrder": "Pickup order",
@@ -477,7 +490,7 @@ export const enMessages = {
   "rewards.earnTitle": "Earn points on every order",
   "rewards.programOff": "This restaurant does not run a loyalty program yet.",
   "rewards.redeemForPoints": "Redeem for points",
-  "rewards.noPublished": "No rewards published yet. Keep ordering — your points are still adding up.",
+  "rewards.noPublished": "No rewards published yet. Keep ordering - your points are still adding up.",
   "rewards.addedToCart": "Reward added to cart",
   "rewards.removedFromCart": "Reward removed from cart",
   "rewards.signInToRedeem": "Sign in to redeem",
@@ -517,7 +530,7 @@ export const enMessages = {
   "day.saturday": "Saturday",
 
   // Item modal extras
-  "item.addToCartPrice": "Add to cart — {price}",
+  "item.addToCartPrice": "Add to cart - {price}",
   "item.included": "Included",
   "item.selectOne": "Select 1",
   "item.selectUpTo": "Select up to {count}",

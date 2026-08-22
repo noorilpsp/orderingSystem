@@ -87,7 +87,7 @@ function normalizeTime24(timeValue: string): string {
 }
 
 /**
- * Time dropdown dot colors (global layer — not the assigned table):
+ * Time dropdown dot colors (global layer - not the assigned table):
  * - Emerald + "open" / fit label: global table-fit is favorable (or capacity <70% if fit data missing).
  * - Amber / red: capacity pressure bands (70%+ / 90%+).
  * - Violet + short label: some tables work but not for full `duration` (partial window).
@@ -597,7 +597,7 @@ export function FormBookingDetails({
           )}
           {!isPastDate && assignedTableId && !selectedTableFitsDuration && (
             <p className="mt-1.5 text-[10px] text-amber-300/90">
-              Selected table may not fit the full stay at this time — shorten duration, change time, or pick another table.
+              Selected table may not fit the full stay at this time - shorten duration, change time, or pick another table.
             </p>
           )}
           {(capacity || selectedFit) && (

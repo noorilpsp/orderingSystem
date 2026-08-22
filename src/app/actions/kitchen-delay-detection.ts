@@ -30,7 +30,7 @@ const DEFAULT_WARNING_MINUTES = 10;
 /**
  * Find order items sent to kitchen but not yet ready, where the delay exceeds the threshold.
  * Records session events (type = kitchen_delay, meta = { orderItemId, minutesLate }) for each.
- * Helper only — does not run automatically.
+ * Helper only - does not run automatically.
  */
 export async function detectKitchenDelays(
   sessionId: string,

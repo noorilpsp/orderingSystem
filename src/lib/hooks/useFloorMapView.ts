@@ -214,7 +214,7 @@ export function useFloorMapView(
     }
   }, [refresh, locationId, floorplanId]);
 
-  // Background sync after SSR — avoids duplicating heavy DB work on immediate mount.
+  // Background sync after SSR - avoids duplicating heavy DB work on immediate mount.
   useEffect(() => {
     if (!locationId || !hasInitialFromServer) return;
     const timer = window.setTimeout(() => {

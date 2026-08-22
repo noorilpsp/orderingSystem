@@ -152,7 +152,7 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
   const [activeTab, setActiveTab] = React.useState("basic")
   const [isSaving, setIsSaving] = React.useState(false)
 
-  // Custom tag creation state — one mini-form per tag section
+  // Custom tag creation state - one mini-form per tag section
   const [newAttributeTag, setNewAttributeTag] = React.useState({ emoji: "", text: "" })
   const [newDietaryTag, setNewDietaryTag] = React.useState({ emoji: "", text: "" })
   const [newAllergenTag, setNewAllergenTag] = React.useState({ emoji: "", text: "" })
@@ -998,7 +998,7 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                   </div>
                 </div>
 
-                {/* Prep Station (KDS) — only when merchant has KDS enabled */}
+                {/* Prep Station (KDS) - only when merchant has KDS enabled */}
                 {kdsEnabled ? (
                 <>
                 <Separator />
@@ -1018,7 +1018,7 @@ export function ItemDrawer({ item, isOpen, onClose, onSave, onDelete, categories
                       {form.watch("defaultStation") &&
                         !activeStations.some((s) => s.key === form.watch("defaultStation")) && (
                           <div className="rounded-md bg-amber-50 dark:bg-amber-950/50 p-2 text-sm text-amber-800 dark:text-amber-200">
-                            Current: <strong>{form.watch("defaultStation")}</strong> (inactive) — choose an active
+                            Current: <strong>{form.watch("defaultStation")}</strong> (inactive) - choose an active
                             station or None to update.
                           </div>
                         )}

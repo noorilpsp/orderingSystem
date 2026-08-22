@@ -608,7 +608,7 @@ const EMPTY_GUEST_PROFILE: GuestProfile = {
   vipTier: null,
 }
 
-/** Build ServiceStatus from table session when available. Honest derivation—no fake items. */
+/** Build ServiceStatus from table session when available. Honest derivation-no fake items. */
 function buildServiceStatusFromTable(
   table: StoreTable,
   duration: number,

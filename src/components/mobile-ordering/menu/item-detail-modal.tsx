@@ -515,7 +515,7 @@ export function ItemDetailModal({
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          {/* Header: drag handle + close — keep X on the visual right in both locales */}
+          {/* Header: drag handle + close - keep X on the visual right in both locales */}
           <div className="relative z-20 flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-3" dir="ltr">
             <div className="h-10 w-10 shrink-0" aria-hidden />
             <div
@@ -961,7 +961,7 @@ export function ItemDetailModal({
               />
             </div>
 
-            {/* Quantity Selector — keep − / + order in both locales */}
+            {/* Quantity Selector - keep − / + order in both locales */}
             <div className="mt-4 mb-1 flex items-center justify-center gap-5" dir="ltr">
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}

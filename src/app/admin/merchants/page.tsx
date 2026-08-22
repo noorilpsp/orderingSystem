@@ -3,9 +3,9 @@ import { MerchantsSearchable } from './components/MerchantsSearchable'
 
 // Optimized date formatting - only format what we need
 function formatDate(value: Date | string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat('en', {
     month: 'short',
     day: 'numeric',

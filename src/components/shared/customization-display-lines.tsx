@@ -232,7 +232,7 @@ function OpsCustomizationDisplayLines({
     textSizeClassName,
   };
 
-  // Guest menu/confirmation runs outside TenantProvider — use guest money formatting.
+  // Guest menu/confirmation runs outside TenantProvider - use guest money formatting.
   if (surface === "guest") {
     return <OpsCustomizationDisplayLinesGuest {...shared} />;
   }

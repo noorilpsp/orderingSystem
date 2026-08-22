@@ -4,7 +4,7 @@
  * Unlock during staff login / ops navigation gestures. Reuse one shared Audio
  * element so later alerts can autoplay. If HTML audio is blocked on a cold
  * /orders load, fall back to an OS notification sound (works when permission
- * was granted earlier — no click required).
+ * was granted earlier - no click required).
  */
 
 type IncomingAlertSoundHandle = {

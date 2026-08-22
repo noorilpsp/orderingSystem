@@ -9,7 +9,7 @@ export async function generateStaticParams() {
   return await db.select({ collection: collections.slug }).from(collections);
 }
 
-export default async function Home(props: {
+export default async function CollectionPage(props: {
   params: Promise<{
     collection: string;
   }>;

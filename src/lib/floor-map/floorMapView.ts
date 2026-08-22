@@ -1,5 +1,5 @@
 /**
- * Floor Map view contract — shape returned by GET /api/floor-map/view.
+ * Floor Map view contract - shape returned by GET /api/floor-map/view.
  * Matches Floor Map Architecture spec §3.1.
  */
 

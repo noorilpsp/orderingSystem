@@ -27,7 +27,7 @@ function GuestLocaleFromMerchant({ children }: { children: ReactNode }) {
   );
 }
 
-/** Reads ?table=&mode= after mount — kept in a tiny Suspense boundary so the shell hydrates cleanly. */
+/** Reads ?table=&mode= after mount - kept in a tiny Suspense boundary so the shell hydrates cleanly. */
 function GuestMenuSearchParamsSync() {
   const searchParams = useSearchParams();
   const publicMenu = usePublicMenuOptional();
@@ -41,7 +41,7 @@ function GuestMenuSearchParamsSync() {
 
     const tableNumber = searchParams.get("table") ?? "";
     const mode = searchParams.get("mode");
-    // Table QR URLs imply dine-in, but an explicit mode always wins — otherwise
+    // Table QR URLs imply dine-in, but an explicit mode always wins - otherwise
     // Switch to Pickup (table stays in the URL) gets snapped back to dine-in.
     const orderType =
       mode === "pickup"

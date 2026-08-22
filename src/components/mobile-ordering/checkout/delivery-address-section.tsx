@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bike, MapPin, MessageSquare, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -22,7 +22,7 @@ import {
 import {
   deleteSavedGuestDeliveryAddress,
   firstMissingGuestDeliveryAddressField,
-  formatGuestDeliveryAddressInline,
+  guestDeliveryDisplayLines,
   normalizeGuestDeliveryAddress,
   readSavedGuestDeliveryAddresses,
   upsertSavedGuestDeliveryAddress,
@@ -45,6 +45,43 @@ const EMPTY_FORM = {
   postalCode: "",
   instructions: "",
 };
+
+function GuestDeliveryAddressLines({
+  nickname,
+  lines,
+}: {
+  nickname?: string | null;
+  lines: { place: string; contact: string; instructions: string | null };
+}) {
+  return (
+    <span className="min-w-0 flex-1">
+      {nickname ? (
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Bike className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>{nickname}</span>
+        </span>
+      ) : null}
+      {lines.place ? (
+        <span className={cn("flex items-start gap-2 text-sm text-foreground", nickname && "mt-1.5")}>
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>{lines.place}</span>
+        </span>
+      ) : null}
+      {lines.contact ? (
+        <span className="mt-1.5 flex items-center gap-2 text-sm text-foreground">
+          <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>{lines.contact}</span>
+        </span>
+      ) : null}
+      {lines.instructions ? (
+        <span className="mt-1.5 flex items-start gap-2 text-xs text-muted-foreground">
+          <MessageSquare className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{lines.instructions}</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 function emptyFormWithPhone(defaultCountry = DEFAULT_GUEST_PHONE_COUNTRY) {
   return {
@@ -172,7 +209,9 @@ export function DeliveryAddressSection({
     if (next.length === 0) setView("form");
   };
 
-  const summary = selected ? formatGuestDeliveryAddressInline(selected) : "";
+  const selectedLines = selected
+    ? guestDeliveryDisplayLines(selected, displayPhone)
+    : null;
   const requiredInputClass = (field: GuestDeliveryRequiredField) =>
     cn(
       inputClass,
@@ -208,29 +247,10 @@ export function DeliveryAddressSection({
         >
           {selected ? (
             <>
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1">
-                {selected.nickname ? (
-                  <span className="block text-sm font-semibold text-foreground">
-                    {selected.nickname}
-                  </span>
-                ) : null}
-                {summary ? (
-                  <span className="block text-sm text-foreground">
-                    {summary}
-                  </span>
-                ) : null}
-                {selected.phone ? (
-                  <span className="block text-sm text-foreground">
-                    {displayPhone(selected.phone)}
-                  </span>
-                ) : null}
-                {selected.instructions ? (
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {selected.instructions}
-                  </span>
-                ) : null}
-              </span>
+              <GuestDeliveryAddressLines
+                nickname={selected.nickname}
+                lines={selectedLines ?? { place: "", contact: "", instructions: null }}
+              />
               <span className="shrink-0 text-sm font-semibold text-primary">
                 {t("checkout.changeAddress")}
               </span>
@@ -280,6 +300,7 @@ export function DeliveryAddressSection({
               <div className="min-h-0 space-y-2 overflow-y-auto px-6">
                 {saved.map((address) => {
                   const isSelected = selected?.id === address.id;
+                  const lines = guestDeliveryDisplayLines(address, displayPhone);
                   return (
                     <div
                       key={address.id}
@@ -295,19 +316,10 @@ export function DeliveryAddressSection({
                         onClick={() => handleSelect(address)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        {address.nickname ? (
-                          <span className="block text-sm font-semibold text-foreground">
-                            {address.nickname}
-                          </span>
-                        ) : null}
-                        <span className="block text-sm text-foreground">
-                          {formatGuestDeliveryAddressInline(address)}
-                        </span>
-                        {address.phone ? (
-                          <span className="block text-sm text-foreground">
-                            {displayPhone(address.phone)}
-                          </span>
-                        ) : null}
+                        <GuestDeliveryAddressLines
+                          nickname={address.nickname}
+                          lines={lines}
+                        />
                       </button>
                       <button
                         type="button"

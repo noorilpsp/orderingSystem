@@ -1,5 +1,5 @@
 /**
- * Guests view contract — shape returned by getGuestsView and GET /api/guests/view.
+ * Guests view contract - shape returned by getGuestsView and GET /api/guests/view.
  * Minimal real read model for the Guests ops page.
  */
 

@@ -5,6 +5,7 @@ import {
   orderItemCustomizations as orderItemCustomizationsTable,
   orderItems as orderItemsTable,
   orders as ordersTable,
+  orderDelivery as orderDeliveryTable,
 } from "@/lib/db/schema/orders";
 import { resolvePublicLocationBySlug } from "@/lib/public-menu/buildPublicMenuView";
 import {
@@ -57,6 +58,14 @@ export type PublicOrderStatusView = {
   taxAmount: number;
   discountAmount: number;
   total: number;
+  delivery: {
+    addressLine1: string;
+    addressLine2: string | null;
+    city: string;
+    postalCode: string | null;
+    deliveryInstructions: string | null;
+    deliveryFee: number;
+  } | null;
 };
 
 export type GetPublicOrderStatusResult =
@@ -107,6 +116,21 @@ export async function getPublicOrderStatus(
   if (!order) {
     return { ok: false, code: "NOT_FOUND", message: "Order not found" };
   }
+
+  const deliveryRow =
+    order.orderType === "delivery"
+      ? await db.query.orderDelivery.findFirst({
+          where: eq(orderDeliveryTable.orderId, order.id),
+          columns: {
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            postalCode: true,
+            deliveryInstructions: true,
+            deliveryFee: true,
+          },
+        })
+      : null;
 
   const itemRows = await db.query.orderItems.findMany({
     where: and(eq(orderItemsTable.orderId, order.id), isNull(orderItemsTable.voidedAt)),
@@ -266,6 +290,16 @@ export async function getPublicOrderStatus(
       taxAmount,
       discountAmount,
       total,
+      delivery: deliveryRow
+        ? {
+            addressLine1: deliveryRow.addressLine1,
+            addressLine2: deliveryRow.addressLine2 ?? null,
+            city: deliveryRow.city,
+            postalCode: deliveryRow.postalCode ?? null,
+            deliveryInstructions: deliveryRow.deliveryInstructions ?? null,
+            deliveryFee: Number(deliveryRow.deliveryFee) || 0,
+          }
+        : null,
     },
   };
 }

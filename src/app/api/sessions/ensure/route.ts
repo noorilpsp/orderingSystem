@@ -12,7 +12,7 @@ export const runtime = "nodejs";
  * POST /api/sessions/ensure
  * Ensure a session exists for the given table. Creates one if needed.
  * Body: { tableUuid (required), locationId (required), guestCount?, eventSource? }
- * Does NOT write to DB inside the route — delegates to domain.
+ * Does NOT write to DB inside the route - delegates to domain.
  */
 export async function POST(request: NextRequest) {
   let idemKey: string | undefined;

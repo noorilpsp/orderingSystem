@@ -71,12 +71,12 @@ export default async function Page(props: {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DetailCard label="Legal Name" value={merchant.legalName} />
-        <DetailCard label="KBO Number" value={merchant.kboNumber ?? "—"} />
+        <DetailCard label="KBO Number" value={merchant.kboNumber ?? "-"} />
         <DetailCard label="Status" value={merchant.status} />
         <DetailCard label="Business Type" value={merchant.businessType} />
         <DetailCard label="Contact Email" value={merchant.contactEmail} />
         <DetailCard label="Phone" value={merchant.contactPhone} />
-        <DetailCard label="Address" value={merchant.registeredAddressLine1 ?? "—"} />
+        <DetailCard label="Address" value={merchant.registeredAddressLine1 ?? "-"} />
         <DetailCard label="Timezone" value={merchant.defaultTimezone} />
         <DetailCard label="Subscription Tier" value={merchant.subscriptionTier} />
         <DetailCard
@@ -84,7 +84,7 @@ export default async function Page(props: {
           value={
             merchant.subscriptionExpiresAt
               ? new Date(merchant.subscriptionExpiresAt).toLocaleString()
-              : "—"
+              : "-"
           }
         />
         <DetailCard label="Currency" value={merchant.defaultCurrency} />
@@ -93,7 +93,7 @@ export default async function Page(props: {
           value={
             merchant.createdAt
               ? new Date(merchant.createdAt).toLocaleString()
-              : "—"
+              : "-"
           }
         />
         <DetailCard
@@ -101,7 +101,7 @@ export default async function Page(props: {
           value={
             merchant.updatedAt
               ? new Date(merchant.updatedAt).toLocaleString()
-              : "—"
+              : "-"
           }
         />
       </div>
@@ -141,13 +141,13 @@ export default async function Page(props: {
                   {location.name}
                 </div>
                 <div className="text-xs text-gray-600">
-                  {location.city ?? "—"}
+                  {location.city ?? "-"}
                 </div>
                 <div className="text-xs text-gray-600">
-                  {location.address ?? "—"}
+                  {location.address ?? "-"}
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  {location.phone ?? "—"} · {location.email ?? "—"}
+                  {location.phone ?? "-"} · {location.email ?? "-"}
                 </div>
               </div>
             </Link>
@@ -168,7 +168,7 @@ function DetailCard({
   return (
     <div className="rounded border p-3">
       <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="text-sm text-gray-900">{value ?? "—"}</p>
+      <p className="text-sm text-gray-900">{value ?? "-"}</p>
     </div>
   );
 }

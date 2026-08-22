@@ -11,6 +11,7 @@ export const enMessages = {
   "common.tax": "Tax",
   "common.total": "Total",
   "common.instructions": "Instructions:",
+  "common.deliverTo": "Deliver to",
   "common.note": "Note:",
   "common.saving": "Saving…",
   "common.items": "Items",
@@ -80,7 +81,7 @@ export const enMessages = {
   "action.refund": "Refund",
   "action.fireWave": "Fire W{number}",
   "action.orderActions": "Order actions",
-  "action.waveFired": "{label} — Wave {number} fired",
+  "action.waveFired": "{label} - Wave {number} fired",
 
   "prep.inPreparation": "In preparation",
   "prep.markReadyHint": "Mark ready when the order is done for the guest.",
@@ -117,7 +118,7 @@ export const enMessages = {
   "incoming.snooze": "Snooze 30s",
   "incoming.decreaseEta": "Decrease prep time",
   "incoming.increaseEta": "Increase prep time",
-  "incoming.resume": "{count} waiting — resume",
+  "incoming.resume": "{count} waiting - resume",
 
   "service.aria": "Guest service requests",
   "service.waiterCalled": "Guest called waiter",

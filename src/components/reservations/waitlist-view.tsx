@@ -75,7 +75,7 @@ export function WaitlistView() {
   const handleSeatAt = useCallback(
     (entry: WaitlistEntry, tableId: string) => {
       if (!tableId) {
-        // "Choose table" — open matching panel on tablet
+        // "Choose table" - open matching panel on tablet
         if (!isDesktop) setShowMatchPanel(true)
         return
       }

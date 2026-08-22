@@ -33,7 +33,7 @@ interface FormTableAssignmentProps {
   partySize: number
   selectedTime: string
   duration: number
-  /** ISO date YYYY-MM-DD for reservation day — blocks use store/API reservations for this day only. */
+  /** ISO date YYYY-MM-DD for reservation day - blocks use store/API reservations for this day only. */
   selectedDate: string
   reservations: Reservation[]
   /** Same service window as global fit / best table (continuous-window parity). */

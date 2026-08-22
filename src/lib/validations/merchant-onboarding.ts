@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Validation schema for platform admin store onboarding.
- * Nothing is required — blanks are stored as empty / defaults.
+ * Nothing is required - blanks are stored as empty / defaults.
  */
 
 const belgianPostalCodeRegex = /^\d{4}$/;

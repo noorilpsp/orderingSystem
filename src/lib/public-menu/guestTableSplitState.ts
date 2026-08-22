@@ -39,7 +39,7 @@ function money(value: number): number {
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
 }
 
-/** Postgres jsonb text cannot contain NUL bytes — strip/replace before write. */
+/** Postgres jsonb text cannot contain NUL bytes - strip/replace before write. */
 function sanitizeJsonbLineId(lineId: string): string {
   return lineId.replace(/\u0000/g, "\u001f");
 }
@@ -465,7 +465,7 @@ export async function assignGuestBillLinesBatch(input: {
   return { ok: true, claims };
 }
 
-/** @deprecated use assignGuestBillLine — kept for claim toggle compatibility */
+/** @deprecated use assignGuestBillLine - kept for claim toggle compatibility */
 export async function claimGuestBillLine(input: {
   storeSlug: string;
   tableNumber: string;

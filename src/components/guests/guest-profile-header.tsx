@@ -118,7 +118,7 @@ export function GuestProfileHeader({ guest, onEdit }: ProfileHeaderProps) {
             value:
               guest.loyaltyPoints != null
                 ? guest.loyaltyPoints.toLocaleString()
-                : "—",
+                : "-",
             label: "loyalty pts",
             sub: guest.loyaltyPoints != null ? "Enrolled" : "Not enrolled",
             subColor: guest.loyaltyPoints != null ? "text-orange-400" : "text-muted-foreground",

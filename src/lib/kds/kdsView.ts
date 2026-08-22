@@ -1,5 +1,5 @@
 /**
- * KDS view contract — shape returned by GET /api/kds/view.
+ * KDS view contract - shape returned by GET /api/kds/view.
  * Minimal and practical for the first slice.
  */
 

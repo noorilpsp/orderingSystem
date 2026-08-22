@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 
 /**
- * Guest ordering canvas — full-bleed on all breakpoints.
+ * Guest ordering canvas - full-bleed on all breakpoints.
  * Soft banner blur sits behind content on tablet/desktop without covering
  * the liquid-glass page gradients.
  */

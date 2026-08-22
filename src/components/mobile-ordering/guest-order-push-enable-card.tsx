@@ -116,7 +116,7 @@ export function GuestOrderPushEnableCard({
 
         if (!isGuestOrderPushSupported()) return;
 
-        // Place Order may still have the permission dialog open — wait briefly.
+        // Place Order may still have the permission dialog open - wait briefly.
         if (Notification.permission === "default") {
           const started = Date.now();
           while (
@@ -140,7 +140,7 @@ export function GuestOrderPushEnableCard({
           return;
         }
 
-        // Permission still default/denied — show a one-tap fallback.
+        // Permission still default/denied - show a one-tap fallback.
         setNeedsManualEnable(true);
       } catch {
         if (!cancelled) setNeedsManualEnable(true);
@@ -157,7 +157,7 @@ export function GuestOrderPushEnableCard({
   if (!ready || !orderId) return null;
   if (!supported && !iosNeedsInstall) return null;
 
-  // Happy path: alerts are on — no banner needed.
+  // Happy path: alerts are on - no banner needed.
   if (subscribed && !iosNeedsInstall) return null;
 
   if (iosNeedsInstall) {

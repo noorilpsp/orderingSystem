@@ -18,14 +18,15 @@ const DAY_MAP: Record<string, number> = {
   saturday: 6,
 };
 
-const DAY_NAMES = [
-  "sunday",
+/** Guest hours list: Monday first, Sunday last. */
+const GUEST_HOURS_DAY_ORDER = [
   "monday",
   "tuesday",
   "wednesday",
   "thursday",
   "friday",
   "saturday",
+  "sunday",
 ] as const;
 
 function normalizeTime(value: string): string {
@@ -207,7 +208,7 @@ export function openingHoursToGuestHours(
 ): Array<{ day: string; time: string }> {
   if (!openingHours) return [];
 
-  return DAY_NAMES.map((day) => {
+  return GUEST_HOURS_DAY_ORDER.map((day) => {
     const blocks = openingHours[day];
     if (!blocks?.length) {
       return { day: day.charAt(0).toUpperCase() + day.slice(1), time: "Closed" };
@@ -235,7 +236,7 @@ function guestHoursToDbSchedule(
     const blocks: Array<{ open: string; close: string }> = [];
     for (const part of time.split(",")) {
       const [open, close] = part
-        .split(/\s*[-–—]\s*/)
+        .split(/\s*[-–-]\s*/)
         .map((value) => value.trim());
       if (open && close) blocks.push({ open, close });
     }

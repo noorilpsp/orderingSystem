@@ -107,7 +107,7 @@ export async function saveIdempotentResponse(
 
 /**
  * Deletes idempotency keys older than N days. Run periodically (e.g. via cron) to avoid unbounded growth.
- * Not scheduled automatically — wire into your job runner or cron.
+ * Not scheduled automatically - wire into your job runner or cron.
  *
  * @param days - Delete rows older than this many days (default 30)
  * @returns Number of rows deleted

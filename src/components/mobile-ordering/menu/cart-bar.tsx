@@ -23,6 +23,9 @@ import { resolveCatalogText } from "@/lib/catalog-i18n";
 import { useGuestLocale, useGuestT } from "@/lib/guest-i18n";
 import { useGuestLocalization } from "@/lib/hooks/useGuestLocalization";
 import { GuestDealBadge, guestDealKind } from "@/components/mobile-ordering/guest-deal-badge";
+import { guestParksUntilOpen } from "@/lib/public-menu/guestParksUntilOpen";
+import { isGuestRestaurantOpenNow } from "@/lib/public-menu/resolveActiveMenu";
+import { formatPickupScheduleLabel } from "@/lib/public-menu/buildPickupScheduleSlots";
 
 interface CartBarProps {
   items: CartItem[];
@@ -56,6 +59,15 @@ export function CartBar({
   const customizationGroups = publicMenu?.customizationGroups ?? staticCustomizationGroups;
   const taxRatePercent = publicMenu?.taxRate ?? 0;
   const resolvedCheckoutPath = checkoutPath ?? publicMenu?.checkoutPath ?? "/mobile/checkout";
+  const parksUntilOpen = guestParksUntilOpen({
+    storeOpenNow: isGuestRestaurantOpenNow(
+      publicMenu?.restaurant?.hours,
+      publicMenu?.restaurant?.timezone,
+    ),
+    orderType: publicMenu?.orderType ?? "pickup",
+    orderModes: publicMenu?.orderModes,
+  });
+  const scheduledPickupAt = publicMenu?.scheduledPickupAt ?? null;
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [dragY, setDragY] = useState(0);
@@ -521,7 +533,16 @@ export function CartBar({
                               router.push(resolvedCheckoutPath);
                             }}
                           >
-                            {t("cart.proceedToCheckout")}
+                            {parksUntilOpen
+                              ? scheduledPickupAt
+                                ? t("actions.checkoutAt", {
+                                    time: formatPickupScheduleLabel(
+                                      scheduledPickupAt,
+                                      restaurant?.timezone,
+                                    ),
+                                  })
+                                : t("closed.scheduleOrder")
+                              : t("cart.proceedToCheckout")}
                           </button>
                         </div>
                       </>

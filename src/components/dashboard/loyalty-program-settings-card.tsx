@@ -283,7 +283,7 @@ export function LoyaltyProgramSettingsCard() {
 export function LoyaltySampleDataBanner() {
   return (
     <div className="mb-6 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-      Sample data below — program settings above are live.
+      Sample data below - program settings above are live.
     </div>
   );
 }

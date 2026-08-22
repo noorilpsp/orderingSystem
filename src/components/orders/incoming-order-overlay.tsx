@@ -13,6 +13,7 @@ import {
 import { groupOpsOrderItems } from "@/lib/orders/groupOpsOrderItems";
 import { createIncomingOrderAlertSound } from "@/lib/orders/incoming-order-alert-sound";
 import { cn } from "@/lib/utils";
+import { OpsOrderNote } from "@/components/orders/ops-order-note";
 
 export type IncomingOrderOverlayOrder = {
   id: string;
@@ -245,7 +246,7 @@ export function IncomingOrderOverlay({
                     <span className="shrink-0 font-mono text-sm font-semibold text-white/85" dir="ltr">
                       {typeof item.price === "number" && Number.isFinite(item.price)
                         ? formatMoney(item.price)
-                        : "—"}
+                        : "-"}
                     </span>
                   </li>
                 ))
@@ -265,8 +266,11 @@ export function IncomingOrderOverlay({
                     : "border-white/10 bg-white/[0.04] text-white/75",
                 )}
               >
-                <span className="not-italic text-white/55">{t("common.instructions")}</span>{" "}
-                <span className="italic">{order.note}</span>
+                <OpsOrderNote
+                  note={order.note}
+                  instructionsLabel={t("common.instructions")}
+                  deliverToLabel={t("common.deliverTo")}
+                />
               </div>
             ) : null}
 

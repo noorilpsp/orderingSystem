@@ -1966,7 +1966,7 @@ export async function closeSessionService(
         tx,
       );
       if (probe.ok) {
-        // Already covered (e.g. per-order payments) — close without inserting another charge.
+        // Already covered (e.g. per-order payments) - close without inserting another charge.
         effectivePayment = undefined;
       } else if (probe.reason === "unpaid_balance") {
         const remaining = Math.max(0, Number(probe.remaining ?? 0));

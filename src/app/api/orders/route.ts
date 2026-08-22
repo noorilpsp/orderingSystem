@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
           });
           continue;
         }
-        // Owner/admin accounts often aren't linked to a Staff row — use users.fullName.
+        // Owner/admin accounts often aren't linked to a Staff row - use users.fullName.
         if (event.changedByUser?.fullName) {
           acceptedByByOrderId.set(event.orderId, {
             id: event.changedByUser.id,

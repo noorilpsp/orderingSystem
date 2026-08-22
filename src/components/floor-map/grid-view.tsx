@@ -65,12 +65,12 @@ const statusOrder: TableColorState[] = [
 
 // ── Group config ───────────────────────────────────────────────────────────
 const groupConfig: Record<TableColorState, { label: string; defaultExpanded: boolean; emptyMsg: string }> = {
-  needs_attention: { label: "NEEDS ATTENTION", defaultExpanded: true, emptyMsg: "No tables need attention — great work!" },
+  needs_attention: { label: "NEEDS ATTENTION", defaultExpanded: true, emptyMsg: "No tables need attention - great work!" },
   food_ready: { label: "FOOD READY", defaultExpanded: true, emptyMsg: "No food ready tables" },
   bill_requested: { label: "BILL REQUESTED", defaultExpanded: true, emptyMsg: "No tables requesting the bill" },
   occupied: { label: "OCCUPIED", defaultExpanded: true, emptyMsg: "No occupied tables" },
   reserved: { label: "RESERVED", defaultExpanded: false, emptyMsg: "No reserved tables" },
-  available: { label: "AVAILABLE", defaultExpanded: true, emptyMsg: "All tables occupied — full house!" },
+  available: { label: "AVAILABLE", defaultExpanded: true, emptyMsg: "All tables occupied - full house!" },
   cleaning: { label: "CLEANING", defaultExpanded: false, emptyMsg: "No tables cleaning" },
 }
 

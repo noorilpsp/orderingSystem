@@ -91,7 +91,7 @@ export async function sendGuestOrderPush(input: {
       .from(guestPushSubscriptions)
       .where(eq(guestPushSubscriptions.orderId, input.orderId));
 
-    // Don't claim the event until someone is subscribed — otherwise Enable alerts
+    // Don't claim the event until someone is subscribed - otherwise Enable alerts
     // after Accept/Ready permanently misses those notifications.
     if (rows.length === 0) return;
 

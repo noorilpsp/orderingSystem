@@ -26,6 +26,9 @@ import {
 import type { GuestSplitProposalRecord } from "@/lib/db/schema/guest-table-splits";
 import { toUserFacingErrorMessage } from "@/lib/db/withDbRetry";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
+import { guestParksUntilOpen } from "@/lib/public-menu/guestParksUntilOpen";
+import { isGuestRestaurantOpenNow } from "@/lib/public-menu/resolveActiveMenu";
+import { formatPickupScheduleLabel } from "@/lib/public-menu/buildPickupScheduleSlots";
 
 type OrderType = "dine-in" | "pickup" | "delivery";
 type ToastType = "success" | "warning";
@@ -100,6 +103,26 @@ export function SmartBottomBar({
     orderType === "dine-in" &&
     resolveGuestSessionMode(publicMenu?.orderModes) !== "self_service";
   const effectiveTableNumber = linkedTableNumber.trim();
+  const parksUntilOpen = guestParksUntilOpen({
+    storeOpenNow: isGuestRestaurantOpenNow(
+      publicMenu?.restaurant?.hours,
+      publicMenu?.restaurant?.timezone,
+    ),
+    orderType,
+    orderModes: publicMenu?.orderModes,
+  });
+  const scheduledPickupAt = publicMenu?.scheduledPickupAt ?? null;
+  const cartCtaLabel =
+    parksUntilOpen && scheduledPickupAt
+      ? t("actions.checkoutAt", {
+          time: formatPickupScheduleLabel(
+            scheduledPickupAt,
+            publicMenu?.restaurant?.timezone,
+          ),
+        })
+      : parksUntilOpen
+        ? t("actions.scheduleCartCount", { count: cartCount })
+        : t("actions.viewCartCount", { count: cartCount });
 
   const handleRef = useRef<HTMLButtonElement>(null);
   const firstActionRef = useRef<HTMLButtonElement>(null);
@@ -212,7 +235,7 @@ export function SmartBottomBar({
   useEffect(() => {
     if (!trayOpen) return;
     void loadSplitBill({ silent: true });
-    // Prefetch once when the table drawer opens — not when loadSplitBill identity changes.
+    // Prefetch once when the table drawer opens - not when loadSplitBill identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [trayOpen]);
 
@@ -228,12 +251,12 @@ export function SmartBottomBar({
   useEffect(() => {
     if (!splitOpen) return;
     void loadSplitBill();
-    // Only reload when the dialog opens — not when loadSplitBill identity changes.
+    // Only reload when the dialog opens - not when loadSplitBill identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [splitOpen]);
 
   // Live-refresh claims / extra payers only while Split bill is open.
-  // Do not poll on the menu — a seated table with no open check 404s every tick.
+  // Do not poll on the menu - a seated table with no open check 404s every tick.
   useEffect(() => {
     if (!splitOpen) return;
     if (orderType !== "dine-in") return;
@@ -508,13 +531,13 @@ export function SmartBottomBar({
                 <button
                   type="button"
                   role="button"
-                  aria-label={`View cart, ${cartCount} items, ${formatMoney(total)}`}
+                  aria-label={`${cartCtaLabel}, ${formatMoney(total)}`}
                   className="sheen-overlay relative flex min-h-[52px] w-full items-center justify-between rounded-xl border border-white/26 bg-black/78 px-4 py-3 text-white backdrop-blur-2xl shadow-[0_14px_30px_rgba(0,0,0,0.42)] ring-1 ring-white/10 transition-transform duration-200 hover:bg-black/84 active:scale-[0.99] dark:border-blue-300/25 dark:bg-blue-900/55 dark:text-blue-100 dark:backdrop-blur-xl dark:hover:bg-blue-900/70 vivid:border-white/55 vivid:bg-white/72 vivid:text-black vivid:backdrop-blur-xl vivid:hover:bg-white/84"
                   onClick={onViewCart}
                 >
                   <div className="flex items-center gap-2">
                     <ShoppingCart className="h-4 w-4" />
-                    <span className="text-sm font-semibold">{t("actions.viewCartCount", { count: cartCount })}</span>
+                    <span className="text-sm font-semibold">{cartCtaLabel}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-semibold">{formatMoney(total)}</span>

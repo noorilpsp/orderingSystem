@@ -14,6 +14,7 @@ export const arMessages: Record<OpsMessageKey, string> = {
   "common.tax": "الضريبة",
   "common.total": "الإجمالي",
   "common.instructions": "ملاحظات:",
+  "common.deliverTo": "التوصيل إلى",
   "common.note": "ملاحظة:",
   "common.saving": "جاري الحفظ…",
   "common.items": "الأصناف",
@@ -80,7 +81,7 @@ export const arMessages: Record<OpsMessageKey, string> = {
   "action.refund": "استرداد",
   "action.fireWave": "إرسال الموجة W{number}",
   "action.orderActions": "إجراءات الطلب",
-  "action.waveFired": "{label} — تم إرسال الموجة {number}",
+  "action.waveFired": "{label} - تم إرسال الموجة {number}",
 
   "prep.inPreparation": "قيد التحضير",
   "prep.markReadyHint": "حدده كجاهز عندما يكتمل الطلب للضيف.",
@@ -117,7 +118,7 @@ export const arMessages: Record<OpsMessageKey, string> = {
   "incoming.snooze": "تأجيل 30 ث",
   "incoming.decreaseEta": "إنقاص وقت التحضير",
   "incoming.increaseEta": "زيادة وقت التحضير",
-  "incoming.resume": "{count} بانتظار — استئناف",
+  "incoming.resume": "{count} بانتظار - استئناف",
 
   "service.aria": "طلبات خدمة الضيوف",
   "service.waiterCalled": "الضيف طلب النادل",

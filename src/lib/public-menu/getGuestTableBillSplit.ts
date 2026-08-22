@@ -36,7 +36,7 @@ export type GuestBillSplitCustomization = {
 
 export type GuestBillSplitItem = {
   id: string;
-  /** Menu item id when known — used with i18n for guest locale names. */
+  /** Menu item id when known - used with i18n for guest locale names. */
   itemId: string | null;
   name: string;
   /** Catalog locale overrides (Arabic name, etc.). */
@@ -104,7 +104,7 @@ function guestBillMergeKey(item: {
     ? `id:${item.itemId.trim()}`
     : `name:${item.itemName.trim().toLowerCase()}`;
   const seatKey = item.seatId?.trim() || "unassigned";
-  // Use Unit Separator (\u001f), never NUL (\u0000) — Postgres jsonb rejects \\u0000 in text.
+  // Use Unit Separator (\u001f), never NUL (\u0000) - Postgres jsonb rejects \\u0000 in text.
   const fieldSep = "\u001f";
   const customizationKey = item.customizations
     .map((row) =>
@@ -182,8 +182,8 @@ function mapCustomizations(
 
 /**
  * Guest-facing bill split preview for the open table session.
- * Requires a claimed seat on this table (QR / deep link) — same gate as staff
- * opening one table on the floor plan — then returns the full check so guests
+ * Requires a claimed seat on this table (QR / deep link) - same gate as staff
+ * opening one table on the floor plan - then returns the full check so guests
  * can review One bill / By seat / Equal (payment still happens with staff).
  */
 export async function getGuestTableBillSplit(input: {

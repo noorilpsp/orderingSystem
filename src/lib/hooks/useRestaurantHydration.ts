@@ -8,7 +8,7 @@ import { getActiveFloorPlan, getConvertedTablesForFloorPlan } from "@/app/action
 
 /**
  * Hydrates the restaurant Zustand store from Neon when currentLocationId is set.
- * Reservations and waitlist are NOT hydrated here — they use the server-read path
+ * Reservations and waitlist are NOT hydrated here - they use the server-read path
  * (layout + GET /api/reservations/view) to avoid duplicate fetches.
  */
 export function useRestaurantHydration() {

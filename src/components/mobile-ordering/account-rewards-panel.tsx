@@ -30,7 +30,7 @@ export function AccountRewardsPanel({
 
   const handleUse = (rewardId: string) => {
     writeSelectedRewardId(storeSlug, rewardId);
-    toast.success("Reward saved — add items, then apply at checkout");
+    toast.success("Reward saved - add items, then apply at checkout");
     router.push(`/menu/${storeSlug}`);
   };
 

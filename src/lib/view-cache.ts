@@ -117,7 +117,7 @@ export const OPS_POST_SEATING_EVENT = "ops:post-seating";
 
 export type PostSeatingDetail = { locationId: string; tableId?: string };
 
-/** Clear caches only — no refresh event. Use when optimistic UI already shows the seated state. */
+/** Clear caches only - no refresh event. Use when optimistic UI already shows the seated state. */
 export function invalidatePostSeatingCaches(locationId: string, tableId?: string): void {
   invalidateFloorMapCache(locationId);
   if (tableId) invalidateTableCache(tableId);

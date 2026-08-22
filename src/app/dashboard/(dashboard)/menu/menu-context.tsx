@@ -701,7 +701,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           allergensRes.json(),
         ])
 
-      // Unwrap POS envelope { ok, data } — all list APIs return posSuccess
+      // Unwrap POS envelope { ok, data } - all list APIs return posSuccess
       const unwrap = <T,>(json: unknown, label: string): T[] => {
         if (process.env.NODE_ENV === "development") {
           const ok = json && typeof json === "object" && "ok" in (json as object)

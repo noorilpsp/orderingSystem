@@ -1,5 +1,5 @@
 /**
- * Domain event emitter — a seam for realtime, webhooks, and analytics.
+ * Domain event emitter - a seam for realtime, webhooks, and analytics.
  * Currently a no-op. Wire Supabase Realtime, webhooks, or analytics later.
  */
 

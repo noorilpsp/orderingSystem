@@ -1,5 +1,5 @@
 /**
- * Capacity aggregation engine — computes real seat occupancy per 30-minute slot
+ * Capacity aggregation engine - computes real seat occupancy per 30-minute slot
  * from reservations, sessions, and location capacity.
  *
  * Pure synchronous function. No side effects.

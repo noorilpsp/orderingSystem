@@ -1,5 +1,5 @@
 /**
- * POS demo data seed — runs staff, menu, and orders seeds in order.
+ * POS demo data seed - runs staff, menu, and orders seeds in order.
  * Run with: npm run seed:pos
  *
  * Cross-platform: uses spawnSync without shell. Stops on first failure.

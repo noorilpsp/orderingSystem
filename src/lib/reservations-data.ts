@@ -573,7 +573,7 @@ function deriveCourseStage(
   return "ordering"
 }
 
-/** Estimate predicted turn minutes from course stage. Simple honest model—no predictive analytics. */
+/** Estimate predicted turn minutes from course stage. Simple honest model-no predictive analytics. */
 function estimatePredictedTurnMin(stage: CourseStage): number {
   const map: Record<CourseStage, number> = {
     paying: 3,
@@ -615,13 +615,13 @@ function hasDessertWave(session: { tableItems?: { wave: string }[]; seats?: { it
 
 /** Format seatedAt from ISO string to "HH:MM". */
 function formatSeatedAt(iso: string | null | undefined): string {
-  if (!iso || typeof iso !== "string") return "—"
+  if (!iso || typeof iso !== "string") return "-"
   try {
     const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return "—"
+    if (Number.isNaN(d.getTime())) return "-"
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
   } catch {
-    return "—"
+    return "-"
   }
 }
 

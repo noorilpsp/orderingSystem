@@ -5,9 +5,9 @@ import Image from 'next/image'
 
 // Optimized date formatting - only format what we need
 function formatDate(value: Date | string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat('en', {
     month: 'short',
     day: 'numeric',
@@ -16,9 +16,9 @@ function formatDate(value: Date | string | null) {
 }
 
 function formatDateTime(value: Date | string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat('en', {
     month: 'short',
     day: 'numeric',
@@ -90,7 +90,7 @@ export default async function AdminPersonnelPage() {
                     {person.user?.fullName ?? 'Unknown'}
                   </div>
                   <div className="text-xs text-muted-foreground truncate">
-                    {person.user?.email ?? '—'}
+                    {person.user?.email ?? '-'}
                   </div>
                 </div>
               </div>
@@ -110,7 +110,7 @@ export default async function AdminPersonnelPage() {
               <div className="text-xs text-muted-foreground space-y-1 w-full">
                 <div>Status: {person.isActive ? 'Active' : 'Inactive'}</div>
                 <div>Added: {person.createdAtFormatted}</div>
-                {person.lastLoginAtFormatted !== '—' && (
+                {person.lastLoginAtFormatted !== '-' && (
                   <div>Last login: {person.lastLoginAtFormatted}</div>
                 )}
               </div>

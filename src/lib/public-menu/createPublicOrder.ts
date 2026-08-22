@@ -35,11 +35,19 @@ import {
   formatScheduledPickupNote,
   parseScheduledPickupAt,
 } from "@/lib/public-menu/scheduledOrderRelease";
+import { nextGuestFulfillmentAt } from "@/lib/public-menu/buildPickupScheduleSlots";
+import {
+  isGuestRestaurantOpenNow,
+  openingHoursToGuestHours,
+} from "@/lib/public-menu/resolveActiveMenu";
+import { resolveStoreTimezone } from "@/lib/timezone/fromCountry";
 import { getLoggedInCustomer } from "@/lib/public-menu/getLoggedInCustomer";
 import { ensureWalkInCustomerByPhone } from "@/lib/public-menu/ensureWalkInCustomerByPhone";
-import { formatPhoneForDisplay, isValidGuestPhone } from "@/lib/public-menu/guest-phone";
+import { isValidGuestPhone } from "@/lib/public-menu/guest-phone";
 import {
   formatGuestDeliveryAddressNote,
+  formatStoredDeliveryAddressLine2,
+  formatStoredDeliveryInstructions,
   normalizeGuestDeliveryAddress,
 } from "@/lib/public-menu/guest-delivery-address";
 import { withTx } from "@/domain/tx";
@@ -317,11 +325,35 @@ async function createPickupOrDeliveryOrder(
   });
   const orderNumber = `ORD-${String(todayOrders.length + 1).padStart(3, "0")}`;
 
-  const scheduledPickupAt = parseScheduledPickupAt(input.scheduledPickupAt);
+  const guestHours = openingHoursToGuestHours(location.openingHours);
+  const storeTimeZone = resolveStoreTimezone({
+    country: location.country,
+    locationTimezone: location.timezone,
+  });
+  const prepMinutes =
+    input.orderType === "delivery"
+      ? Math.max(0, Number(location.orderModes?.delivery?.estimated_time_minutes) || 15)
+      : Math.max(0, Number(location.orderModes?.pickup?.estimated_time_minutes) || 15);
+
+  let scheduledPickupAt = parseScheduledPickupAt(input.scheduledPickupAt);
   if (input.scheduledPickupAt && !scheduledPickupAt) {
     return { ok: false, code: "BAD_REQUEST", message: "Invalid scheduledPickupAt" };
   }
-  if (scheduledPickupAt && scheduledPickupAt.getTime() <= Date.now()) {
+
+  const storeOpenNow = isGuestRestaurantOpenNow(guestHours, storeTimeZone);
+  if (storeOpenNow === false) {
+    const nextOpenAt = nextGuestFulfillmentAt({
+      hours: guestHours,
+      prepMinutes,
+      timeZone: storeTimeZone,
+    });
+    if (!nextOpenAt) {
+      return { ok: false, code: "BAD_REQUEST", message: "This store is closed" };
+    }
+    if (!scheduledPickupAt || scheduledPickupAt.getTime() < nextOpenAt.getTime()) {
+      scheduledPickupAt = nextOpenAt;
+    }
+  } else if (scheduledPickupAt && scheduledPickupAt.getTime() <= Date.now()) {
     return {
       ok: false,
       code: "BAD_REQUEST",
@@ -339,14 +371,13 @@ async function createPickupOrDeliveryOrder(
     parsedDeliveryAddress
       ? formatGuestDeliveryAddressNote(
           parsedDeliveryAddress,
-          input.guestName,
           location.country,
         )
       : null;
   const notes =
     [deliveryNote, input.notes?.trim() || null, scheduledNote]
       .filter(Boolean)
-      .join(" · ") || null;
+      .join("\n") || null;
 
   const merchantId =
     preparedRedemption.ok &&
@@ -391,22 +422,16 @@ async function createPickupOrDeliveryOrder(
         await tx.insert(orderDeliveryTable).values({
           orderId: created.orderId,
           addressLine1: parsedDeliveryAddress.line1,
-          addressLine2:
-            [parsedDeliveryAddress.building, parsedDeliveryAddress.line2]
-              .filter(Boolean)
-              .join(", ") || null,
+          addressLine2: formatStoredDeliveryAddressLine2(
+            parsedDeliveryAddress.building,
+            parsedDeliveryAddress.line2,
+          ),
           city: parsedDeliveryAddress.city,
           postalCode: parsedDeliveryAddress.postalCode,
-          deliveryInstructions:
-            [
-              parsedDeliveryAddress.intercom,
-              parsedDeliveryAddress.phone
-                ? `Tel ${formatPhoneForDisplay(parsedDeliveryAddress.phone, location.country)}`
-                : null,
-              parsedDeliveryAddress.instructions,
-            ]
-              .filter(Boolean)
-              .join(" · ") || null,
+          deliveryInstructions: formatStoredDeliveryInstructions(
+            parsedDeliveryAddress,
+            location.country,
+          ),
           deliveryFee: deliveryFee.toFixed(2),
           estimatedDeliveryAt: scheduledPickupAt,
         });
@@ -675,7 +700,7 @@ export async function createPublicOrder(
 
   if (input.orderType === "dine_in") {
     const guestSessionMode = resolveGuestSessionMode(location.orderModes);
-    // Walk-in self-service dine-in: no table/seat — create a counter dine-in order.
+    // Walk-in self-service dine-in: no table/seat - create a counter dine-in order.
     if (guestSessionMode === "self_service" && !input.tableNumber?.trim()) {
       return createPickupOrDeliveryOrder(input, location, customerId, userId);
     }

@@ -10,9 +10,11 @@ import { FeaturedSection } from "@/components/mobile-ordering/menu/featured-sect
 import { CartBar } from "@/components/mobile-ordering/menu/cart-bar";
 import { ContextPill } from "@/components/mobile-ordering/menu/context-pill";
 import { GuestWelcomeSheet } from "@/components/mobile-ordering/guest-welcome-sheet";
+import { GuestClosedSheet } from "@/components/mobile-ordering/guest-closed-sheet";
+import { PickupTimingPicker } from "@/components/mobile-ordering/checkout/pickup-timing-picker";
 import type { ThemePreview } from "@/components/mobile-ordering/menu/context-pill";
 import { SmartBottomBar } from "@/components/mobile-ordering/menu/smart-bottom-bar";
-import { CheckCircle2, Bell, Loader2 } from "lucide-react";
+import { CheckCircle2, Bell, Loader2, CalendarClock } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { GuestCartItem, GuestMenuItem } from "@/lib/guest-menu/types";
@@ -20,6 +22,17 @@ import { featuredItemsInCategoryOrder } from "@/lib/guest-menu/featuredItems";
 import { sumGuestCartItems } from "@/lib/public-menu/guest-cart-pricing";
 import { itemNeedsCustomizationBeforeQuickAdd } from "@/lib/public-menu/item-needs-customization";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
+import { guestParksUntilOpen } from "@/lib/public-menu/guestParksUntilOpen";
+import { isGuestRestaurantOpenNow } from "@/lib/public-menu/resolveActiveMenu";
+import {
+  formatPickupScheduleLabel,
+  nextGuestFulfillmentAt,
+} from "@/lib/public-menu/buildPickupScheduleSlots";
+import {
+  hasSeenGuestClosedSheet,
+  markGuestClosedSheetSeen,
+} from "@/lib/public-menu/guest-closed-sheet-storage";
+import { readGuestScheduledPickupAt } from "@/lib/public-menu/guest-scheduled-pickup-storage";
 import { cartQuantityForCatalogItem } from "@/lib/public-menu/guest-cart-lines";
 import { isRewardCartLine } from "@/lib/public-menu/guest-reward-cart";
 import {
@@ -75,6 +88,8 @@ export function GuestMenuPage() {
     accountLoginPath,
     accountSignupPath,
     getCustomizationGroupsForItem,
+    scheduledPickupAt,
+    setScheduledPickupAt,
   } = usePublicMenu();
 
   const [checkRequested, setCheckRequested] = useState(false);
@@ -92,6 +107,9 @@ export function GuestMenuPage() {
   const [tick, setTick] = useState(0);
   const [activeOrders, setActiveOrders] = useState<GuestActiveOrder[]>([]);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [closedSheetOpen, setClosedSheetOpen] = useState(false);
+  const [scheduleOpenNonce, setScheduleOpenNonce] = useState(0);
+  const [scheduleSheetOpen, setScheduleSheetOpen] = useState(false);
   const isTabletUp = useMediaQuery("(min-width: 768px)");
   const cardVariant = isTabletUp ? "tile" : "row";
 
@@ -102,6 +120,13 @@ export function GuestMenuPage() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressScrollSpyUntilRef = useRef(0);
   const programmaticScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const storeOpenNow = isGuestRestaurantOpenNow(restaurant?.hours, restaurant?.timezone);
+  const parksUntilOpen = guestParksUntilOpen({
+    storeOpenNow,
+    orderType,
+    orderModes,
+  });
 
   useEffect(() => {
     recoverGuestActiveOrdersFromSession(storeSlug);
@@ -114,13 +139,99 @@ export function GuestMenuPage() {
       setWelcomeOpen(false);
       return;
     }
+    if (closedSheetOpen || scheduleSheetOpen) {
+      setWelcomeOpen(false);
+      return;
+    }
+    const waitingOnClosedLanding =
+      parksUntilOpen &&
+      !scheduledPickupAt &&
+      !readGuestScheduledPickupAt(storeSlug) &&
+      !hasSeenGuestClosedSheet(storeSlug);
+    if (waitingOnClosedLanding) {
+      setWelcomeOpen(false);
+      return;
+    }
     setWelcomeOpen(!hasSeenGuestWelcome(storeSlug));
-  }, [customer, customerLoading, storeSlug]);
-
+  }, [
+    closedSheetOpen,
+    customer,
+    customerLoading,
+    parksUntilOpen,
+    scheduleSheetOpen,
+    scheduledPickupAt,
+    storeSlug,
+  ]);
   const handleContinueAsGuest = useCallback(() => {
     markGuestWelcomeSeen(storeSlug);
     setWelcomeOpen(false);
   }, [storeSlug]);
+  const handleWelcomeChooseAccount = useCallback(() => {
+    markGuestWelcomeSeen(storeSlug);
+  }, [storeSlug]);
+  const handleWelcomeClose = useCallback(() => {
+    setWelcomeOpen(false);
+  }, []);
+
+  const fulfillmentPrepMinutes =
+    orderType === "delivery"
+      ? orderModes.delivery?.estimated_time_minutes ??
+        orderModes.pickup?.estimated_time_minutes ??
+        15
+      : orderModes.pickup?.estimated_time_minutes ?? 15;
+  const nextOpenAt = useMemo(
+    () =>
+      nextGuestFulfillmentAt({
+        hours: restaurant?.hours,
+        prepMinutes: fulfillmentPrepMinutes,
+        timeZone: restaurant?.timezone,
+      }),
+    [fulfillmentPrepMinutes, restaurant?.hours, restaurant?.timezone],
+  );
+  const nextOpenLabel = nextOpenAt
+    ? formatPickupScheduleLabel(nextOpenAt.toISOString(), restaurant?.timezone)
+    : null;
+  const whenChipLabel = scheduledPickupAt
+    ? formatPickupScheduleLabel(scheduledPickupAt, restaurant?.timezone)
+    : nextOpenLabel
+      ? t("menu.opensAt", { time: nextOpenLabel })
+      : t("info.closedNow");
+
+  const openScheduleDrawer = useCallback(() => {
+    setScheduleOpenNonce((nonce) => nonce + 1);
+  }, []);
+
+  const handleClosedSheetBrowse = useCallback(() => {
+    markGuestClosedSheetSeen(storeSlug);
+    setClosedSheetOpen(false);
+  }, [storeSlug]);
+
+  const handleClosedSheetSchedule = useCallback(() => {
+    markGuestClosedSheetSeen(storeSlug);
+    setWelcomeOpen(false);
+    setClosedSheetOpen(false);
+    openScheduleDrawer();
+  }, [openScheduleDrawer, storeSlug]);
+
+  const handleClosedSheetClose = useCallback(() => {
+    setClosedSheetOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (customerLoading || !parksUntilOpen) {
+      if (!parksUntilOpen) setClosedSheetOpen(false);
+      return;
+    }
+    if (scheduledPickupAt || readGuestScheduledPickupAt(storeSlug)) {
+      setClosedSheetOpen(false);
+      return;
+    }
+    if (hasSeenGuestClosedSheet(storeSlug)) {
+      setClosedSheetOpen(false);
+      return;
+    }
+    setClosedSheetOpen(true);
+  }, [customerLoading, parksUntilOpen, scheduledPickupAt, storeSlug]);
 
   const activeOrderIds = activeOrders.map((order) => order.orderId).join(",");
 
@@ -228,7 +339,7 @@ export function GuestMenuPage() {
       const existingLines = cart.filter(
         (entry) => entry.id === item.id && !isRewardCartLine(entry),
       );
-      // Already in cart — bump quantity on the most recent configuration.
+      // Already in cart - bump quantity on the most recent configuration.
       if (existingLines.length > 0) {
         addToCart({ ...existingLines[existingLines.length - 1], quantity: 1 });
         return;
@@ -281,7 +392,7 @@ export function GuestMenuPage() {
         setTableNumber(options.tableNumber.trim());
       }
       if (waiterCooldownSeconds > 0) {
-        const message = "Already notified — your waiter is on the way";
+        const message = "Already notified - your waiter is on the way";
         showToast(message, "warning");
         return { ok: false, message };
       }
@@ -322,7 +433,7 @@ export function GuestMenuPage() {
         setTableNumber(options.tableNumber.trim());
       }
       if (checkRequested) {
-        const message = "Check already requested — your server is on the way";
+        const message = "Check already requested - your server is on the way";
         showToast(message, "warning");
         return { ok: false, message };
       }
@@ -569,6 +680,7 @@ export function GuestMenuPage() {
   const showTableServiceUi = orderType === "dine-in" && !isSelfPickupMode;
   const showSmartBottomBar =
     !welcomeOpen &&
+    !closedSheetOpen &&
     (showTableServiceUi || cartCount > 0 || Boolean(activeOrderPath));
   const showCartCta = cartCount > 0 || Boolean(activeOrderPath);
   const smartBarPad = showTableServiceUi
@@ -590,7 +702,22 @@ export function GuestMenuPage() {
       <HeroSection
         onInfoClick={() => setIsInfoOpen(true)}
         topRightSlot={
-          <ContextPill
+          <div className="flex max-w-[min(100vw-1.5rem,24rem)] items-center justify-end gap-2">
+            {parksUntilOpen ? (
+              <button
+                type="button"
+                onClick={openScheduleDrawer}
+                className={
+                  scheduledPickupAt
+                    ? "liquid-glass flex min-h-9 max-w-46 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white"
+                    : "liquid-glass flex min-h-9 max-w-46 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-rose-100"
+                }
+              >
+                <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{whenChipLabel}</span>
+              </button>
+            ) : null}
+            <ContextPill
             compact
             orderType={orderType}
             tableNumber={tableNumber}
@@ -619,6 +746,7 @@ export function GuestMenuPage() {
             onTableNumberChange={setTableNumber}
             onToast={showToast}
           />
+          </div>
         }
       />
 
@@ -746,7 +874,38 @@ export function GuestMenuPage() {
         loginPath={accountLoginPath}
         signupPath={accountSignupPath}
         onContinueAsGuest={handleContinueAsGuest}
+        onChooseAccount={handleWelcomeChooseAccount}
+        onClose={handleWelcomeClose}
       />
+
+      <GuestClosedSheet
+        open={closedSheetOpen}
+        restaurantName={restaurant?.name ?? "this restaurant"}
+        opensAtLabel={nextOpenLabel}
+        onSchedule={handleClosedSheetSchedule}
+        onBrowse={handleClosedSheetBrowse}
+        onClose={handleClosedSheetClose}
+      />
+
+      {parksUntilOpen ? (
+        <PickupTimingPicker
+          hideCard
+          forceScheduled
+          mode={scheduledPickupAt ? "schedule" : "now"}
+          scheduledAt={scheduledPickupAt}
+          hours={restaurant?.hours}
+          prepMinutes={fulfillmentPrepMinutes}
+          kind={orderType === "delivery" ? "delivery" : "pickup"}
+          timeZone={restaurant?.timezone}
+          openRequestKey={scheduleOpenNonce}
+          onModeChange={() => {}}
+          onScheduledAtChange={(iso) => {
+            setScheduledPickupAt(iso);
+            if (iso) markGuestClosedSheetSeen(storeSlug);
+          }}
+          onSheetOpenChange={setScheduleSheetOpen}
+        />
+      ) : null}
 
       <InfoSheet open={isInfoOpen} onOpenChange={setIsInfoOpen} />
 
@@ -770,7 +929,13 @@ export function GuestMenuPage() {
           checkRequested={checkRequested}
           onCallWaiter={handleCallWaiter}
           onRequestCheck={handleRequestCheck}
-          onViewCart={() => setCartOpenSignal((prev) => prev + 1)}
+          onViewCart={() => {
+            if (parksUntilOpen && !scheduledPickupAt) {
+              openScheduleDrawer();
+              return;
+            }
+            setCartOpenSignal((prev) => prev + 1);
+          }}
           onToast={showToast}
           activeOrderPath={activeOrderPath}
           activeOrderNumber={activeOrder?.orderNumber ?? null}

@@ -8,25 +8,25 @@ const summaryCards = [
     title: 'Active merchants',
     description: 'Merchants currently transacting on the platform.',
     icon: BarChart3,
-    metric: '—',
+    metric: '-',
   },
   {
     title: 'Platform personnel',
     description: 'Internal users with assigned roles.',
     icon: Users,
-    metric: '—',
+    metric: '-',
   },
   {
     title: 'Alerts',
     description: 'Open issues that need review.',
     icon: AlertTriangle,
-    metric: '—',
+    metric: '-',
   },
   {
     title: "Today's activity",
     description: 'Sign-ins, approvals, and escalations.',
     icon: Activity,
-    metric: '—',
+    metric: '-',
   },
 ]
 

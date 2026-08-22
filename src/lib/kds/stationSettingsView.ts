@@ -1,5 +1,5 @@
 /**
- * Station settings read model — shape returned by GET /api/kds/stations.
+ * Station settings read model - shape returned by GET /api/kds/stations.
  */
 
 export type StationSettingsSubstation = {

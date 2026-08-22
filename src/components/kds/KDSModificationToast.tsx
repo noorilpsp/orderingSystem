@@ -33,7 +33,7 @@ interface KDSModificationToastProps {
 export function KDSModificationToast({ toast, onDismiss, onView }: KDSModificationToastProps) {
   const locationText = toast.tableNumber
     ? `Table ${toast.tableNumber}`
-    : toast.customerName ?? "—";
+    : toast.customerName ?? "-";
 
   return (
     <motion.div

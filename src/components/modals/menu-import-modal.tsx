@@ -360,22 +360,22 @@ export function MenuImportModal({
                         )}
                       >
                         <td className="p-2">{validation.rowIndex}</td>
-                        <td className="max-w-[140px] truncate p-2">{row?.name ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2">{row?.name ?? "-"}</td>
                         <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
-                          {row?.i18n?.ar?.name ?? "—"}
+                          {row?.i18n?.ar?.name ?? "-"}
                         </td>
-                        <td className="p-2">{row?.price ?? "—"}</td>
-                        <td className="max-w-[140px] truncate p-2">{row?.category ?? "—"}</td>
+                        <td className="p-2">{row?.price ?? "-"}</td>
+                        <td className="max-w-[140px] truncate p-2">{row?.category ?? "-"}</td>
                         <td className="max-w-[160px] truncate p-2 text-xs">
-                          {row?.menuNames?.join("; ") ?? (menuId ? "Default" : "—")}
+                          {row?.menuNames?.join("; ") ?? (menuId ? "Default" : "-")}
                         </td>
                         <td className="max-w-[120px] truncate p-2 text-xs text-muted-foreground">
-                          {row?.photoUrl ? "Yes" : "—"}
+                          {row?.photoUrl ? "Yes" : "-"}
                         </td>
                         {kdsEnabled ? (
                           <>
-                            <td className="p-2 text-xs">{row?.defaultStation ?? "—"}</td>
-                            <td className="p-2 text-xs">{row?.defaultSubstation ?? "—"}</td>
+                            <td className="p-2 text-xs">{row?.defaultStation ?? "-"}</td>
+                            <td className="p-2 text-xs">{row?.defaultSubstation ?? "-"}</td>
                           </>
                         ) : null}
                         <td className="p-2">{row?.status ?? (importAsDrafts ? "draft" : "live")}</td>

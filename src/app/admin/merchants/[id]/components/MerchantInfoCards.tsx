@@ -22,9 +22,9 @@ type MerchantInfoCardsProps = {
 }
 
 function formatDate(value: Date | string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat('en', {
     month: 'long',
     day: 'numeric',
@@ -49,7 +49,7 @@ export function MerchantInfoCards({ merchant }: MerchantInfoCardsProps) {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <div className="text-sm font-medium text-muted-foreground">Legal Name</div>
-            <div className="text-sm">{merchant.legalName || '—'}</div>
+            <div className="text-sm">{merchant.legalName || '-'}</div>
           </div>
           {merchant.kboNumber && (
             <div className="space-y-2">

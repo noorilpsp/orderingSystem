@@ -394,7 +394,7 @@ export function KDSColumn({
                     ? getReadySubstationSummary(order)
                     : undefined;
 
-                // READY column: work-group scoped — only items from ready/served groups, and only ready/served items
+                // READY column: work-group scoped - only items from ready/served groups, and only ready/served items
                 const displayOrder =
                   status === "ready"
                     ? {

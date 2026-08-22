@@ -1,5 +1,5 @@
 /**
- * Reservations view contract — shape returned by getReservationsView and GET /api/reservations/view.
+ * Reservations view contract - shape returned by getReservationsView and GET /api/reservations/view.
  * Server-read snapshot for the reservations shell and child views.
  */
 

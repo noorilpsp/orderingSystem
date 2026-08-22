@@ -31,6 +31,28 @@ const DAY_MESSAGE_KEYS: Record<string, EnMessageKey> = {
   saturday: "day.saturday",
 };
 
+const WEEKDAY_DISPLAY_ORDER = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+function hoursMondayFirst<T extends { day: string }>(hours: T[]): T[] {
+  return [...hours].sort((a, b) => {
+    const aIndex = WEEKDAY_DISPLAY_ORDER.indexOf(
+      a.day.trim().toLowerCase() as (typeof WEEKDAY_DISPLAY_ORDER)[number],
+    );
+    const bIndex = WEEKDAY_DISPLAY_ORDER.indexOf(
+      b.day.trim().toLowerCase() as (typeof WEEKDAY_DISPLAY_ORDER)[number],
+    );
+    return (aIndex < 0 ? 99 : aIndex) - (bIndex < 0 ? 99 : bIndex);
+  });
+}
+
 function localizeDayLabel(day: string, t: (key: EnMessageKey) => string): string {
   const key = DAY_MESSAGE_KEYS[day.trim().toLowerCase()];
   return key ? t(key) : day;
@@ -197,7 +219,7 @@ export function InfoSheet({ open, onOpenChange }: InfoSheetProps) {
                   {t("info.openingHours")}
                 </p>
                 <div className="space-y-2">
-                  {restaurant.hours.map((schedule) => (
+                  {hoursMondayFirst(restaurant.hours).map((schedule) => (
                     <div key={schedule.day} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">
                         {localizeDayLabel(schedule.day, t)}

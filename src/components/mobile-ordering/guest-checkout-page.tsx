@@ -20,6 +20,8 @@ import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 import { unlockGuestOrderReadyAudio } from "@/lib/mobile-ordering/guest-order-ready-sound";
 import { ensureGuestOrderPushPermission } from "@/lib/public-menu/guest-orders-push-client";
 import { formatPickupScheduleLabel } from "@/lib/public-menu/buildPickupScheduleSlots";
+import { isGuestRestaurantOpenNow } from "@/lib/public-menu/resolveActiveMenu";
+import { guestParksUntilOpen } from "@/lib/public-menu/guestParksUntilOpen";
 import { resolveGuestSessionMode } from "@/lib/public-menu/guestSessionMode";
 import {
   findRewardInCart,
@@ -83,10 +85,12 @@ export function GuestCheckoutPage() {
     guestDeviceId,
     claimGuestSeat,
     updateGuestSeatName,
+    scheduledPickupAt,
+    setScheduledPickupAt,
   } = usePublicMenu();
 
   const [pickupTimingMode, setPickupTimingMode] = useState<PickupTimingMode>("now");
-  const [scheduledPickupAt, setScheduledPickupAt] = useState<string | null>(null);
+  const [scheduleOpenNonce, setScheduleOpenNonce] = useState(0);
   const [orderNotes, setOrderNotes] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestPhoneError, setGuestPhoneError] = useState(false);
@@ -132,12 +136,6 @@ export function GuestCheckoutPage() {
     }
   }, [orderType, setOrderType, tableNumber]);
 
-  useEffect(() => {
-    if (orderType === "pickup" || orderType === "delivery") return;
-    setPickupTimingMode("now");
-    setScheduledPickupAt(null);
-  }, [orderType]);
-
   const rewardCartLine = findRewardInCart(cart);
   const selectedReward =
     rewardCartLine?.rewardId != null
@@ -166,6 +164,13 @@ export function GuestCheckoutPage() {
   const guestSessionMode = resolveGuestSessionMode(orderModes);
   const isSelfPickupMode = guestSessionMode === "self_service";
   const isDelivery = orderType === "delivery";
+  const fulfillmentPrepMinutes = isDelivery ? deliveryPrepMinutes : pickupPrepMinutes;
+  const storeOpenNow = isGuestRestaurantOpenNow(restaurant?.hours, restaurant?.timezone);
+  const shouldParkUntilOpen = guestParksUntilOpen({
+    storeOpenNow,
+    orderType,
+    orderModes,
+  });
   const deliveryFee = isDelivery
     ? Math.max(0, Number(orderModes.delivery?.delivery_fee) || 0)
     : 0;
@@ -184,7 +189,7 @@ export function GuestCheckoutPage() {
     dineInEnabled && (isSelfPickupMode || tableNumber.trim().length > 0);
   const showOrderTypeToggle =
     [checkoutDineInEnabled, pickupEnabled, deliveryEnabled].filter(Boolean).length >= 2;
-  // Delivery-to-table needs a table. Self pickup dine-in is counter collect —
+  // Delivery-to-table needs a table. Self pickup dine-in is counter collect -
   // never bind checkout to a table (avoids sticky ?table= looking "auto-selected").
   const usesTableSession = orderType === "dine-in" && !isSelfPickupMode;
   const needsGuestPhone = !customer && !usesTableSession && !isDelivery;
@@ -196,6 +201,31 @@ export function GuestCheckoutPage() {
     if (!tableNumber.trim()) return;
     setTableNumber("");
   }, [isSelfPickupMode, setTableNumber, tableNumber]);
+
+  useEffect(() => {
+    if (usesTableSession) {
+      setPickupTimingMode("now");
+      setScheduledPickupAt(null);
+      return;
+    }
+    if (shouldParkUntilOpen) {
+      setPickupTimingMode("schedule");
+      return;
+    }
+    if (scheduledPickupAt) {
+      setPickupTimingMode("schedule");
+      return;
+    }
+    if (orderType !== "pickup" && orderType !== "delivery") {
+      setPickupTimingMode("now");
+      setScheduledPickupAt(null);
+    }
+  }, [
+    orderType,
+    scheduledPickupAt,
+    shouldParkUntilOpen,
+    usesTableSession,
+  ]);
 
   useEffect(() => {
     setPaymentMethod(
@@ -215,14 +245,21 @@ export function GuestCheckoutPage() {
     return "pickup" as const;
   }, [isSelfPickupMode, orderType, usesTableSession]);
 
-  const isFormComplete =
+  const readyExceptSchedule =
     canPlaceOrder &&
     !!paymentMethod &&
     meetsDeliveryMinimum &&
-    (!usesTableSession || tableNumber.trim().length > 0) &&
-    ((orderType !== "pickup" && orderType !== "delivery") ||
-      pickupTimingMode === "now" ||
-      (pickupTimingMode === "schedule" && !!scheduledPickupAt));
+    (!usesTableSession || tableNumber.trim().length > 0);
+
+  const scheduleOk = usesTableSession
+    ? true
+    : shouldParkUntilOpen
+      ? !!scheduledPickupAt
+      : orderType !== "pickup" && orderType !== "delivery"
+        ? true
+        : pickupTimingMode === "now" || !!scheduledPickupAt;
+
+  const isFormComplete = readyExceptSchedule && scheduleOk;
 
   const cardClass =
     "rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-md";
@@ -245,6 +282,14 @@ export function GuestCheckoutPage() {
         block: "center",
       });
       guestPhoneInputRef.current?.focus();
+      return;
+    }
+    if (
+      !usesTableSession &&
+      !scheduledPickupAt &&
+      (shouldParkUntilOpen || pickupTimingMode === "schedule")
+    ) {
+      setScheduleOpenNonce((nonce) => nonce + 1);
       return;
     }
     if (!isFormComplete) return;
@@ -315,9 +360,11 @@ export function GuestCheckoutPage() {
         deviceId: usesTableSession ? guestDeviceId || null : null,
         notes: guestNotes,
         scheduledPickupAt:
-          (orderType === "pickup" || isDelivery) && pickupTimingMode === "schedule"
-            ? scheduledPickupAt
-            : null,
+          usesTableSession
+            ? null
+            : shouldParkUntilOpen || pickupTimingMode === "schedule"
+              ? scheduledPickupAt
+              : null,
         rewardId: selectedReward?.id,
         phone: needsGuestPhone ? guestPhone.trim() : deliveryPhone,
         guestName: tableGuestName,
@@ -650,13 +697,18 @@ export function GuestCheckoutPage() {
           </section>
         ) : null}
 
-        {(orderType === "pickup" && pickupEnabled) || (isDelivery && deliveryEnabled) ? (
+        {(orderType === "pickup" && pickupEnabled) ||
+        (isDelivery && deliveryEnabled) ||
+        (shouldParkUntilOpen && orderType === "dine-in" && isSelfPickupMode) ? (
           <PickupTimingPicker
             mode={pickupTimingMode}
             scheduledAt={scheduledPickupAt}
             hours={restaurant?.hours}
-            prepMinutes={isDelivery ? deliveryPrepMinutes : pickupPrepMinutes}
+            prepMinutes={fulfillmentPrepMinutes}
             kind={isDelivery ? "delivery" : "pickup"}
+            timeZone={restaurant?.timezone}
+            forceScheduled={shouldParkUntilOpen}
+            openRequestKey={scheduleOpenNonce}
             onModeChange={setPickupTimingMode}
             onScheduledAtChange={setScheduledPickupAt}
           />
@@ -768,27 +820,34 @@ export function GuestCheckoutPage() {
                 <Clock className="h-3.5 w-3.5" />
                 <span>
                   {usesTableSession
-                    ? t("checkout.footerTableTray", { number: tableNumber || "—" })
-                    : isDelivery
-                      ? pickupTimingMode === "schedule" && scheduledPickupAt
-                        ? t("checkout.footerDeliveryScheduled", {
-                            time: formatPickupScheduleLabel(scheduledPickupAt),
-                          })
-                        : t("checkout.footerDeliveryNow")
-                      : orderType === "dine-in" && isSelfPickupMode
-                      ? t("checkout.footerDineInCounter")
-                      : pickupTimingMode === "schedule" && scheduledPickupAt
-                        ? t("checkout.footerPickupScheduled", {
-                            time: formatPickupScheduleLabel(scheduledPickupAt),
-                          })
-                        : t("checkout.footerPickupNow")}
+                    ? t("checkout.footerTableTray", { number: tableNumber || "-" })
+                    : scheduledPickupAt &&
+                        (isDelivery || orderType === "pickup" || shouldParkUntilOpen)
+                      ? t(
+                          isDelivery
+                            ? "checkout.footerDeliveryScheduled"
+                            : "checkout.footerPickupScheduled",
+                          {
+                            time: formatPickupScheduleLabel(
+                              scheduledPickupAt,
+                              restaurant?.timezone,
+                            ),
+                          },
+                        )
+                    : shouldParkUntilOpen && !scheduledPickupAt
+                      ? t("checkout.pickTime")
+                      : isDelivery
+                        ? t("checkout.footerDeliveryNow")
+                        : orderType === "dine-in" && isSelfPickupMode
+                          ? t("checkout.footerDineInCounter")
+                          : t("checkout.footerPickupNow")}
                 </span>
               </div>
               <span>{t("checkout.itemCount", { count: itemCount })}</span>
             </div>
             <button
               type="button"
-              disabled={!isFormComplete || !!unavailableReason}
+              disabled={!readyExceptSchedule || !!unavailableReason}
               className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50"
               onClick={handlePlaceOrder}
             >

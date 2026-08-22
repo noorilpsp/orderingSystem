@@ -1,5 +1,5 @@
 /**
- * Orders view contract — shape returned by getOrdersView and GET /api/orders/view.
+ * Orders view contract - shape returned by getOrdersView and GET /api/orders/view.
  * Unified read model for the Orders ops page (table + pickup + delivery).
  */
 

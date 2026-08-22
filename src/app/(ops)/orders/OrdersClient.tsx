@@ -14,12 +14,13 @@ function getPayloadErrorMessage(payload: unknown, fallback: string): string {
   return typeof msg === "string" && msg.trim() ? msg : fallback
 }
 import Link from "next/link"
-import { AlertTriangle, Armchair, Banknote, Bike, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MoreHorizontal, Search, ShoppingBag, Store, Users } from "lucide-react"
+import { AlertTriangle, Armchair, Banknote, Bike, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, CreditCard, Flame, HandPlatter, MapPin, MessageSquare, MoreHorizontal, Phone, Search, ShoppingBag, Store, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useMerchantLocalization } from "@/lib/hooks/useMerchantLocalization"
 
 import { IncomingOrderOverlay, IncomingWaitingBadge } from "@/components/orders/incoming-order-overlay"
+import { OpsOrderNote } from "@/components/orders/ops-order-note"
 import { ServiceRequestBanner } from "@/components/orders/service-request-banner"
 import { OrdersStaffMenu } from "@/components/orders/orders-staff-menu"
 import { OpsCustomizationDisplayLines } from "@/components/shared/customization-display-lines"
@@ -64,6 +65,7 @@ import type { OrdersStaffProfile } from "@/lib/orders/getOrdersStaffProfile"
 import { isOrdersView, type OrdersServiceRequest, type OrdersView } from "@/lib/orders/ordersView"
 import { extractTableCode, mergeServedTableTicketsForBoard, formatTableSeatGuestLabel } from "@/lib/orders/buildTableCheckOrder"
 import { groupOpsOrderItems } from "@/lib/orders/groupOpsOrderItems"
+import { splitGuestDeliveryOrderNote } from "@/lib/public-menu/guest-delivery-address"
 
 type OrderSource = "table" | "pickup" | "delivery" | "dine_in_no_table"
 type UnifiedStatus = "sent" | "preparing" | "ready" | "served" | "voided" | "refunded"
@@ -212,7 +214,7 @@ function sourceLabelFor(t: OpsTranslate, source: OrderSource): string {
   }
 }
 
-/** Source chip text — table orders include the table code (e.g. "Table T5"). */
+/** Source chip text - table orders include the table code (e.g. "Table T5"). */
 function sourceBadgeLabel(
   order: Pick<UnifiedOrder, "source" | "label" | "guestLabel">,
   t: OpsTranslate,
@@ -881,8 +883,11 @@ function OrderCard({
 
       {order.note ? (
         <div className={cn("mx-4 mb-2 rounded-md border px-2 py-1.5 text-[11px]", hasAllergyHint ? "border-amber-400/30 bg-amber-500/10 text-amber-200/90" : "border-white/10 bg-black/20 text-muted-foreground")}>
-          <span className="not-italic text-white/55">{t("common.instructions")}</span>{" "}
-          <span className="italic">{order.note}</span>
+          <OpsOrderNote
+            note={order.note}
+            instructionsLabel={t("common.instructions")}
+            deliverToLabel={t("common.deliverTo")}
+          />
         </div>
       ) : null}
 
@@ -1316,7 +1321,7 @@ function OrdersBoard({
       const ok = await sound.start()
       if (cancelled) return
       if (ok) return
-      // HTML audio blocked (common on cold /orders load) — OS notification can still sound.
+      // HTML audio blocked (common on cold /orders load) - OS notification can still sound.
       fireNotificationFallback()
       window.setTimeout(() => {
         if (cancelled) return
@@ -1621,7 +1626,7 @@ function OrdersBoard({
         for (const row of sessionOrders) {
           if (row.status === "voided" || row.status === "refunded") continue
           if (row.status === "sent" || row.status === "preparing" || row.status === "ready") {
-            // Still in kitchen — leave status; server will reject close if unfinished.
+            // Still in kitchen - leave status; server will reject close if unfinished.
             continue
           }
           patchOrderStatus(row.id, "served")
@@ -2077,6 +2082,7 @@ function OrdersBoard({
   )
 
   const selectedIdentifier = selectedOrder ? getIdentifier(selectedOrder) : null
+  const selectedDelivery = splitGuestDeliveryOrderNote(selectedOrder?.note)
   const selectedIsCounterOrder = !!selectedOrder && isCounterStyleOrder(selectedOrder)
   const canVoidSelected =
     !!selectedOrder &&
@@ -2355,12 +2361,20 @@ function OrdersBoard({
                     <p className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                       <span>
                         {opsItemsCountLabel(t, order.itemCount)}
-                        {order.note ? ` · ${t("common.instructions")} ${order.note}` : ""}
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums text-foreground" dir="ltr">
                         {formatMoney(order.total)}
                       </span>
                     </p>
+                    {order.note ? (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        <OpsOrderNote
+                          note={order.note}
+                          instructionsLabel={t("common.instructions")}
+                          deliverToLabel={t("common.deliverTo")}
+                        />
+                      </div>
+                    ) : null}
                     {order.items.length > 0 ? (
                       <ul className="mt-3 space-y-1 border-t border-white/10 pt-2">
                         {groupOpsOrderItems(order.items).slice(0, 4).map((item, index) => (
@@ -2570,6 +2584,38 @@ function OrdersBoard({
                       </button>
                     ) : null}
                   </div>
+                  {selectedDelivery.place || selectedDelivery.contact ? (
+                    <div className="mt-3">
+                      <div className="flex items-center gap-2">
+                        <Bike className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <p className="text-sm font-semibold text-foreground">
+                          {t("common.deliverTo")}
+                        </p>
+                      </div>
+                      <div className="mt-2 space-y-1.5 text-sm text-foreground">
+                        {selectedDelivery.place ? (
+                          <div className="flex items-start gap-2">
+                            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span>{selectedDelivery.place}</span>
+                          </div>
+                        ) : null}
+                        {selectedDelivery.contact ? (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span>{selectedDelivery.contact}</span>
+                          </div>
+                        ) : null}
+                        {selectedDelivery.instructions ? (
+                          <div className="flex items-start gap-2">
+                            <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="text-xs italic text-amber-200/80">
+                              {selectedDelivery.instructions}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -2592,7 +2638,7 @@ function OrdersBoard({
                             <p className="text-[10px] font-semibold">{statusChipLabel(stepStatus, t)}</p>
                             <p className="mt-0.5 text-[9px] font-medium opacity-85">
                               {selectedStageMinutes[index] == null
-                                ? "—"
+                                ? "-"
                                 : formatMinutesCompact(selectedStageMinutes[index]!)}
                             </p>
                           </div>
@@ -2711,18 +2757,18 @@ function OrdersBoard({
                         )
                       })}
                     </div>
-                    {selectedOrder.note ? (
-                      <div
+                    {selectedOrder.note && !selectedDelivery.place && !selectedDelivery.contact ? (
+                      <OpsOrderNote
+                        note={selectedOrder.note}
+                        instructionsLabel={t("common.instructions")}
+                        parts="instructions"
                         className={cn(
                           "mt-3 rounded-lg border px-3 py-2 text-xs",
                           /allergy|no nuts|no nut|allergic/i.test(selectedOrder.note)
                             ? "border-amber-400/25 bg-amber-500/10 text-amber-200/90"
                             : "border-white/10 bg-black/20 text-muted-foreground",
                         )}
-                      >
-                        <span className="not-italic text-white/55">{t("common.instructions")}</span>{" "}
-                        <span className="italic">{selectedOrder.note}</span>
-                      </div>
+                      />
                     ) : null}
                     <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
                       {typeof selectedOrder.taxAmount === "number" &&

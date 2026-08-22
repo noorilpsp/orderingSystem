@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CheckCheck, ChevronLeft, CookingPot, Loader2, LogIn, MapPin, Phone, Sparkles } from "lucide-react";
+import { Bike, CheckCheck, ChevronLeft, CookingPot, Loader2, LogIn, MapPin, MessageSquare, Phone, Sparkles, Store } from "lucide-react";
 import { usePublicMenu } from "@/lib/contexts/PublicMenuContext";
 import { createGuestOrderReadyPlayer, unlockGuestOrderReadyAudio } from "@/lib/mobile-ordering/guest-order-ready-sound";
 import {
@@ -19,6 +19,12 @@ import {
 } from "@/lib/public-menu/guest-order-placement";
 import { formatPickupScheduleLabel } from "@/lib/public-menu/buildPickupScheduleSlots";
 import { useDisplayPhone } from "@/lib/public-menu/use-display-phone";
+import {
+  parseDeliveryInstructionParts,
+  parseLabeledBuildingApt,
+  guestDeliveryDisplayLines,
+  splitGuestDeliveryOrderNote,
+} from "@/lib/public-menu/guest-delivery-address";
 import { cn } from "@/lib/utils";
 import type { GuestCustomizationGroup, GuestMenuItem } from "@/lib/guest-menu/types";
 import type { GuestOrderTrackStatus } from "@/lib/public-menu/deriveGuestOrderTrackStatus";
@@ -81,7 +87,68 @@ type PublicOrderStatusPayload = {
   taxAmount?: number;
   discountAmount?: number;
   total?: number;
+  delivery?: {
+    addressLine1: string;
+    addressLine2: string | null;
+    city: string;
+    postalCode: string | null;
+    deliveryInstructions: string | null;
+    deliveryFee: number;
+  } | null;
 };
+
+type ConfirmationDelivery = {
+  nickname: string | null;
+  name: string | null;
+  line1: string;
+  building: string | null;
+  line2: string | null;
+  city: string | null;
+  intercom: string | null;
+  phone: string | null;
+  instructions: string | null;
+};
+
+function guestFacingOrderNotes(notes: string | null | undefined): string | null {
+  const { instructions } = splitGuestDeliveryOrderNote(notes);
+  if (!instructions) return null;
+  const kept = instructions
+    .split("\n")
+    .map((part) => part.trim())
+    .filter((part) => part && !part.toLowerCase().startsWith("scheduled "));
+  return kept.join("\n") || null;
+}
+
+function confirmationDeliveryFromPlacement(
+  address:
+    | {
+        nickname?: string | null;
+        line1?: string | null;
+        building?: string | null;
+        line2?: string | null;
+        city?: string | null;
+        intercom?: string | null;
+        phone?: string | null;
+        instructions?: string | null;
+      }
+    | null
+    | undefined,
+  guestName?: string | null,
+): ConfirmationDelivery | null {
+  const line1 = address?.line1?.trim() ?? "";
+  if (!line1) return null;
+  return {
+    nickname: address?.nickname?.trim() || null,
+    name: guestName?.trim() || null,
+    line1,
+    building: address?.building?.trim() || null,
+    line2: address?.line2?.trim() || null,
+    city: address?.city?.trim() || null,
+    intercom: address?.intercom?.trim() || null,
+    phone: address?.phone?.trim() || null,
+    instructions: address?.instructions?.trim() || null,
+  };
+}
 
 function lineAddOnsPerUnit(
   customizations: GuestOrderPlacementItem["customizations"],
@@ -184,13 +251,14 @@ function formatSoftWaitEstimate(
   trackStatus: GuestOrderTrackStatus,
   t: TranslateFn,
   scheduledPickupAt?: string | null,
+  timeZone?: string | null,
 ): string {
   if (trackStatus === "served") return t("confirm.allDone");
   if (trackStatus === "cancelled") return t("confirm.cancelledSubtitle");
   if (trackStatus === "refunded") return t("confirm.refundedSubtitle");
   if (trackStatus === "ready") return t("confirm.readyNow");
   if (trackStatus === "scheduled") {
-    if (scheduledPickupAt) return formatPickupScheduleLabel(scheduledPickupAt);
+    if (scheduledPickupAt) return formatPickupScheduleLabel(scheduledPickupAt, timeZone);
     return t("confirm.scheduled");
   }
   if (trackStatus === "placed") return t("confirm.confirmShortly");
@@ -209,7 +277,7 @@ function formatSoftWaitEstimate(
     return t("confirm.about40plus");
   }
 
-  // Quote elapsed, still preparing — automatic delay copy (no staff re-quote).
+  // Quote elapsed, still preparing - automatic delay copy (no staff re-quote).
   const overdueMinutes = Math.max(0, Math.ceil(Math.abs(seconds) / 60));
   if (overdueMinutes <= 8) return t("confirm.takingLonger");
   if (overdueMinutes <= 20) return t("confirm.stillPreparing");
@@ -275,12 +343,13 @@ export function GuestOrderConfirmationPage() {
     customer,
     customerLoading,
     loyaltySettings,
+    orderModes,
   } = usePublicMenu();
 
   const placementKey = searchParams.get("placementKey") ?? "";
   const isPlacementPending = searchParams.get("pending") === "1";
 
-  // sessionStorage is client-only — never read it during render or SSR hydration mismatches.
+  // sessionStorage is client-only - never read it during render or SSR hydration mismatches.
   const [storedPlacement, setStoredPlacement] = useState<GuestOrderPlacementState | null>(null);
 
   useEffect(() => {
@@ -312,11 +381,15 @@ export function GuestOrderConfirmationPage() {
     isPlacementPending &&
     (!resolvedPlacement || resolvedPlacement.status === "pending");
   const urlMode = searchParams.get("mode");
-  const isDeliveryOrder = urlMode === "delivery";
+  const [liveIsDelivery, setLiveIsDelivery] = useState(false);
+  const isDeliveryOrder =
+    liveIsDelivery ||
+    urlMode === "delivery" ||
+    resolvedPlacement?.request?.orderType === "delivery";
   const urlOrderType: OrderType =
     urlMode === "pickup" || urlMode === "delivery" ? "pickup" : "on_site";
   const [liveOrderType, setLiveOrderType] = useState<OrderType | null>(null);
-  // Prefer live status from the server — URL mode can be missing/wrong after refresh.
+  // Prefer live status from the server - URL mode can be missing/wrong after refresh.
   const orderType: OrderType = liveOrderType ?? urlOrderType;
   const [liveOrderNumber, setLiveOrderNumber] = useState<string | null>(null);
   const orderNumber =
@@ -357,6 +430,9 @@ export function GuestOrderConfirmationPage() {
     discountAmount: number;
     total: number;
   } | null>(null);
+  const [liveDelivery, setLiveDelivery] = useState<
+    NonNullable<PublicOrderStatusPayload["delivery"]> | null
+  >(null);
   const [loading, setLoading] = useState(Boolean(orderId));
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [soundMuted, setSoundMuted] = useState(false);
@@ -404,9 +480,11 @@ export function GuestOrderConfirmationPage() {
     const readyLabel = isServed ? t("confirm.complete") : t("confirm.ready");
     const readySubtitle = isServed
       ? t("confirm.allDone")
-      : orderType === "pickup"
-        ? t("confirm.readyForPickup")
-        : t("confirm.readyToServe");
+      : isDeliveryOrder
+        ? t("confirm.readyForDelivery")
+        : orderType === "pickup"
+          ? t("confirm.readyForPickup")
+          : t("confirm.readyToServe");
     const stepCopy: Record<StatusStep["id"], { label: string; subtitle: string }> = {
       placed: { label: t("confirm.received"), subtitle: t("confirm.receivedSubtitle") },
       preparing: { label: t("confirm.preparing"), subtitle: t("confirm.preparingSubtitle") },
@@ -416,7 +494,7 @@ export function GuestOrderConfirmationPage() {
       ...step,
       ...stepCopy[step.id],
     }));
-  }, [orderType, t, trackStatus]);
+  }, [isDeliveryOrder, orderType, t, trackStatus]);
 
   useEffect(() => {
     if (!placementKey || !isPlacementPending) return;
@@ -544,7 +622,7 @@ export function GuestOrderConfirmationPage() {
         throw new Error("Invalid order status response");
       }
 
-      // Stop alert the moment poll leaves ready — don't wait on effect timing.
+      // Stop alert the moment poll leaves ready - don't wait on effect timing.
       if (status.trackStatus !== "ready") {
         playReadySoundRef.current = false;
         stopReadySound();
@@ -555,11 +633,17 @@ export function GuestOrderConfirmationPage() {
         setLiveOrderNumber(status.orderNumber);
       }
       if (typeof status.orderType === "string" && status.orderType) {
+        setLiveIsDelivery(status.orderType === "delivery");
         setLiveOrderType(
           status.orderType === "pickup" || status.orderType === "delivery"
             ? "pickup"
             : "on_site",
         );
+      }
+      if (status.delivery && typeof status.delivery.addressLine1 === "string") {
+        setLiveDelivery(status.delivery);
+      } else if (status.delivery === null) {
+        setLiveDelivery(null);
       }
       if (typeof status.scheduledPickupAt === "string" && status.scheduledPickupAt) {
         setScheduledPickupAt(status.scheduledPickupAt);
@@ -569,7 +653,7 @@ export function GuestOrderConfirmationPage() {
       } else if (status.notes === null) {
         setOrderNotes(null);
       }
-      // Soft estimate only — no local second ticker. Allow staff quote updates.
+      // Soft estimate only - no local second ticker. Allow staff quote updates.
       setEtaSeconds((prev) => {
         if (status.trackStatus === "placed") return null;
         if (
@@ -749,7 +833,39 @@ export function GuestOrderConfirmationPage() {
   const placementItems = resolvedPlacement?.request?.items ?? [];
   const placementNotes =
     resolvedPlacement?.request?.notes?.trim() || null;
-  const displayedOrderNotes = orderNotes ?? placementNotes;
+  const deliveryView = useMemo(() => {
+    const fromPlacement = confirmationDeliveryFromPlacement(
+      resolvedPlacement?.request?.deliveryAddress,
+      resolvedPlacement?.request?.guestName,
+    );
+    if (fromPlacement) return fromPlacement;
+    if (!liveDelivery?.addressLine1) return null;
+    const parsed = parseDeliveryInstructionParts(liveDelivery.deliveryInstructions);
+    const buildingApt = parseLabeledBuildingApt(liveDelivery.addressLine2);
+    return {
+      nickname: null,
+      name: resolvedPlacement?.request?.guestName?.trim() || null,
+      line1: liveDelivery.addressLine1,
+      building: buildingApt.building,
+      line2: buildingApt.line2,
+      city: liveDelivery.city,
+      intercom: parsed.intercom,
+      phone: parsed.phone,
+      instructions: parsed.instructions,
+    };
+  }, [liveDelivery, resolvedPlacement]);
+  const deliveryLines = deliveryView
+    ? guestDeliveryDisplayLines(deliveryView, displayPhone)
+    : null;
+  const displayedOrderNotes = isDeliveryOrder
+    ? (() => {
+        const extra =
+          placementNotes?.trim() || guestFacingOrderNotes(orderNotes);
+        const onCard = deliveryLines?.instructions?.trim() || null;
+        if (extra && onCard && extra === onCard) return null;
+        return extra || null;
+      })()
+    : orderNotes ?? placementNotes;
   const selectedRewardId = resolvedPlacement?.request?.rewardId ?? null;
   const selectedReward =
     selectedRewardId != null
@@ -791,9 +907,12 @@ export function GuestOrderConfirmationPage() {
   const placementLoyaltyDiscount =
     selectedReward != null ? previewCatalogDiscount(selectedReward, placementSubtotal) : 0;
   const placementTax = placementSubtotal * (taxRatePercent / 100);
+  const deliveryFee =
+    liveDelivery?.deliveryFee ??
+    (isDeliveryOrder ? Math.max(0, Number(orderModes.delivery?.delivery_fee) || 0) : 0);
   const placementTotal = Math.max(
     0,
-    placementSubtotal + placementTax - placementLoyaltyDiscount,
+    placementSubtotal + placementTax - placementLoyaltyDiscount + deliveryFee,
   );
 
   // Prefer live order money, but if the DB row was saved without tax, recompute
@@ -805,10 +924,15 @@ export function GuestOrderConfirmationPage() {
   if (liveMoney && tax <= 0 && taxRatePercent > 0 && subtotal > 0) {
     const exclusive = Math.max(0, subtotal - loyaltyDiscount);
     const looksTaxExclusive =
-      Math.abs(total - exclusive) <= 0.02 || Math.abs(total - subtotal) <= 0.02;
+      Math.abs(total - exclusive) <= 0.02 ||
+      Math.abs(total - subtotal) <= 0.02 ||
+      (deliveryFee > 0 && Math.abs(total - (exclusive + deliveryFee)) <= 0.02);
     if (looksTaxExclusive) {
       tax = Math.round(subtotal * (taxRatePercent / 100) * 100) / 100;
-      total = Math.max(0, Math.round((subtotal + tax - loyaltyDiscount) * 100) / 100);
+      total = Math.max(
+        0,
+        Math.round((subtotal + tax - loyaltyDiscount + deliveryFee) * 100) / 100,
+      );
     }
   }
 
@@ -868,22 +992,25 @@ export function GuestOrderConfirmationPage() {
             )}
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
-            {orderType === "pickup"
-              ? trackStatus === "scheduled" && scheduledPickupAt
-                ? t(
-                    isDeliveryOrder
-                      ? "confirm.deliveryScheduled"
-                      : "confirm.pickupScheduled",
-                    {
-                      time: formatPickupScheduleLabel(scheduledPickupAt),
-                    },
-                  )
-                : t(isDeliveryOrder ? "confirm.deliveryOrder" : "confirm.pickupOrder")
-              : tableNumber
-                ? `${t("confirm.dineInTable", { number: tableNumber })}${
-                    guestSeat ? ` · Seat ${guestSeat.seatNumber}` : ""
-                  }${guestSeat?.guestName ? ` · ${guestSeat.guestName}` : ""}`
-                : t("context.dineIn")}
+            {trackStatus === "scheduled" && scheduledPickupAt
+              ? t(
+                  isDeliveryOrder
+                    ? "confirm.deliveryScheduled"
+                    : "confirm.pickupScheduled",
+                  {
+                    time: formatPickupScheduleLabel(
+                      scheduledPickupAt,
+                      restaurant?.timezone,
+                    ),
+                  },
+                )
+              : orderType === "pickup"
+                ? t(isDeliveryOrder ? "confirm.deliveryOrder" : "confirm.pickupOrder")
+                : tableNumber
+                  ? `${t("confirm.dineInTable", { number: tableNumber })}${
+                      guestSeat ? ` · Seat ${guestSeat.seatNumber}` : ""
+                    }${guestSeat?.guestName ? ` · ${guestSeat.guestName}` : ""}`
+                  : t("context.dineIn")}
           </p>
         </section>
 
@@ -1014,7 +1141,13 @@ export function GuestOrderConfirmationPage() {
               {loading ? (
                 <Loader2 className="ml-auto h-5 w-5 animate-spin" />
               ) : (
-                formatSoftWaitEstimate(etaSeconds, trackStatus, t, scheduledPickupAt)
+                formatSoftWaitEstimate(
+                  etaSeconds,
+                  trackStatus,
+                  t,
+                  scheduledPickupAt,
+                  restaurant?.timezone,
+                )
               )}
             </span>
           </div>
@@ -1261,7 +1394,7 @@ export function GuestOrderConfirmationPage() {
               </p>
             ) : null}
             <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
-              {tax > 0 || loyaltyDiscount > 0 ? (
+              {tax > 0 || loyaltyDiscount > 0 || deliveryFee > 0 ? (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t("common.subtotal")}</span>
                   <span className="font-medium text-foreground">{formatMoney(subtotal)}</span>
@@ -1283,6 +1416,12 @@ export function GuestOrderConfirmationPage() {
                   </span>
                 </div>
               ) : null}
+              {deliveryFee > 0 ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{t("checkout.deliveryFee")}</span>
+                  <span className="font-medium text-foreground">{formatMoney(deliveryFee)}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between">
                 <span className="text-base font-bold text-foreground">{t("common.total")}</span>
                 <span className="text-lg font-bold text-foreground">{formatMoney(total)}</span>
@@ -1291,17 +1430,57 @@ export function GuestOrderConfirmationPage() {
           </section>
         ) : null}
 
-        <section className="rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm backdrop-blur-md">
-          <p className="text-base font-semibold text-foreground">{restaurant?.name}</p>
-          <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <div className="flex items-start gap-2">
-              <MapPin className="mt-0.5 h-4 w-4" />
-              <span>{restaurant?.address}</span>
-            </div>
+        {isDeliveryOrder && deliveryView ? (
+          <section className="rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm backdrop-blur-md">
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4" />
-              <span>{displayPhone(restaurant?.phone)}</span>
+              <Bike className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="text-base font-semibold text-foreground">
+                {t("confirm.deliverTo")}
+              </p>
             </div>
+            <div className="mt-3 space-y-2 text-sm text-foreground">
+              {deliveryLines?.place ? (
+                <div className="flex items-start gap-2">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span>{deliveryLines.place}</span>
+                </div>
+              ) : null}
+              {deliveryLines?.contact ? (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span>{deliveryLines.contact}</span>
+                </div>
+              ) : null}
+              {deliveryLines?.instructions ? (
+                <div className="flex items-start gap-2">
+                  <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="text-xs italic text-amber-700/90">
+                    {deliveryLines.instructions}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        <section className="rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <p className="text-base font-semibold text-foreground">{restaurant?.name}</p>
+          </div>
+          <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {restaurant?.address ? (
+              <div className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{restaurant.address}</span>
+              </div>
+            ) : null}
+            {restaurant?.phone ? (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 shrink-0" />
+                <span>{displayPhone(restaurant.phone)}</span>
+              </div>
+            ) : null}
           </div>
         </section>
 

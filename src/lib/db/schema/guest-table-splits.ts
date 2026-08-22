@@ -19,7 +19,7 @@ export type GuestSplitClaimRecord = {
   shares: GuestSplitShare[];
   updatedByDeviceId: string;
   updatedAt: string;
-  /** @deprecated legacy sole-claim fields — still accepted when reading old JSON */
+  /** @deprecated legacy sole-claim fields - still accepted when reading old JSON */
   seatId?: string;
   seatNumber?: number | null;
   deviceId?: string;

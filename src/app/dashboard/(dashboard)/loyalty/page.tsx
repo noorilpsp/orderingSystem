@@ -3009,7 +3009,7 @@ export default function LoyaltyPage() {
                               <div>
                                 <div className="font-semibold">{member.name}</div>
                                 <div className="text-sm text-muted-foreground">
-                                  {member.email ?? "—"}
+                                  {member.email ?? "-"}
                                 </div>
                                 {member.phone ? (
                                   <div className="text-xs text-muted-foreground">
@@ -3020,7 +3020,7 @@ export default function LoyaltyPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-muted-foreground">—</span>
+                            <span className="text-sm text-muted-foreground">-</span>
                           </TableCell>
                           <TableCell>
                             <div className="font-semibold">

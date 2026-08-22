@@ -1,6 +1,6 @@
 /**
  * Builds the guest-facing menu view from a store slug.
- * No auth required — caller is the public API route.
+ * No auth required - caller is the public API route.
  */
 
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
@@ -643,6 +643,8 @@ export async function resolvePublicLocationBySlug(storeSlug: string) {
         taxRate: true,
         serviceChargePercentage: true,
         country: true,
+        openingHours: true,
+        timezone: true,
       },
     }),
   );

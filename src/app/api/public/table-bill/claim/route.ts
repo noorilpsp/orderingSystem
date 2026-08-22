@@ -11,11 +11,11 @@ export const runtime = "nodejs";
 /**
  * POST /api/public/table-bill/claim
  * Body variants:
- * - { storeSlug, tableNumber, deviceId, lineId, claim: boolean } — claim me / release
- * - { storeSlug, tableNumber, deviceId, lineId, seatId } — assign to seat (last write wins)
- * - { storeSlug, tableNumber, deviceId, lineId, shares: [{ seatId, shares }] } — split
- * - { storeSlug, tableNumber, deviceId, lineId, clear: true } — clear
- * - { storeSlug, tableNumber, deviceId, assignments: [...] } — batch preset / clear-all
+ * - { storeSlug, tableNumber, deviceId, lineId, claim: boolean } - claim me / release
+ * - { storeSlug, tableNumber, deviceId, lineId, seatId } - assign to seat (last write wins)
+ * - { storeSlug, tableNumber, deviceId, lineId, shares: [{ seatId, shares }] } - split
+ * - { storeSlug, tableNumber, deviceId, lineId, clear: true } - clear
+ * - { storeSlug, tableNumber, deviceId, assignments: [...] } - batch preset / clear-all
  */
 export async function POST(request: NextRequest) {
   try {

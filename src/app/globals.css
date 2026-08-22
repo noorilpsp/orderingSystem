@@ -126,7 +126,7 @@
   --bg-gloss: rgba(60, 100, 220, 0.06);
 }
 
-/* Vivid theme: match checkout-button-design — light text on dark, neon emerald accents */
+/* Vivid theme: match checkout-button-design - light text on dark, neon emerald accents */
 .vivid {
   --background: oklch(0.065 0 0);
   --foreground: oklch(0.98 0 0);
@@ -174,7 +174,7 @@
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
 }
 
-/* Guest menu phone shell — tablet/desktop atmosphere + frame entrance */
+/* Guest menu phone shell - tablet/desktop atmosphere + frame entrance */
 @media (min-width: 768px) {
   .guest-phone-atmosphere-image {
     animation: guest-phone-atmosphere-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -206,7 +206,7 @@
 }
 
 /* ═══════════════════════════════════════════════════
-   Liquid glass background — /mobile pages only
+   Liquid glass background - /mobile pages only
    When html.liquid-glass-page: gradient bg + frosted overlay
    ═══════════════════════════════════════════════════ */
 html.liquid-glass-page body {
@@ -246,7 +246,7 @@ html.liquid-glass-page body::before {
 
 /* Mobile ordering: use checkout-button-design theme colors (classic, night, vivid) */
 html.liquid-glass-page:not(.dark):not(.vivid) {
-  /* Classic theme — match checkout-button-design */
+  /* Classic theme - match checkout-button-design */
   --background: oklch(0.985 0.002 75);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -271,7 +271,7 @@ html.liquid-glass-page:not(.dark):not(.vivid) {
   --bg-gloss: rgba(150, 170, 210, 0.1);
 }
 html.liquid-glass-page.dark {
-  /* Night theme — match checkout-button-design */
+  /* Night theme - match checkout-button-design */
   --background: oklch(0.2 0.03 265);
   --foreground: oklch(0.93 0.007 260);
   --card: oklch(0.24 0.028 265);
@@ -298,7 +298,7 @@ html.liquid-glass-page.dark {
   --bg-gloss: rgba(60, 100, 220, 0.06);
 }
 
-/* Color scene behind the frosted glass — classic (light) */
+/* Color scene behind the frosted glass - classic (light) */
 html.liquid-glass-page:not(.dark):not(.vivid) {
   background-color: oklch(0.84 0.025 265);
   background-image:
@@ -575,7 +575,7 @@ html.liquid-glass-page.vivid {
   background-color: hsl(240 10% 3.9%);
 }
 
-/* Tables (table detail, my-tables) — theme, animations, portaled content
+/* Tables (table detail, my-tables) - theme, animations, portaled content
    Uses full hsl() values so Tailwind v4 @theme resolves correctly (table-merge parity) */
 .ops-tables-root {
   font-family: var(--font-inter-ops, ui-sans-serif, system-ui, sans-serif);
@@ -707,10 +707,10 @@ html.liquid-glass-page.vivid {
 
 .ops-tables-root [data-slot="button"].h-9 { min-height: 2.5rem !important; height: 2.5rem !important; }
 .ops-tables-root [data-slot="button"].h-8 { min-height: 2.25rem !important; height: 2.25rem !important; }
-/* Icon buttons: table-merge = h-10 w-10 — exclude h-7 (quantity steppers in OrderSummary) */
+/* Icon buttons: table-merge = h-10 w-10 - exclude h-7 (quantity steppers in OrderSummary) */
 .ops-tables-root [data-slot="button"].size-9:not([class*="h-7"]) { width: 2.5rem !important; height: 2.5rem !important; min-width: 2.5rem !important; min-height: 2.5rem !important; }
 
-/* By Seat / By Wave toggle — match table-merge Tabs styling */
+/* By Seat / By Wave toggle - match table-merge Tabs styling */
 .ops-tables-root [data-slot="tabs-list"].h-8 {
   border-radius: 0.375rem !important;
   padding: 0.25rem !important;
@@ -782,7 +782,7 @@ html.liquid-glass-page.vivid {
   color: rgb(167 139 250 / 0.4) !important;
 }
 
-/* Meal progress: Fire/Served buttons in wave timeline — match table-merge */
+/* Meal progress: Fire/Served buttons in wave timeline - match table-merge */
 .ops-tables-root [data-meal-btn="fire-outline"] {
   border-color: rgb(245 158 11 / 0.35) !important;
   background-color: transparent !important;
@@ -826,7 +826,7 @@ html[data-ops-tables] [data-slot="alert-dialog-overlay"] {
   z-index: 90 !important;
   background: rgb(0 0 0 / 0.8) !important;
 }
-/* Payment modal: same size as table-merge — large dialog (64rem / 1024px) */
+/* Payment modal: same size as table-merge - large dialog (64rem / 1024px) */
 html[data-ops-tables] [data-slot="dialog-content"].payment-modal-dialog {
   width: min(96vw, 64rem) !important;
   max-width: 64rem !important;
@@ -865,7 +865,7 @@ html[data-ops-tables] .payment-modal-dialog button:not([data-slot="button"]) {
   font-family: var(--font-inter-ops, var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif);
 }
 
-/* Payment modal: S1 S2 S3 S4 S5 payer chips (rounded-full cyan pills) — table-merge theme */
+/* Payment modal: S1 S2 S3 S4 S5 payer chips (rounded-full cyan pills) - table-merge theme */
 html[data-ops-tables] .payment-modal-dialog [class*="rounded-full"][class*="border-cyan"] {
   border-color: rgb(34 211 238 / 0.3) !important;
   background-color: rgb(6 182 212 / 0.1) !important;
@@ -879,7 +879,7 @@ html[data-ops-tables] .payment-modal-dialog [class*="rounded-full"][class*="bord
   color: rgb(207 250 254) !important;
 }
 
-/* Payment modal: seat/table chips on item lines (sky = table, indigo = S1,S2,...) — table-merge theme */
+/* Payment modal: seat/table chips on item lines (sky = table, indigo = S1,S2,...) - table-merge theme */
 html[data-ops-tables] .payment-modal-dialog [class*="border-sky-300"][class*="bg-sky-500"] {
   border-color: rgb(125 211 252 / 0.45) !important;
   background-color: rgb(14 165 233 / 0.15) !important;
@@ -891,7 +891,7 @@ html[data-ops-tables] .payment-modal-dialog [class*="border-indigo-300"][class*=
   color: rgb(165 180 252) !important;
 }
 
-/* Payment modal: S1 S2 … and Split toggle buttons (inactive) — table-merge border/muted */
+/* Payment modal: S1 S2 … and Split toggle buttons (inactive) - table-merge border/muted */
 html[data-ops-tables] .payment-modal-dialog button.rounded-md.border-border {
   border-color: hsl(220 15% 14%) !important;
   color: hsl(220 10% 48%) !important;
@@ -1042,7 +1042,7 @@ html[data-ops-tables] [data-slot="sheet-content"] .glass-surface {
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Merge Analytics block at bottom of history panel — match table-merge look */
+/* Merge Analytics block at bottom of history panel - match table-merge look */
 html[data-ops-tables] [data-slot="sheet-content"] .merge-history-analytics h3,
 html[data-ops-tables] [data-slot="sheet-content"] .merge-history-analytics h3 .lucide {
   color: hsl(220 10% 48%) !important;
@@ -1062,7 +1062,7 @@ html[data-ops-tables] [data-slot="sheet-content"] .merge-history-analytics .merg
   color: hsl(210 20% 95%) !important;
 }
 
-/* Active / Suggest / Combos: tabs inside bottom sheet (tablet) — match table-merge */
+/* Active / Suggest / Combos: tabs inside bottom sheet (tablet) - match table-merge */
 html[data-ops-tables] [data-slot="sheet-content"] [data-slot="tabs-list"] {
   background: hsl(220 15% 12% / 0.5) !important;
   border-radius: 0.375rem !important;
@@ -1087,13 +1087,13 @@ html[data-ops-tables] [data-slot="sheet-content"] [data-slot="button"] {
   font-family: var(--font-inter-ops, var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif);
 }
 
-/* Right panel (Active / Suggest / Combos) on desktop — own container like table-merge */
+/* Right panel (Active / Suggest / Combos) on desktop - own container like table-merge */
 .ops-tables-root .merge-panel-right {
   background: radial-gradient(ellipse at top, hsl(var(--surface-glass) / 0.25) 0%, transparent 70%);
   border-left-color: hsl(220 15% 14% / 0.3) !important;
 }
 
-/* Merge-split (and any ops-tables) dialogs: Split now, Details, Apply merge — match table-merge */
+/* Merge-split (and any ops-tables) dialogs: Split now, Details, Apply merge - match table-merge */
 /* Header: same surface as dialog body (no separate block), thin divider only */
 html[data-ops-tables] [data-slot="dialog-content"] [data-slot="dialog-header"] {
   background: hsl(var(--surface-glass) / 0.85) !important;
@@ -1115,7 +1115,7 @@ html[data-ops-tables] [data-slot="dialog-content"].template-editor-dialog [data-
   background: transparent !important;
   border-bottom: none !important;
 }
-/* Merge dialogs: section boxes (Step 1, Splitting T8+T9, Impact Analysis) — own container + color like table-merge .section-zone */
+/* Merge dialogs: section boxes (Step 1, Splitting T8+T9, Impact Analysis) - own container + color like table-merge .section-zone */
 html[data-ops-tables] [data-slot="dialog-content"] .merge-dialog-section-box {
   background: radial-gradient(ellipse at center, hsl(var(--surface-glass) / 0.4) 0%, hsl(var(--surface-glass) / 0.15) 60%, transparent 100%);
   border: 1px solid hsl(var(--surface-glass-border) / 0.3);
@@ -1127,7 +1127,7 @@ html[data-ops-tables] [data-slot="dialog-content"] .text-foreground {
 html[data-ops-tables] [data-slot="dialog-content"] .text-muted-foreground {
   color: hsl(220 10% 48%) !important;
 }
-/* Dialog panel itself (has .glass-surface-strong) — glass background + border */
+/* Dialog panel itself (has .glass-surface-strong) - glass background + border */
 html[data-ops-tables] [data-slot="dialog-content"].glass-surface-strong {
   background: hsl(var(--surface-glass) / 0.85) !important;
   border: 1px solid hsl(var(--surface-glass-border) / 0.6) !important;
@@ -1146,7 +1146,7 @@ html[data-ops-tables] [data-slot="dialog-content"] .glass-surface {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-/* Radio buttons (Split now, Split when party leaves, etc.) — table-merge look */
+/* Radio buttons (Split now, Split when party leaves, etc.) - table-merge look */
 html[data-ops-tables] [data-slot="dialog-content"] [data-slot="radio-group-item"] {
   border-color: hsl(185 85% 45%) !important;
   background: transparent !important;
@@ -1161,7 +1161,7 @@ html[data-ops-tables] [data-slot="dialog-content"] [data-slot="radio-group-item"
   color: hsl(185 85% 45%) !important;
   fill: hsl(185 85% 45%) !important;
 }
-/* Checkboxes (Create merge dialog) — table-merge look */
+/* Checkboxes (Create merge dialog) - table-merge look */
 html[data-ops-tables] [data-slot="dialog-content"] [data-slot="checkbox"] {
   border-color: hsl(220 15% 14%) !important;
   background: transparent !important;
@@ -1199,7 +1199,7 @@ html[data-ops-tables] [data-slot="dialog-content"] [data-slot="dialog-close"]:ho
   color: hsl(210 20% 95%) !important;
 }
 
-/* Select dropdowns opened from ops-tables (merge dialogs) — dark theme */
+/* Select dropdowns opened from ops-tables (merge dialogs) - dark theme */
 html[data-ops-tables] [data-slot="select-content"] {
   --popover: 220 18% 8%;
   --popover-foreground: 210 20% 95%;
@@ -1328,21 +1328,21 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
       min-width: auto !important;
     }
 
-    /* Orders Live/Scheduled/History — keep compact inside h-9 segmented control */
+    /* Orders Live/Scheduled/History - keep compact inside h-9 segmented control */
     .orders-board-tabs button {
       min-height: 0 !important;
       min-width: 0 !important;
       height: 100% !important;
     }
 
-    /* Orders All / Dine-in / Pickup — compact height */
+    /* Orders All / Dine-in / Pickup - compact height */
     .orders-source-filters button {
       min-height: 0 !important;
       min-width: 0 !important;
       height: 2rem !important;
     }
 
-    /* Orders All / New / Preparing / Ready — compact height */
+    /* Orders All / New / Preparing / Ready - compact height */
     .orders-status-filters button {
       min-height: 0 !important;
       min-width: 0 !important;
@@ -1398,7 +1398,7 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
       min-width: unset !important;
     }
 
-    /* Store phone / other inline checkout links — don't use 44px tap-row height */
+    /* Store phone / other inline checkout links - don't use 44px tap-row height */
     .checkout-compact-link {
       min-height: unset !important;
       min-width: unset !important;
@@ -1445,7 +1445,7 @@ html[data-ops-tables] [data-slot="dropdown-menu-item"][data-highlighted] {
   html.dark .context-pill button:not(.context-pill-backdrop):focus-visible svg {
     color: inherit !important;
   }
-  /* Vivid: keep same colors on hover — no black text, preserve white/light text and icons */
+  /* Vivid: keep same colors on hover - no black text, preserve white/light text and icons */
   html.vivid .context-pill [data-slot="button"]:hover,
   html.vivid .context-pill button:not(.context-pill-backdrop):hover {
     background-color: rgba(255, 255, 255, 0.1) !important;

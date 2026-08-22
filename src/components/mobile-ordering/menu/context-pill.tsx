@@ -108,7 +108,7 @@ export function ContextPill({
   const deliveryEnabled = publicMenu?.orderModes?.delivery?.enabled === true;
   const canSwitchToPickup = orderType !== "pickup" && pickupEnabled;
   const canSwitchToDelivery = !isDelivery && deliveryEnabled;
-  // Delivery-to-table: table comes from QR — don't offer "switch to dine-in".
+  // Delivery-to-table: table comes from QR - don't offer "switch to dine-in".
   // Self-pickup: guests may switch between counter dine-in and pickup.
   const canSwitchToDineIn = !isDineIn && dineInEnabled && isSelfService;
   const secondaryLabelClass = "font-normal text-white/75 dark:text-blue-200/80 vivid:text-white/80";
@@ -199,10 +199,7 @@ export function ContextPill({
         >
           <div className={cn("min-w-0 flex items-center gap-2", compact && "gap-1.5")}>
             {isDineIn ? (
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="context-dot-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-              </span>
+              <UtensilsCrossed className="h-4 w-4 shrink-0 text-emerald-300" />
             ) : isDelivery ? (
               <Bike className="h-4 w-4 shrink-0 text-sky-300" />
             ) : (

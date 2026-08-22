@@ -203,7 +203,7 @@ export default function MergeSplitPage() {
           />
         </div>
 
-        {/* Right: Tabbed Config Panel (hidden on tablet, shown on desktop) — same container/theme as table-merge */}
+        {/* Right: Tabbed Config Panel (hidden on tablet, shown on desktop) - same container/theme as table-merge */}
         <div className="merge-panel-right hidden w-[380px] shrink-0 border-l border-border/20 xl:flex xl:flex-col">
           <Tabs defaultValue="active" className="flex h-full flex-col">
             <div className="shrink-0 border-b border-border/20 px-2 pt-2">

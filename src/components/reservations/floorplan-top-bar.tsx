@@ -178,7 +178,7 @@ export function FloorplanTopBar({
       {whatIfMode && (
         <div className="flex items-center justify-between border-t border-dashed border-amber-500/50 bg-amber-500/10 px-4 py-1.5 lg:px-6 animate-banner-enter">
           <span className="text-xs font-semibold text-amber-300">
-            WHAT IF MODE — Changes are not saved
+            WHAT IF MODE - Changes are not saved
           </span>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" className="h-6 border-amber-500/40 bg-transparent text-[10px] text-amber-300 hover:bg-amber-500/20">

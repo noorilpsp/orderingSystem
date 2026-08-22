@@ -193,9 +193,9 @@ export function GuestBillSplitDialog({
   const assignmentRollbackRef = useRef(new Map<string, GuestBillSplitItem>());
   const assignmentEpochRef = useRef(new Map<string, number>());
   const assignmentInFlightRef = useRef(new Set<string>());
-  /** Optimistic + Payer ids not confirmed on server yet — keep across silent polls. */
+  /** Optimistic + Payer ids not confirmed on server yet - keep across silent polls. */
   const pendingExtraPayerIdsRef = useRef(new Set<string>());
-  /** In-flight + Payer create requests — claim waits on these so assign-after-add stays fast. */
+  /** In-flight + Payer create requests - claim waits on these so assign-after-add stays fast. */
   const pendingExtraPayerPostsRef = useRef(new Map<string, Promise<boolean>>());
   const splitCountSeededRef = useRef(false);
   const proposalEqualCountAppliedRef = useRef(false);
@@ -1350,7 +1350,7 @@ export function GuestBillSplitDialog({
                                         </button>
                                       </div>
                                     ) : (
-                                      <span className="text-[11px] text-foreground/50">—</span>
+                                      <span className="text-[11px] text-foreground/50">-</span>
                                     )}
                                   </div>
                                 );

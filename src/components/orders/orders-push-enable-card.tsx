@@ -66,7 +66,7 @@ export function OrdersPushEnableCard({ locationId }: OrdersPushEnableCardProps) 
         return;
       }
       await refreshStatus(locationId);
-      toast.success("Closed-tab alerts enabled — try Send test");
+      toast.success("Closed-tab alerts enabled - try Send test");
     } finally {
       setBusy(false);
     }
@@ -95,11 +95,11 @@ export function OrdersPushEnableCard({ locationId }: OrdersPushEnableCardProps) 
       }
       if (isSafariOpenBlockedOnLocalHttp()) {
         toast.success(
-          "Test push sent — Show won’t open on http://localhost in Safari. Use npm run dev:https, then re-enable alerts.",
+          "Test push sent - Show won’t open on http://localhost in Safari. Use npm run dev:https, then re-enable alerts.",
         );
         return;
       }
-      toast.success("Test push sent — check your Notification Center");
+      toast.success("Test push sent - check your Notification Center");
     } finally {
       setBusy(false);
     }

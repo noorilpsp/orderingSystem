@@ -483,7 +483,7 @@ export default function TablesPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 sm:w-full lg:w-auto">
-              {/* Clean All Available — full width on mobile, 1/3 on tablet */}
+              {/* Clean All Available - full width on mobile, 1/3 on tablet */}
               <Button variant="outline" size="sm" disabled className="w-full sm:w-1/3 lg:w-auto bg-transparent">
                 <Sparkles className="h-4 w-4 mr-2" />
                 Clean All Available

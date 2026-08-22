@@ -54,7 +54,7 @@ export function SplitDialog({ open, onOpenChange, mergeId, onConfirm }: SplitDia
               (currently merged as {merge.combinedSeats}-top)
             </p>
 
-            {/* Visual: merged -> split — own container (section-zone style) */}
+            {/* Visual: merged -> split - own container (section-zone style) */}
             <div className="merge-dialog-section-box flex flex-col items-center gap-3 rounded-lg p-4">
               {/* Merged state */}
               <div className="flex items-center gap-0 rounded-lg border-2 border-emerald-500/40 bg-emerald-500/10 px-4 py-3">

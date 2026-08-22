@@ -99,7 +99,7 @@ export function SeatPartyModal({ sectionConfig = defaultSectionConfig, currentSe
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const wasOpenRef = useRef(false)
 
-  // Reset only when the modal opens — not when `tables` refreshes during seating.
+  // Reset only when the modal opens - not when `tables` refreshes during seating.
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current
     wasOpenRef.current = open

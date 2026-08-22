@@ -140,7 +140,7 @@ export interface WaitlistPartyLike {
 export function waitlistPartyToListReservation(wp: WaitlistPartyLike): ListReservation {
   return {
     id: wp.id,
-    time: "—",
+    time: "-",
     guestName: wp.name,
     partySize: wp.partySize,
     table: null,
@@ -908,7 +908,7 @@ export function getTagIcon(type: ListTagType): string {
 
 /** Compact sitting length for lists and detail headers (e.g. `90m`, `1h 30m`). */
 export function formatReservationDurationCompact(minutes: number | undefined | null): string {
-  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return "—"
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return "-"
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   if (h === 0) return `${m}m`
@@ -957,7 +957,7 @@ export function groupReservations(
         const h = Number(parts[0])
         const m = parts[1] != null ? Number(parts[1]) : 0
         if (Number.isNaN(h) || Number.isNaN(m)) {
-          key = "—"
+          key = "-"
           break
         }
         const slot = Math.floor(m / 30) * 30

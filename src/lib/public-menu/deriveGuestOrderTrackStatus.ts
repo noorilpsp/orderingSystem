@@ -138,11 +138,11 @@ export function computeGuestEtaSecondsRemaining(input: {
   }
 
   if (input.estimatedReadyAt != null) {
-    // May be negative after the quote elapses — guest UI uses that for delay copy.
+    // May be negative after the quote elapses - guest UI uses that for delay copy.
     return Math.ceil((input.estimatedReadyAt.getTime() - Date.now()) / 1000);
   }
 
-  // Accepted but missing estimatedReadyAt (legacy) — start from accept/fire time, not created.
+  // Accepted but missing estimatedReadyAt (legacy) - start from accept/fire time, not created.
   const prepMinutes = input.averagePrepMinutes ?? input.fallbackMinutes;
   const startedAt = input.firedAt ?? null;
   if (startedAt == null) {

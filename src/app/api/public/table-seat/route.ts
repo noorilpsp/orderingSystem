@@ -34,9 +34,9 @@ function failureStatus(code: string): number {
 }
 
 /**
- * POST /api/public/table-seat — claim or re-join a seat for this device at a table.
- * GET  /api/public/table-seat?storeSlug=&tableNumber= — list seats for change-seat UI.
- * PATCH /api/public/table-seat — set optional guest name on the claimed seat.
+ * POST /api/public/table-seat - claim or re-join a seat for this device at a table.
+ * GET  /api/public/table-seat?storeSlug=&tableNumber= - list seats for change-seat UI.
+ * PATCH /api/public/table-seat - set optional guest name on the claimed seat.
  */
 export async function POST(request: NextRequest) {
   try {

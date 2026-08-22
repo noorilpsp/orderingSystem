@@ -79,7 +79,7 @@ interface ReservationFormViewProps {
 const PAST_SLOT_GRACE_MINUTES = 8
 
 /**
- * Reservation form — availability layers (keep in sync when changing logic):
+ * Reservation form - availability layers (keep in sync when changing logic):
  *
  * | Layer | Source | Purpose |
  * |-------|--------|---------|
@@ -378,7 +378,7 @@ function buildTimeFitMap(
   servicePeriods: ServicePeriodLike[] | undefined,
   reservations: Reservation[]
 ): Record<string, TimeFitSnapshot> {
-  // Global fit: all tables that could seat this party in the chosen zone — not the assigned table only.
+  // Global fit: all tables that could seat this party in the chosen zone - not the assigned table only.
   const eligibleTables = tableLanes.filter((lane) => (
     lane.seats >= partySize
     && (zonePreference === "any" || lane.zone === zonePreference)

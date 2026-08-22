@@ -1,4 +1,4 @@
-// ── Waitlist Intelligence System — Data Layer ───────────────────────────────
+// ── Waitlist Intelligence System - Data Layer ───────────────────────────────
 
 import { storeTablesToOccupiedTables } from "@/lib/reservations-data"
 import type { StoreTable } from "@/store/types"
@@ -47,7 +47,7 @@ export interface WaitlistEntry {
   notes?: string
   preferences?: string
   smsSent?: boolean
-  smsStatus?: string // e.g. "Confirmed at restaurant", "SMS sent — browsing menu"
+  smsStatus?: string // e.g. "Confirmed at restaurant", "SMS sent - browsing menu"
   bestMatch: TableMatch | null
   altMatches: TableMatch[]
   mergeOption?: MergeOption
@@ -261,7 +261,7 @@ export const activeWaitlist: WaitlistEntry[] = [
       estMinutes: 0,
     },
     altMatches: [
-      { tableId: "T7", seats: 4, zone: "Main Dining", detail: "Center", status: "turning-soon", estMinutes: 15, reason: "Kim Family — mains" },
+      { tableId: "T7", seats: 4, zone: "Main Dining", detail: "Center", status: "turning-soon", estMinutes: 15, reason: "Kim Family - mains" },
       { tableId: "T14", seats: 4, zone: "Main Dining", detail: "Corner", status: "turning-soon", estMinutes: 10, reason: "Martinez wrapping up" },
     ],
   },
@@ -298,7 +298,7 @@ export const activeWaitlist: WaitlistEntry[] = [
     location: "at-restaurant",
     phone: "+1 (555) 345-6789",
     smsSent: true,
-    smsStatus: "SMS sent — browsing menu on phone",
+    smsStatus: "SMS sent - browsing menu on phone",
     notes: "Celebrating promotion, budget flexible",
     bestMatch: {
       tableId: "T22",
@@ -307,7 +307,7 @@ export const activeWaitlist: WaitlistEntry[] = [
       detail: "Round table",
       status: "turning-soon",
       estMinutes: 35,
-      reason: "Anderson party — finishing",
+      reason: "Anderson party - finishing",
     },
     altMatches: [],
     mergeOption: {
@@ -937,5 +937,5 @@ export function getAiQuoteEstimate(partySize: number): { minutes: number; explan
   if (partySize <= 2) return { minutes: 15, explanation: "2 tables turning in ~8-10 min, quick seating likely" }
   if (partySize <= 4) return { minutes: 25, explanation: "3 tables turning in ~15-20 min, 1 no-show risk (may free T14 sooner)" }
   if (partySize <= 5) return { minutes: 40, explanation: "Needs 6-top or merge. T22 turning in ~35 min, merge T15+T16 at ~8:30" }
-  return { minutes: 45, explanation: "Large party — limited 6-tops. T22 est. ~35 min, or merge T10+T12 at ~8:45" }
+  return { minutes: 45, explanation: "Large party - limited 6-tops. T22 est. ~35 min, or merge T10+T12 at ~8:45" }
 }

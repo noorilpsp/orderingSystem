@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════════
-   Ops Reservations — table-merge-manager theme
+   Ops Reservations - table-merge-manager theme
    Dark cyan/slate theme, glass surfaces, animations
    ═══════════════════════════════════════════════════ */
 
 .ops-reservations-root {
   font-family: var(--font-inter-ops, ui-sans-serif, system-ui, sans-serif);
-  /* Table-merge theme — oklch to match NextFaster globals (text-foreground etc) */
+  /* Table-merge theme - oklch to match NextFaster globals (text-foreground etc) */
   --background: oklch(0.12 0.02 250);
   --foreground: oklch(0.95 0.01 250);
   --card: oklch(0.15 0.02 250);
@@ -222,7 +222,7 @@ html[data-ops-reservations] [data-slot="sheet-content"] .glass-surface-strong {
   animation-delay: calc(var(--hist-index, 0) * 60ms);
 }
 
-/* Detail panel — match table-merge: font, colors, scrollbar, buttons.
+/* Detail panel - match table-merge: font, colors, scrollbar, buttons.
    Force oklch so text-foreground, bg-background etc resolve to dark theme. */
 .ops-reservations-root .detail-panel-ops,
 html[data-ops-reservations] .detail-panel-ops {
@@ -261,7 +261,7 @@ html[data-ops-reservations] .detail-panel-ops {
   border-radius: 9999px;
 }
 
-/* Detail panel Tabs — match table-merge */
+/* Detail panel Tabs - match table-merge */
 .ops-reservations-root .detail-panel-ops [data-slot="tabs-list"] {
   background: hsl(220 18% 9% / 0.8);
   border-color: hsl(220 15% 22%);
@@ -275,7 +275,7 @@ html[data-ops-reservations] .detail-panel-ops {
   color: hsl(210 20% 95%);
 }
 
-/* Detail panel header & sections — match table-merge zinc theme */
+/* Detail panel header & sections - match table-merge zinc theme */
 .ops-reservations-root .detail-panel-ops section.rounded-xl {
   background: hsl(220 18% 9% / 0.5) !important;
   border-color: hsl(220 15% 18% / 0.5) !important;
@@ -298,7 +298,7 @@ html[data-ops-reservations] .detail-panel-ops .sticky.border-b {
   border-color: hsl(220 15% 18% / 0.5) !important;
 }
 
-/* Service period button (Lunch/Dinner) — match table-merge: text always white */
+/* Service period button (Lunch/Dinner) - match table-merge: text always white */
 .ops-reservations-root .timeline-service-period-btn,
 .ops-reservations-root .timeline-service-period-btn:hover,
 .ops-reservations-root .timeline-service-period-btn:focus,
@@ -317,7 +317,7 @@ html[data-ops-reservations] .detail-panel-ops .sticky.border-b {
   color: inherit !important;
 }
 
-/* Dialog & Sheet — match table-merge: z-index, overlay, size, stacking */
+/* Dialog & Sheet - match table-merge: z-index, overlay, size, stacking */
 html[data-ops-reservations] [data-slot="dialog-overlay"],
 html[data-ops-reservations] [data-slot="sheet-overlay"] {
   z-index: 90 !important;
@@ -327,13 +327,13 @@ html[data-ops-reservations] [data-slot="dialog-content"],
 html[data-ops-reservations] [data-slot="sheet-content"] {
   z-index: 90 !important;
 }
-/* Reservation form modal — exact same size as table-merge */
+/* Reservation form modal - exact same size as table-merge */
 html[data-ops-reservations] [data-slot="dialog-content"].reservation-form-dialog {
   width: min(1320px, 98vw) !important;
   max-width: none !important;
 }
 
-/* Dialog & Sheet (New/Edit reservation form) — 1:1 table-merge: theme, font, colors.
+/* Dialog & Sheet (New/Edit reservation form) - 1:1 table-merge: theme, font, colors.
    table-merge uses HSL; use full hsl() values so bg-secondary/50, border-border/60
    produce the same lighter grayish look (not dark navy). */
 html[data-ops-reservations] [data-slot="dialog-content"],
@@ -375,7 +375,7 @@ html[data-ops-reservations] [data-slot="dialog-content"] [data-slot="dialog-foot
   background: hsl(220 20% 4%) !important;
   color: hsl(210 20% 95%) !important;
 }
-/* Form content inside modal — inputs, labels, borders match table-merge */
+/* Form content inside modal - inputs, labels, borders match table-merge */
 html[data-ops-reservations] [data-slot="dialog-content"] [data-slot="input"],
 html[data-ops-reservations] [data-slot="sheet-content"] [data-slot="input"] {
   background: hsl(220 15% 14% / 0.5) !important;
@@ -444,7 +444,7 @@ html[data-ops-reservations] [data-slot="select-item"][data-highlighted] {
   color: hsl(210 15% 90%) !important;
 }
 
-/* Select separator lines — match table-merge: bg-muted (subtle gray) */
+/* Select separator lines - match table-merge: bg-muted (subtle gray) */
 html[data-ops-reservations] [data-slot="select-separator"] {
   background: hsl(220 15% 12%) !important;
 }

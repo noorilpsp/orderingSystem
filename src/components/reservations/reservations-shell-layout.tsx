@@ -361,7 +361,7 @@ function ReservationsShellLayoutInner({ children }: { children: ReactNode }) {
       next.delete("id")
       next.delete("draft")
       next.delete("time")
-      // Keep "date" — it is the shared view date for List/Timeline, not just form prefill
+      // Keep "date" - it is the shared view date for List/Timeline, not just form prefill
       next.delete("table")
       next.delete("service")
       next.delete("zone")

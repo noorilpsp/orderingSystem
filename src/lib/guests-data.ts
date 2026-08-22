@@ -708,7 +708,7 @@ export const sarahStaffNotes: StaffNote[] = [
 // ── Sarah's Smart Actions ─────────────────────────────────────
 export const sarahSmartActions: SmartAction[] = [
   { id: "sa1", icon: "Gift", text: "Birthday (Mar 15) is in 57 days.", subtext: "She asked about the private room.", action: "Send Birthday Invite" },
-  { id: "sa2", icon: "Sparkles", text: "She hasn't tried the new winter cocktails.", subtext: "High engagement — likely to appreciate a preview.", action: "Send New Menu Preview" },
+  { id: "sa2", icon: "Sparkles", text: "She hasn't tried the new winter cocktails.", subtext: "High engagement - likely to appreciate a preview.", action: "Send New Menu Preview" },
   { id: "sa3", icon: "Heart", text: "Referred a friend on Jan 3.", subtext: "Potential new regular. Send a thank-you note?", action: "Send Thank You" },
 ]
 

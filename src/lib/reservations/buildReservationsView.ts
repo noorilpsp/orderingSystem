@@ -155,7 +155,7 @@ export interface BuildReservationsViewOptions {
 }
 
 /**
- * Build ReservationsView for a location. No auth — caller validates access.
+ * Build ReservationsView for a location. No auth - caller validates access.
  */
 export async function buildReservationsView(
   locationId: string,
@@ -365,7 +365,7 @@ export async function buildReservationsView(
     partySize: r.partySize,
     phone: r.phone ?? undefined,
     addedAt: r.addedAt.toISOString(),
-    waitTime: r.waitTime ?? "—",
+    waitTime: r.waitTime ?? "-",
     notes: r.notes ?? undefined,
   }));
 

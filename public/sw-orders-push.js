@@ -3,7 +3,7 @@
  * Staff incoming-order push service worker.
  * Serves closed-tab / background alerts for /orders.
  *
- * Version: 6 — do not preventDefault on Safari Show (it cancels the only open path
+ * Version: 6 - do not preventDefault on Safari Show (it cancels the only open path
  * when openWindow is flaky); openWindow must be the first waitUntil work.
  */
 

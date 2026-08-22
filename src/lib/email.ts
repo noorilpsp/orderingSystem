@@ -53,7 +53,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
           return { success: true, messageId: result.body?.messageId || "sent" };
         }
         lastError = "BREVO_FROM_EMAIL not set";
-        console.warn("[email]", lastError, "— trying next provider");
+        console.warn("[email]", lastError, "- trying next provider");
       }
     } catch (err: any) {
       console.error("[email] Brevo error:", err);

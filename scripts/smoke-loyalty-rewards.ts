@@ -27,7 +27,7 @@ async function main() {
     columns: { id: true, loyaltySettings: true, name: true },
   });
   if (!merchant) {
-    throw new Error("No merchant found — seed DB first");
+    throw new Error("No merchant found - seed DB first");
   }
 
   const location = await db.query.merchantLocations.findFirst({

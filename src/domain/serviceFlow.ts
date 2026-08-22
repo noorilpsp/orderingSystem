@@ -1,5 +1,5 @@
 /**
- * Domain service flow — centralized allowed transitions for sessions, orders, and order_items.
+ * Domain service flow - centralized allowed transitions for sessions, orders, and order_items.
  * Pure validation functions: no DB, no side effects. Return structured results for better UI.
  * All actions must call these validators before mutating state.
  */

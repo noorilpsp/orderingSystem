@@ -248,19 +248,19 @@ export function CustomizationImportModal({
                         )}
                       >
                         <td className="p-2">{validation.rowIndex}</td>
-                        <td className="max-w-[140px] truncate p-2">{row?.groupName ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2">{row?.groupName ?? "-"}</td>
                         <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
-                          {row?.groupNameAr ?? "—"}
+                          {row?.groupNameAr ?? "-"}
                         </td>
-                        <td className="max-w-[140px] truncate p-2">{row?.optionName ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2">{row?.optionName ?? "-"}</td>
                         <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
-                          {row?.optionNameAr ?? "—"}
+                          {row?.optionNameAr ?? "-"}
                         </td>
-                        <td className="p-2">{row ? row.priceDelta.toFixed(2) : "—"}</td>
+                        <td className="p-2">{row ? row.priceDelta.toFixed(2) : "-"}</td>
                         <td className="max-w-[180px] truncate p-2 text-xs">
                           {row
                             ? `${row.required ? "Required" : "Optional"} · ${row.min}–${formatMax(row.max)}${row.isDefault ? " · Default" : ""}`
-                            : "—"}
+                            : "-"}
                         </td>
                         <td className="max-w-[200px] p-2 text-xs text-muted-foreground">
                           {issues.length > 0 ? issues.map((issue) => issue.message).join("; ") : "OK"}

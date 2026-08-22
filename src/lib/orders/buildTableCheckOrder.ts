@@ -20,7 +20,7 @@ function memberIdOf(order: OrdersUnifiedOrder): string {
 /** Normalize display codes like "T5" / "5" / "Table T5" → "T5" (never the word "Table"). */
 export function extractTableCode(order: Pick<OrdersUnifiedOrder, "label" | "guestLabel">): string {
   const guest = order.guestLabel ?? "";
-  // Prefer "Table T5" / "Table Patio" — do not capture the word "Table" itself.
+  // Prefer "Table T5" / "Table Patio" - do not capture the word "Table" itself.
   const afterTable = guest.match(/\bTable\s+(?!Table\b)(T?[\w-]+)/i)?.[1] ?? null;
   const bareCode = guest.match(/\b(T\d[\w-]*)\b/i)?.[1] ?? null;
   const raw = (afterTable ?? bareCode ?? order.label ?? "").trim();

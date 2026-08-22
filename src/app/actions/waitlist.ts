@@ -37,7 +37,7 @@ export async function getWaitlistForLocation(
     partySize: r.partySize,
     phone: r.phone ?? undefined,
     addedAt: r.addedAt.toISOString(),
-    waitTime: r.waitTime ?? "—",
+    waitTime: r.waitTime ?? "-",
     notes: r.notes ?? undefined,
   }));
 }

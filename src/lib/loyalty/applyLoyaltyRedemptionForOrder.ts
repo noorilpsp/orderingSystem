@@ -309,7 +309,7 @@ export async function prepareLoyaltyRedemptionForOrder(
       ) {
         return {
           ok: false,
-          error: "Free item is unavailable — choose another reward",
+          error: "Free item is unavailable - choose another reward",
         };
       }
       const applied = applyFreeItemToLineItems({

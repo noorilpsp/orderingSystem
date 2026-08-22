@@ -83,7 +83,7 @@ export async function proxy(request: NextRequest) {
 
   const isStaffAuthPage = matchesPrefix(pathname, STAFF_AUTH_PREFIXES)
   const isDinerAuthPage = matchesPrefix(pathname, DINER_AUTH_PREFIXES)
-  // Recovery links establish a session before the form submits — don't bounce.
+  // Recovery links establish a session before the form submits - don't bounce.
   const isResetPasswordPage =
     pathname === '/reset-password' ||
     pathname.startsWith('/reset-password/') ||

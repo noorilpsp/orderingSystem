@@ -4780,7 +4780,7 @@ export default function FloorplanEditorPage({
                                 </Badge>
                               )}
                               {(!table.changeStatus || table.changeStatus === "unchanged") && (
-                                <span className="text-muted-foreground text-sm">—</span>
+                                <span className="text-muted-foreground text-sm">-</span>
                               )}
                             </td>
                             <td className="p-3">

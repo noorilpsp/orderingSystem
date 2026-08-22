@@ -150,7 +150,7 @@ export function MergeHistoryPanel({ open, onOpenChange }: MergeHistoryPanelProps
 
             <Separator className="bg-border/20" />
 
-            {/* Analytics — class for ops-tables sheet styling parity */}
+            {/* Analytics - class for ops-tables sheet styling parity */}
             <div className="merge-history-analytics">
               <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <BarChart3 className="h-3.5 w-3.5" />

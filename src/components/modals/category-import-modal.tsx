@@ -276,16 +276,16 @@ export function CategoryImportModal({
                         )}
                       >
                         <td className="p-2">{validation.rowIndex}</td>
-                        <td className="max-w-[140px] truncate p-2">{row?.name ?? "—"}</td>
+                        <td className="max-w-[140px] truncate p-2">{row?.name ?? "-"}</td>
                         <td className="max-w-[140px] truncate p-2 text-xs" dir="auto">
-                          {row?.i18n?.ar?.name ?? "—"}
+                          {row?.i18n?.ar?.name ?? "-"}
                         </td>
-                        <td className="p-2">{row?.emoji ?? "—"}</td>
+                        <td className="p-2">{row?.emoji ?? "-"}</td>
                         <td className="max-w-[180px] truncate p-2 text-xs text-muted-foreground">
-                          {row?.description ?? "—"}
+                          {row?.description ?? "-"}
                         </td>
                         <td className="max-w-[160px] truncate p-2 text-xs">
-                          {row?.menuNames?.join("; ") ?? (menuId ? "Default" : "—")}
+                          {row?.menuNames?.join("; ") ?? (menuId ? "Default" : "-")}
                         </td>
                         <td className="max-w-[200px] p-2 text-xs text-muted-foreground">
                           {issues.length > 0 ? issues.map((issue) => issue.message).join("; ") : "OK"}

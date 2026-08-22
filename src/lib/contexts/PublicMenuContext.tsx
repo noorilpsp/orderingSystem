@@ -75,6 +75,10 @@ import {
 import type { GuestOrderHistoryEntry } from "@/lib/public-menu/getGuestOrderHistory";
 import { writeStoredGuestPhoneCountry } from "@/lib/public-menu/guest-phone";
 import { writeGuestLastStore } from "@/lib/public-menu/guest-last-store";
+import {
+  readGuestScheduledPickupAt,
+  writeGuestScheduledPickupAt,
+} from "@/lib/public-menu/guest-scheduled-pickup-storage";
 
 type OrderType = GuestOrderType;
 
@@ -124,7 +128,9 @@ type PublicMenuContextValue = {
   cart: GuestCartItem[];
   orderType: OrderType;
   tableNumber: string;
-  /** True when the guest joined via table QR (or already claimed a seat) — Change table is blocked. */
+  scheduledPickupAt: string | null;
+  setScheduledPickupAt: (iso: string | null) => void;
+  /** True when the guest joined via table QR (or already claimed a seat) - Change table is blocked. */
   tableLocked: boolean;
   setOrderType: (type: OrderType) => void;
   setTableNumber: (table: string) => void;
@@ -206,6 +212,7 @@ export function PublicMenuProvider({
   const [hydratedCartSlug, setHydratedCartSlug] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
   const [tableNumber, setTableNumberState] = useState(initialTableNumber);
+  const [scheduledPickupAt, setScheduledPickupAtState] = useState<string | null>(null);
   const [tableLockedFromQr, setTableLockedFromQr] = useState(false);
   const [guestOrderPlacement, setGuestOrderPlacement] =
     useState<GuestOrderPlacementState | null>(null);
@@ -237,6 +244,7 @@ export function PublicMenuProvider({
   useEffect(() => {
     setCart(readGuestCart(storeSlug));
     setHydratedCartSlug(storeSlug);
+    setScheduledPickupAtState(readGuestScheduledPickupAt(storeSlug));
   }, [storeSlug]);
 
   useEffect(() => {
@@ -397,6 +405,18 @@ export function PublicMenuProvider({
       setTableNumberState(next);
     },
     [storeSlug, tableLockedFromQr, tableNumber],
+  );
+
+  const setScheduledPickupAt = useCallback(
+    (iso: string | null) => {
+      const next =
+        iso && !Number.isNaN(new Date(iso).getTime()) && new Date(iso).getTime() > Date.now()
+          ? new Date(iso).toISOString()
+          : null;
+      setScheduledPickupAtState(next);
+      writeGuestScheduledPickupAt(storeSlug, next);
+    },
+    [storeSlug],
   );
 
   const lockTableFromQr = useCallback(
@@ -837,6 +857,8 @@ export function PublicMenuProvider({
     orderType,
     tableNumber,
     tableLocked,
+    scheduledPickupAt,
+    setScheduledPickupAt,
     setOrderType,
     setTableNumber,
     lockTableFromQr,
@@ -893,6 +915,7 @@ export function StaticDemoMenuProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<GuestCartItem[]>(DEMO_CART);
   const [orderType, setOrderType] = useState<OrderType>("dine-in");
   const [tableNumber, setTableNumber] = useState("5");
+  const [scheduledPickupAt, setScheduledPickupAt] = useState<string | null>(null);
 
   const addToCart = useCallback((item: GuestMenuItem | GuestCartItem) => {
     const incomingQty =
@@ -939,6 +962,8 @@ export function StaticDemoMenuProvider({ children }: { children: ReactNode }) {
     orderType,
     tableNumber,
     tableLocked: true,
+    scheduledPickupAt,
+    setScheduledPickupAt,
     setOrderType,
     setTableNumber,
     lockTableFromQr: () => {},
